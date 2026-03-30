@@ -1,0 +1,25 @@
+name: AziRouge
+version: '${version}'
+main: net.azisaba.aziRouge.AziRouge
+description: Roguelike dungeon generator with external schematic templates.
+api-version: '1.21'
+softdepend:
+  - WorldEdit
+commands:
+  azirouge:
+    description: ダンジョン生成と設定リロードを行います
+    usage: /azirouge <generate|reload|debug>
+    permission: azirouge.command
+permissions:
+  azirouge.command:
+    description: AziRouge のコマンド利用権限
+    default: op
+  azirouge.command.reload:
+    description: AziRouge の設定再読込権限
+    default: op
+  azirouge.command.debug:
+    description: AziRouge のデバッグ切替権限
+    default: op
+  azirouge.command.generate:
+    description: AziRouge のダンジョン生成権限
+    default: op

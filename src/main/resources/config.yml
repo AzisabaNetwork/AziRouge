@@ -1,0 +1,26 @@
+generation:
+  template-patterns:
+    - templates/*.yml
+  start-piece: start_room
+  world: world
+  origin:
+    x: 0
+    y: 64
+    z: 0
+  seed: 123456789
+  algorithm:
+    max-depth: 8
+    branch-chance: 0.45
+    target-piece-count: 18
+    piece-count-jitter: 2
+    min-piece-count: 12
+    max-piece-count: 24
+door:
+  enabled: true
+  chance: 0.35
+  material: SPRUCE_DOOR
+debug:
+  enabled: false
+enemies:
+  enabled: false
+  mode: reserved
