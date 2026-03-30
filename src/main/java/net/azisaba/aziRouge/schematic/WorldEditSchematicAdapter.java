@@ -14,6 +14,7 @@ import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import net.azisaba.aziRouge.debug.DebugLogger;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
+import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -52,12 +53,16 @@ public final class WorldEditSchematicAdapter implements SchematicAdapter {
     @Override
     public void paste(World world, PlacedPiece piece) throws SchematicPlacementException {
         Clipboard clipboard = loadClipboard(piece.template().schematicPath());
-        BlockVector3 target = BlockVector3.at(piece.origin().x(), piece.origin().y(), piece.origin().z());
+        IntVector3 anchorOffset = toVector(clipboard.getOrigin()).subtract(toVector(clipboard.getMinimumPoint()));
+        IntVector3 rotatedAnchorOffset = piece.rotation().apply(anchorOffset);
+        IntVector3 pasteTarget = piece.origin().add(rotatedAnchorOffset);
+        BlockVector3 target = BlockVector3.at(pasteTarget.x(), pasteTarget.y(), pasteTarget.z());
         debugLogger.log("schematic", "paste_begin", Map.of(
+                "anchorOffset", anchorOffset.x() + "," + anchorOffset.y() + "," + anchorOffset.z(),
                 "piece", piece.template().id(),
                 "rotation", piece.rotation().degrees(),
                 "schematic", piece.template().schematicPath(),
-                "target", piece.origin().x() + "," + piece.origin().y() + "," + piece.origin().z()
+                "target", pasteTarget.x() + "," + pasteTarget.y() + "," + pasteTarget.z()
         ));
         try (EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world))) {
             ClipboardHolder holder = new ClipboardHolder(clipboard);
@@ -100,12 +105,18 @@ public final class WorldEditSchematicAdapter implements SchematicAdapter {
         try (InputStream inputStream = Files.newInputStream(path); ClipboardReader reader = format.getReader(inputStream)) {
             Clipboard clipboard = reader.read();
             debugLogger.log("schematic", "loaded", Map.of(
+                    "clipboardMin", clipboard.getMinimumPoint(),
                     "dimensions", clipboard.getDimensions(),
+                    "origin", clipboard.getOrigin(),
                     "path", path
             ));
             return clipboard;
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to read schematic: " + path, ex);
         }
+    }
+
+    private IntVector3 toVector(BlockVector3 vector) {
+        return new IntVector3(vector.x(), vector.y(), vector.z());
     }
 }

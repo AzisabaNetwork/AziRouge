@@ -68,6 +68,7 @@ public final class DungeonGenerator {
         GenerationSettings generation = settings.generation();
         Random random = new Random(request.seed());
         int targetPieceCount = generation.resolveTargetPieceCount(random);
+        int maxDepth = request.maxDepthOverride() == null ? generation.maxDepth() : Math.max(1, request.maxDepthOverride());
         List<PlacedPiece> pieces = new ArrayList<>();
         List<PieceConnection> connections = new ArrayList<>();
         List<Frontier> frontiers = new ArrayList<>();
@@ -75,15 +76,15 @@ public final class DungeonGenerator {
 
         PlacedPiece startPiece = createPlacedPiece(startTemplate, Rotation.NONE, request.origin(), 0, 0);
         pieces.add(startPiece);
-        activateEntrances(startPiece, usedEntrances, frontiers, random, generation);
+        activateEntrances(startPiece, usedEntrances, frontiers, random, maxDepth, generation);
 
         while (pieces.size() < targetPieceCount && !frontiers.isEmpty()) {
             Frontier frontier = frontiers.remove(random.nextInt(frontiers.size()));
-            if (usedEntrances.contains(frontier.entrance.key()) || frontier.entrance.piece().depth() >= generation.maxDepth()) {
+            if (usedEntrances.contains(frontier.entrance.key()) || frontier.entrance.piece().depth() >= maxDepth) {
                 continue;
             }
 
-            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, generation);
+            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, generation, maxDepth);
             if (attempt == null) {
                 debugLogger.log("generation", "frontier_exhausted", Map.of(
                         "depth", frontier.entrance.piece().depth(),
@@ -97,7 +98,7 @@ public final class DungeonGenerator {
             usedEntrances.add(attempt.childEntrance.key());
             pieces.add(attempt.piece);
             connections.add(new PieceConnection(frontier.entrance, attempt.childEntrance));
-            activateEntrances(attempt.piece, usedEntrances, frontiers, random, generation);
+            activateEntrances(attempt.piece, usedEntrances, frontiers, random, maxDepth, generation);
         }
 
         for (PlacedPiece piece : pieces) {
@@ -112,6 +113,7 @@ public final class DungeonGenerator {
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
         debugLogger.log("generation", "complete", Map.of(
                 "connections", connections.size(),
+                "maxDepth", maxDepth,
                 "pieces", pieces.size(),
                 "seed", request.seed(),
                 "target", targetPieceCount,
@@ -131,7 +133,8 @@ public final class DungeonGenerator {
             List<PlacedPiece> pieces,
             LoadedTemplates templates,
             Random random,
-            GenerationSettings settings
+            GenerationSettings settings,
+            int maxDepth
     ) {
         List<PieceTemplate> weightedPieces = weightedShuffle(new ArrayList<>(templates.pieces().values()), random);
         for (PieceTemplate candidateTemplate : weightedPieces) {
@@ -141,7 +144,7 @@ public final class DungeonGenerator {
                 Rotation rotation = Rotation.fromFacing(candidateEntrance.facing(), frontier.entrance.worldFacing().opposite());
                 IntVector3 origin = computeChildOrigin(frontier.entrance, candidateEntrance, rotation);
                 PlacedPiece placedPiece = createPlacedPiece(candidateTemplate, rotation, origin, frontier.entrance.piece().depth() + 1, pieces.size());
-                if (placedPiece.depth() > settings.maxDepth()) {
+                if (placedPiece.depth() > maxDepth) {
                     continue;
                 }
                 if (intersectsExisting(placedPiece.worldBounds(), pieces)) {
@@ -183,9 +186,10 @@ public final class DungeonGenerator {
             Set<String> usedEntrances,
             List<Frontier> frontiers,
             Random random,
+            int maxDepth,
             GenerationSettings settings
     ) {
-        if (piece.depth() >= settings.maxDepth()) {
+        if (piece.depth() >= maxDepth) {
             return;
         }
 

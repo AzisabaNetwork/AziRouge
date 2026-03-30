@@ -10,6 +10,7 @@ public record GenerationExecutionRequest(
         String startPieceId,
         World world,
         IntVector3 origin,
-        long seed
+        long seed,
+        Integer maxDepthOverride
 ) {
 }

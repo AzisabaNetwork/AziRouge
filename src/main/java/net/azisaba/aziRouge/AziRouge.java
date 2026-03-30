@@ -1,5 +1,8 @@
 package net.azisaba.aziRouge;
 
+import net.azisaba.aziRouge.author.MissingSelectionProvider;
+import net.azisaba.aziRouge.author.SelectionProvider;
+import net.azisaba.aziRouge.author.TemplateAuthoringService;
 import net.azisaba.aziRouge.command.AziRougeCommand;
 import net.azisaba.aziRouge.config.PluginSettings;
 import net.azisaba.aziRouge.config.SettingsLoader;
@@ -17,6 +20,8 @@ public final class AziRouge extends JavaPlugin {
     private DebugLogger debugLogger;
     private TemplateManager templateManager;
     private SchematicAdapter schematicAdapter;
+    private SelectionProvider selectionProvider;
+    private TemplateAuthoringService templateAuthoringService;
     private DungeonGenerator dungeonGenerator;
 
     @Override
@@ -41,6 +46,8 @@ public final class AziRouge extends JavaPlugin {
         this.debugLogger = new DebugLogger(this, settings.debug().enabled());
         this.templateManager = new TemplateManager(this, debugLogger);
         this.schematicAdapter = createSchematicAdapter();
+        this.selectionProvider = createSelectionProvider();
+        this.templateAuthoringService = new TemplateAuthoringService(this, selectionProvider, debugLogger);
         this.dungeonGenerator = new DungeonGenerator(
                 this,
                 debugLogger,
@@ -48,7 +55,9 @@ public final class AziRouge extends JavaPlugin {
                 schematicAdapter,
                 new EnemyPlacementService(debugLogger)
         );
-        getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled() + " schematic=" + schematicAdapter.describeAvailability());
+        getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
+                + " schematic=" + schematicAdapter.describeAvailability()
+                + " selection=" + selectionProvider.describeAvailability());
     }
 
     public PluginSettings settings() {
@@ -57,6 +66,10 @@ public final class AziRouge extends JavaPlugin {
 
     public DungeonGenerator dungeonGenerator() {
         return dungeonGenerator;
+    }
+
+    public TemplateAuthoringService templateAuthoringService() {
+        return templateAuthoringService;
     }
 
     public DebugLogger debugLogger() {
@@ -90,6 +103,21 @@ public final class AziRouge extends JavaPlugin {
         } catch (ReflectiveOperationException | LinkageError ex) {
             getLogger().severe("Failed to initialize WorldEdit adapter: " + ex.getMessage());
             return new MissingSchematicAdapter("WorldEdit adapter initialization failed");
+        }
+    }
+
+    private SelectionProvider createSelectionProvider() {
+        if (getServer().getPluginManager().getPlugin("WorldEdit") == null) {
+            return new MissingSelectionProvider("WorldEdit plugin not found");
+        }
+        try {
+            Class<?> type = Class.forName("net.azisaba.aziRouge.author.WorldEditSelectionProvider");
+            return (SelectionProvider) type
+                    .getConstructor()
+                    .newInstance();
+        } catch (ReflectiveOperationException | LinkageError ex) {
+            getLogger().severe("Failed to initialize WorldEdit selection provider: " + ex.getMessage());
+            return new MissingSelectionProvider("WorldEdit selection provider initialization failed");
         }
     }
 }

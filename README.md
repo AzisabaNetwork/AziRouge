@@ -32,6 +32,7 @@ AziRouge は、ローグライク向けにダンジョンピースをランダ�
 /azirouge generate --patterns=templates/*.yml,templates/boss/*.yml
 /azirouge generate --start=start_room --world=dungeon_world --x=100 --y=64 --z=100
 /azirouge generate --seed=123456789
+/azirouge generate --depth=10
 ```
 
 指定可能なオプション:
@@ -41,6 +42,7 @@ AziRouge は、ローグライク向けにダンジョンピースをランダ�
 - `--world=` 生成先ワールド名
 - `--x=` `--y=` `--z=` 初期座標
 - `--seed=` seed
+- `--depth=` その実行だけ最大 depth を上書き
 
 ### リロード
 
@@ -54,6 +56,28 @@ AziRouge は、ローグライク向けにダンジョンピースをランダ�
 /azirouge debug on
 /azirouge debug off
 ```
+
+### ゲーム内 authoring
+
+piece と entrance は WorldEdit 選択とコマンドだけで更新できます。  
+piece の schematic origin は常に WorldEdit 選択範囲の最小 corner へ固定されます。
+
+```text
+/azirouge author piece upsert templates/custom.yml room_a schematics/custom/room_a.schem 1.5
+/azirouge author entrance upsert templates/custom.yml room_a north_gate NORTH
+/azirouge author entrance remove templates/custom.yml room_a north_gate
+```
+
+推奨手順:
+
+1. WorldEdit でピース全体を選択する
+2. `/azirouge author piece upsert ...` を実行する
+3. この時点で piece の origin は選択範囲の最小 corner に固定される
+4. 次に入口面を WorldEdit で 2 点選択する
+5. その最小 corner ブロックへ立ったまま `/azirouge author entrance upsert ...` を実行する
+
+`author piece upsert` は `bounds`、`schematic`、`weight` を更新します。  
+`author entrance upsert` は選択面を `point1` / `point2` として保存し、bounds 外や開口深さ超過は拒否します。
 
 ## config.yml
 
@@ -139,8 +163,8 @@ pieces:
 ## schematic 配置の考え方
 
 - `schematic` はテンプレート YAML からの相対パス、またはプラグインデータフォルダからの相対パス、または絶対パスで指定できます
-- schematic の貼り付け原点は WorldEdit の clipboard origin を前提にしています
-- `bounds` と入口座標は schematic 原点基準で合わせてください
+- 貼り付け時は WorldEdit clipboard origin をそのまま使わず、clipboard の最小 corner を実質的な原点として補正します
+- `bounds` と入口座標は最小 corner 基準で合わせてください
 
 ## デバッグログ
 

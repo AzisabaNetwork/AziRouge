@@ -8,7 +8,7 @@ softdepend:
 commands:
   azirouge:
     description: ダンジョン生成と設定リロードを行います
-    usage: /azirouge <generate|reload|debug>
+    usage: /azirouge <generate|reload|debug|author>
     permission: azirouge.command
 permissions:
   azirouge.command:
@@ -22,4 +22,7 @@ permissions:
     default: op
   azirouge.command.generate:
     description: AziRouge のダンジョン生成権限
+    default: op
+  azirouge.command.author:
+    description: AziRouge のゲーム内テンプレート編集権限
     default: op
