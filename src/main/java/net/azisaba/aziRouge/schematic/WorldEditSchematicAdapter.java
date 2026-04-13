@@ -53,12 +53,10 @@ public final class WorldEditSchematicAdapter implements SchematicAdapter {
     @Override
     public void paste(World world, PlacedPiece piece) throws SchematicPlacementException {
         Clipboard clipboard = loadClipboard(piece.template().schematicPath());
-        IntVector3 anchorOffset = toVector(clipboard.getOrigin()).subtract(toVector(clipboard.getMinimumPoint()));
-        IntVector3 rotatedAnchorOffset = piece.rotation().apply(anchorOffset);
-        IntVector3 pasteTarget = piece.origin().add(rotatedAnchorOffset);
+        IntVector3 pasteTarget = resolvePasteTarget(piece, clipboard);
         BlockVector3 target = BlockVector3.at(pasteTarget.x(), pasteTarget.y(), pasteTarget.z());
         debugLogger.log("schematic", "paste_begin", Map.of(
-                "anchorOffset", anchorOffset.x() + "," + anchorOffset.y() + "," + anchorOffset.z(),
+                "anchor", piece.origin().x() + "," + piece.origin().y() + "," + piece.origin().z(),
                 "piece", piece.template().id(),
                 "rotation", piece.rotation().degrees(),
                 "schematic", piece.template().schematicPath(),
@@ -104,8 +102,10 @@ public final class WorldEditSchematicAdapter implements SchematicAdapter {
         }
         try (InputStream inputStream = Files.newInputStream(path); ClipboardReader reader = format.getReader(inputStream)) {
             Clipboard clipboard = reader.read();
+            BlockVector3 clipboardMin = clipboard.getRegion().getMinimumPoint();
+            clipboard.setOrigin(clipboardMin);
             debugLogger.log("schematic", "loaded", Map.of(
-                    "clipboardMin", clipboard.getMinimumPoint(),
+                    "clipboardMin", clipboardMin,
                     "dimensions", clipboard.getDimensions(),
                     "origin", clipboard.getOrigin(),
                     "path", path
@@ -116,7 +116,14 @@ public final class WorldEditSchematicAdapter implements SchematicAdapter {
         }
     }
 
-    private IntVector3 toVector(BlockVector3 vector) {
-        return new IntVector3(vector.x(), vector.y(), vector.z());
+    private IntVector3 resolvePasteTarget(PlacedPiece piece, Clipboard clipboard) {
+        int sizeX = clipboard.getDimensions().x();
+        int sizeZ = clipboard.getDimensions().z();
+        return switch (piece.rotation()) {
+            case NONE -> piece.origin();
+            case CLOCKWISE_90 -> new IntVector3(piece.origin().x(), piece.origin().y(), piece.origin().z() + sizeX - 1);
+            case CLOCKWISE_180 -> new IntVector3(piece.origin().x() + sizeX - 1, piece.origin().y(), piece.origin().z() + sizeZ - 1);
+            case CLOCKWISE_270 -> new IntVector3(piece.origin().x() + sizeZ - 1, piece.origin().y(), piece.origin().z());
+        };
     }
 }

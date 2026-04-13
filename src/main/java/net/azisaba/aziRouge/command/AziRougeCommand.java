@@ -20,11 +20,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements CommandExecutor, TabCompleter {
@@ -107,12 +103,18 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        IntVector3 origin = new IntVector3(
-                parseInt(options.get("x"), defaults.origin().x()),
-                parseInt(options.get("y"), defaults.origin().y()),
-                parseInt(options.get("z"), defaults.origin().z())
+        IntVector3 origin;
+        if (sender instanceof Player p) {
+            origin = new IntVector3(p.getLocation().getBlockX(), p.getLocation().getBlockY(), p.getLocation().getBlockZ());
+        } else {
+            origin = defaults.origin();
+        }
+        origin = new IntVector3(
+                parseInt(options.get("x"), origin.x()),
+                parseInt(options.get("y"), origin.y()),
+                parseInt(options.get("z"), origin.z())
         );
-        long seed = parseLong(options.get("seed"), defaults.defaultSeed());
+        long seed = parseLong(options.get("seed"), System.currentTimeMillis());
         Integer depthOverride = options.containsKey("depth") ? Math.max(1, parseInt(options.get("depth"), defaults.maxDepth())) : null;
 
         try {
@@ -219,7 +221,7 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
         if ("upsert".equalsIgnoreCase(args[0])) {
             if (args.length < 5) {
                 player.sendMessage("Usage: /azirouge author entrance upsert <templateFile> <pieceId> <entranceId> <facing>");
-                player.sendMessage("Stand on the same minimum corner used for the piece, then select the entrance plane with WorldEdit.");
+                player.sendMessage("Select the entrance plane with WorldEdit. The piece minimum corner saved by `piece upsert` will be reused automatically.");
                 return true;
             }
             Direction facing;

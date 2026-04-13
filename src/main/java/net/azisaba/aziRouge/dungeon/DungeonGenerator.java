@@ -66,25 +66,34 @@ public final class DungeonGenerator {
         }
 
         GenerationSettings generation = settings.generation();
-        Random random = new Random(request.seed());
-        int targetPieceCount = generation.resolveTargetPieceCount(random);
         int maxDepth = request.maxDepthOverride() == null ? generation.maxDepth() : Math.max(1, request.maxDepthOverride());
+        GenerationPlan plan = buildGenerationPlan(generation, startTemplate, templates, maxDepth);
+        Random random = new Random(request.seed());
+        int targetPieceCount = plan.targetPieceCount();
         List<PlacedPiece> pieces = new ArrayList<>();
         List<PieceConnection> connections = new ArrayList<>();
         List<Frontier> frontiers = new ArrayList<>();
         Set<String> usedEntrances = new HashSet<>();
+        int[] placedPerDepth = new int[maxDepth + 1];
 
         PlacedPiece startPiece = createPlacedPiece(startTemplate, Rotation.NONE, request.origin(), 0, 0);
         pieces.add(startPiece);
-        activateEntrances(startPiece, usedEntrances, frontiers, random, maxDepth, generation);
+        placedPerDepth[0] = 1;
+        debugLogger.log("generation", "plan", Map.of(
+                "depthTargets", format(plan.targetPiecesPerDepth()),
+                "maxDepth", maxDepth,
+                "target", targetPieceCount
+        ));
+        activateEntrances(startPiece, usedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
 
         while (pieces.size() < targetPieceCount && !frontiers.isEmpty()) {
-            Frontier frontier = frontiers.remove(random.nextInt(frontiers.size()));
+            Frontier frontier = selectFrontier(frontiers, random, plan, placedPerDepth);
+            frontiers.remove(frontier);
             if (usedEntrances.contains(frontier.entrance.key()) || frontier.entrance.piece().depth() >= maxDepth) {
                 continue;
             }
 
-            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, generation, maxDepth);
+            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, maxDepth);
             if (attempt == null) {
                 debugLogger.log("generation", "frontier_exhausted", Map.of(
                         "depth", frontier.entrance.piece().depth(),
@@ -97,22 +106,24 @@ public final class DungeonGenerator {
             usedEntrances.add(frontier.entrance.key());
             usedEntrances.add(attempt.childEntrance.key());
             pieces.add(attempt.piece);
+            placedPerDepth[attempt.piece.depth()]++;
             connections.add(new PieceConnection(frontier.entrance, attempt.childEntrance));
-            activateEntrances(attempt.piece, usedEntrances, frontiers, random, maxDepth, generation);
+            activateEntrances(attempt.piece, usedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
         }
 
         for (PlacedPiece piece : pieces) {
             schematicAdapter.paste(request.world(), piece);
         }
 
-        for (PieceConnection connection : connections) {
+        List<PieceConnection> allConnections = collectConnections(pieces, connections);
+        for (PieceConnection connection : allConnections) {
             carveConnection(request.world(), connection);
             maybePlaceDoor(request.world(), connection, random, settings.door());
         }
 
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
         debugLogger.log("generation", "complete", Map.of(
-                "connections", connections.size(),
+                "connections", allConnections.size(),
                 "maxDepth", maxDepth,
                 "pieces", pieces.size(),
                 "seed", request.seed(),
@@ -123,7 +134,7 @@ public final class DungeonGenerator {
                 request.seed(),
                 targetPieceCount,
                 pieces.size(),
-                connections.size(),
+                allConnections.size(),
                 reservations
         );
     }
@@ -133,7 +144,6 @@ public final class DungeonGenerator {
             List<PlacedPiece> pieces,
             LoadedTemplates templates,
             Random random,
-            GenerationSettings settings,
             int maxDepth
     ) {
         List<PieceTemplate> weightedPieces = weightedShuffle(new ArrayList<>(templates.pieces().values()), random);
@@ -142,40 +152,52 @@ public final class DungeonGenerator {
             Collections.shuffle(candidateEntrances, random);
             for (EntranceTemplate candidateEntrance : candidateEntrances) {
                 Rotation rotation = Rotation.fromFacing(candidateEntrance.facing(), frontier.entrance.worldFacing().opposite());
-                IntVector3 origin = computeChildOrigin(frontier.entrance, candidateEntrance, rotation);
-                PlacedPiece placedPiece = createPlacedPiece(candidateTemplate, rotation, origin, frontier.entrance.piece().depth() + 1, pieces.size());
-                if (placedPiece.depth() > maxDepth) {
-                    continue;
-                }
-                if (intersectsExisting(placedPiece.worldBounds(), pieces)) {
-                    debugLogger.log("generation", "candidate_rejected", Map.of(
-                            "candidate", candidateTemplate.id(),
-                            "depth", placedPiece.depth(),
-                            "origin", format(origin),
-                            "reason", "collision",
+                for (IntVector3 origin : computeChildOrigins(frontier.entrance, candidateTemplate, candidateEntrance, rotation)) {
+                    PlacedPiece placedPiece = createPlacedPiece(candidateTemplate, rotation, origin, frontier.entrance.piece().depth() + 1, pieces.size());
+                    if (placedPiece.depth() > maxDepth) {
+                        continue;
+                    }
+                    if (intersectsExisting(placedPiece.worldBounds(), pieces)) {
+                        debugLogger.log("generation", "candidate_rejected", Map.of(
+                                "candidate", candidateTemplate.id(),
+                                "depth", placedPiece.depth(),
+                                "origin", format(origin),
+                                "reason", "collision",
                             "rotation", rotation.degrees()
-                    ));
-                    continue;
-                }
-                PlacedEntrance placedEntrance = findEntrance(placedPiece, candidateEntrance.id());
-                if (!frontier.entrance.canConnectTo(placedEntrance)) {
-                    debugLogger.log("generation", "candidate_rejected", Map.of(
+                        ));
+                        continue;
+                    }
+                    PlacedPiece deniedNeighbor = findDeniedAdjacentPiece(placedPiece, pieces);
+                    if (deniedNeighbor != null) {
+                        debugLogger.log("generation", "candidate_rejected", Map.of(
+                                "candidate", candidateTemplate.id(),
+                                "neighbor", deniedNeighbor.template().id(),
+                                "origin", format(origin),
+                                "reason", "adjacent_piece_denied",
+                                "rotation", rotation.degrees()
+                        ));
+                        continue;
+                    }
+                    PlacedEntrance placedEntrance = findEntrance(placedPiece, candidateEntrance.id());
+                    if (!frontier.entrance.canConnectTo(placedEntrance)) {
+                        debugLogger.log("generation", "candidate_rejected", Map.of(
+                                "candidate", candidateTemplate.id(),
+                                "childEntrance", candidateEntrance.id(),
+                                "origin", format(origin),
+                                "reason", "adjacency",
+                                "rotation", rotation.degrees()
+                        ));
+                        continue;
+                    }
+                    debugLogger.log("generation", "candidate_accepted", Map.of(
                             "candidate", candidateTemplate.id(),
                             "childEntrance", candidateEntrance.id(),
+                            "depth", placedPiece.depth(),
                             "origin", format(origin),
-                            "reason", "adjacency",
                             "rotation", rotation.degrees()
                     ));
-                    continue;
+                    return new PlacementAttempt(placedPiece, placedEntrance);
                 }
-                debugLogger.log("generation", "candidate_accepted", Map.of(
-                        "candidate", candidateTemplate.id(),
-                        "childEntrance", candidateEntrance.id(),
-                        "depth", placedPiece.depth(),
-                        "origin", format(origin),
-                        "rotation", rotation.degrees()
-                ));
-                return new PlacementAttempt(placedPiece, placedEntrance);
             }
         }
         return null;
@@ -187,7 +209,9 @@ public final class DungeonGenerator {
             List<Frontier> frontiers,
             Random random,
             int maxDepth,
-            GenerationSettings settings
+            GenerationSettings settings,
+            GenerationPlan plan,
+            int[] placedPerDepth
     ) {
         if (piece.depth() >= maxDepth) {
             return;
@@ -203,28 +227,28 @@ public final class DungeonGenerator {
             return;
         }
 
-        Collections.shuffle(available, random);
-        Set<PlacedEntrance> selected = new LinkedHashSet<>();
-        selected.add(available.get(0));
-        for (int index = 1; index < available.size(); index++) {
-            if (random.nextDouble() <= settings.branchChance()) {
-                selected.add(available.get(index));
-            }
+        int nextDepth = piece.depth() + 1;
+        int remainingBudget = plan.remainingForDepth(nextDepth, placedPerDepth);
+        if (remainingBudget <= 0) {
+            return;
         }
-        for (PlacedEntrance entrance : selected) {
-            frontiers.add(new Frontier(entrance));
+
+        Collections.shuffle(available, random);
+        int desiredCount = resolveDesiredFrontierCount(available.size(), remainingBudget, settings, random);
+        for (int index = 0; index < desiredCount; index++) {
+            frontiers.add(new Frontier(available.get(index)));
         }
     }
 
     private PlacedPiece createPlacedPiece(PieceTemplate template, Rotation rotation, IntVector3 origin, int depth, int index) {
-        BlockBox worldBounds = template.bounds().rotate(rotation).offset(origin);
+        TransformedPieceGeometry geometry = transformGeometry(template, rotation);
+        BlockBox worldBounds = geometry.relativeBounds().offset(origin);
         PlacedPiece base = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.of());
-        List<PlacedEntrance> entrances = new ArrayList<>(template.entrances().size());
-        for (EntranceTemplate entranceTemplate : template.entrances()) {
-            BlockBox plane = entranceTemplate.planeBox().rotate(rotation).offset(origin);
-            Direction worldFacing = rotation.rotate(entranceTemplate.facing());
-            BlockBox opening = plane.extend(worldFacing.opposite(), entranceTemplate.width() - 1);
-            entrances.add(new PlacedEntrance(base, entranceTemplate, worldFacing, plane, opening));
+        List<PlacedEntrance> entrances = new ArrayList<>(geometry.entrances().size());
+        for (TransformedEntranceGeometry transformedEntrance : geometry.entrances()) {
+            BlockBox plane = transformedEntrance.relativePlane().offset(origin);
+            BlockBox opening = transformedEntrance.relativeOpening().offset(origin);
+            entrances.add(new PlacedEntrance(base, transformedEntrance.template(), transformedEntrance.worldFacing(), plane, opening));
         }
 
         PlacedPiece full = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.of());
@@ -235,38 +259,70 @@ public final class DungeonGenerator {
         return new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.copyOf(rebound));
     }
 
-    private IntVector3 computeChildOrigin(PlacedEntrance parentEntrance, EntranceTemplate childEntrance, Rotation rotation) {
-        BlockBox childPlane = childEntrance.planeBox().rotate(rotation);
+    private List<IntVector3> computeChildOrigins(
+            PlacedEntrance parentEntrance,
+            PieceTemplate childTemplate,
+            EntranceTemplate childEntrance,
+            Rotation rotation
+    ) {
+        TransformedPieceGeometry geometry = transformGeometry(childTemplate, rotation);
+        TransformedEntranceGeometry transformedEntrance = geometry.findEntrance(childEntrance.id());
+        BlockBox childPlane = transformedEntrance.relativePlane();
         BlockBox parentPlane = parentEntrance.planeBox();
-
-        int x;
-        int y = parentPlane.minY() + centeredOffset(parentPlane.sizeY(), childPlane.sizeY()) - childPlane.minY();
-        int z;
+        int y = parentPlane.minY() - childPlane.minY();
 
         switch (parentEntrance.worldFacing()) {
             case NORTH -> {
-                x = parentPlane.minX() + centeredOffset(parentPlane.sizeX(), childPlane.sizeX()) - childPlane.minX();
-                z = parentPlane.minZ() - childPlane.minZ() - 1;
+                int z = parentPlane.minZ() - childPlane.minZ() - 1;
+                int x = centeredOriginForAxis(parentPlane.minX(), parentPlane.sizeX(), childPlane.minX(), childPlane.sizeX());
+                return List.of(new IntVector3(x, y, z));
             }
             case SOUTH -> {
-                x = parentPlane.minX() + centeredOffset(parentPlane.sizeX(), childPlane.sizeX()) - childPlane.minX();
-                z = parentPlane.maxZ() + 1 - childPlane.minZ();
+                int z = parentPlane.maxZ() + 1 - childPlane.minZ();
+                int x = centeredOriginForAxis(parentPlane.minX(), parentPlane.sizeX(), childPlane.minX(), childPlane.sizeX());
+                return List.of(new IntVector3(x, y, z));
             }
             case EAST -> {
-                x = parentPlane.maxX() + 1 - childPlane.minX();
-                z = parentPlane.minZ() + centeredOffset(parentPlane.sizeZ(), childPlane.sizeZ()) - childPlane.minZ();
+                int x = parentPlane.maxX() + 1 - childPlane.minX();
+                int z = centeredOriginForAxis(parentPlane.minZ(), parentPlane.sizeZ(), childPlane.minZ(), childPlane.sizeZ());
+                return List.of(new IntVector3(x, y, z));
             }
             case WEST -> {
-                x = parentPlane.minX() - childPlane.minX() - 1;
-                z = parentPlane.minZ() + centeredOffset(parentPlane.sizeZ(), childPlane.sizeZ()) - childPlane.minZ();
+                int x = parentPlane.minX() - childPlane.minX() - 1;
+                int z = centeredOriginForAxis(parentPlane.minZ(), parentPlane.sizeZ(), childPlane.minZ(), childPlane.sizeZ());
+                return List.of(new IntVector3(x, y, z));
             }
             default -> throw new IllegalStateException("Unsupported direction");
         }
-        return new IntVector3(x, y, z);
+    }
+
+    private int centeredOriginForAxis(int parentMin, int parentSize, int childMin, int childSize) {
+        return parentMin + centeredOffset(parentSize, childSize) - childMin;
     }
 
     private int centeredOffset(int parentSize, int childSize) {
         return Math.floorDiv(parentSize - childSize, 2);
+    }
+
+    private int overlapSize(int minA, int maxA, int minB, int maxB) {
+        int overlapMin = Math.max(minA, minB);
+        int overlapMax = Math.min(maxA, maxB);
+        return overlapMin > overlapMax ? 0 : overlapMax - overlapMin + 1;
+    }
+
+    private int resolveDesiredFrontierCount(int availableCount, int remainingBudget, GenerationSettings settings, Random random) {
+        if (availableCount <= 0 || remainingBudget <= 0) {
+            return 0;
+        }
+        double expected = settings.expectedActivatedEntranceCount(availableCount);
+        int desired = (int) Math.floor(expected);
+        double fraction = expected - desired;
+        if (fraction > 0.0D && random.nextDouble() < fraction) {
+            desired++;
+        }
+        desired = Math.max(1, desired);
+        desired = Math.min(desired, availableCount);
+        return Math.min(desired, remainingBudget);
     }
 
     private boolean intersectsExisting(BlockBox candidate, List<PlacedPiece> pieces) {
@@ -278,6 +334,22 @@ public final class DungeonGenerator {
         return false;
     }
 
+    private PlacedPiece findDeniedAdjacentPiece(PlacedPiece candidate, List<PlacedPiece> pieces) {
+        for (PlacedPiece piece : pieces) {
+            if (!areAdjacent(candidate.worldBounds(), piece.worldBounds())) {
+                continue;
+            }
+            if (!allowsAdjacency(candidate.template(), piece.template())) {
+                return piece;
+            }
+        }
+        return null;
+    }
+
+    private boolean allowsAdjacency(PieceTemplate left, PieceTemplate right) {
+        return left.allowsAdjacentPiece(right.id()) && right.allowsAdjacentPiece(left.id());
+    }
+
     private PlacedEntrance findEntrance(PlacedPiece piece, String entranceId) {
         for (PlacedEntrance entrance : piece.entrances()) {
             if (entrance.template().id().equals(entranceId)) {
@@ -285,6 +357,162 @@ public final class DungeonGenerator {
             }
         }
         throw new IllegalArgumentException("Entrance not found: " + entranceId + " on piece " + piece.template().id());
+    }
+
+    private Frontier selectFrontier(List<Frontier> frontiers, Random random, GenerationPlan plan, int[] placedPerDepth) {
+        List<Frontier> prioritized = new ArrayList<>();
+        int shallowestNeededDepth = Integer.MAX_VALUE;
+        for (Frontier frontier : frontiers) {
+            int childDepth = frontier.entrance.piece().depth() + 1;
+            if (childDepth > plan.maxDepth() || plan.remainingForDepth(childDepth, placedPerDepth) <= 0) {
+                continue;
+            }
+            if (childDepth < shallowestNeededDepth) {
+                shallowestNeededDepth = childDepth;
+                prioritized.clear();
+            }
+            if (childDepth == shallowestNeededDepth) {
+                prioritized.add(frontier);
+            }
+        }
+        List<Frontier> pool = prioritized.isEmpty() ? frontiers : prioritized;
+        return weightedFrontier(pool, random);
+    }
+
+    private Frontier weightedFrontier(List<Frontier> frontiers, Random random) {
+        double totalWeight = 0.0D;
+        for (Frontier frontier : frontiers) {
+            totalWeight += frontierWeight(frontier);
+        }
+        double cursor = random.nextDouble() * totalWeight;
+        Frontier selected = frontiers.get(0);
+        for (Frontier frontier : frontiers) {
+            cursor -= frontierWeight(frontier);
+            if (cursor <= 0.0D) {
+                selected = frontier;
+                break;
+            }
+        }
+        return selected;
+    }
+
+    private double frontierWeight(Frontier frontier) {
+        return Math.max(1.0D, frontier.entrance.piece().template().entrances().size());
+    }
+
+    private GenerationPlan buildGenerationPlan(
+            GenerationSettings settings,
+            PieceTemplate startTemplate,
+            LoadedTemplates templates,
+            int maxDepth
+    ) {
+        int[] targetPerDepth = new int[maxDepth + 1];
+        targetPerDepth[0] = 1;
+        int total = 1;
+        double averageChildBranches = averageChildBranches(settings, templates);
+        double expectedLayerPieces = settings.expectedActivatedEntranceCount(startTemplate.entrances().size());
+
+        for (int depth = 1; depth <= maxDepth && total < settings.maxPieceCount(); depth++) {
+            int planned = resolvePlannedLayerCount(expectedLayerPieces, settings);
+            planned = Math.min(planned, settings.maxPieceCount() - total);
+            targetPerDepth[depth] = planned;
+            total += planned;
+            expectedLayerPieces = planned * averageChildBranches;
+        }
+
+        int clampedTarget = Math.max(1, Math.min(settings.maxPieceCount(), Math.max(total, settings.minPieceCount())));
+        if (clampedTarget > total && maxDepth > 0) {
+            int depth = 1;
+            while (total < clampedTarget) {
+                if (depth > maxDepth) {
+                    depth = 1;
+                }
+                if (depth == 1 || targetPerDepth[depth - 1] > 0) {
+                    targetPerDepth[depth]++;
+                    total++;
+                }
+                depth++;
+            }
+        }
+        return new GenerationPlan(maxDepth, total, targetPerDepth);
+    }
+
+    private double averageChildBranches(GenerationSettings settings, LoadedTemplates templates) {
+        double totalWeight = 0.0D;
+        double weightedExpectedBranches = 0.0D;
+        for (PieceTemplate template : templates.pieces().values()) {
+            double weight = Math.max(0.0001D, template.weight());
+            int availableAfterConnection = Math.max(0, template.entrances().size() - 1);
+            weightedExpectedBranches += settings.expectedActivatedEntranceCount(availableAfterConnection) * weight;
+            totalWeight += weight;
+        }
+        return totalWeight <= 0.0D ? 0.0D : weightedExpectedBranches / totalWeight;
+    }
+
+    private int resolvePlannedLayerCount(double expectedLayerPieces, GenerationSettings settings) {
+        if (expectedLayerPieces <= 0.0D) {
+            return 0;
+        }
+        return Math.max(1, (int) Math.round(expectedLayerPieces * settings.depthPredictionMultiplier()));
+    }
+
+    private List<PieceConnection> collectConnections(List<PlacedPiece> pieces, List<PieceConnection> explicitConnections) {
+        List<PieceConnection> collected = new ArrayList<>(explicitConnections);
+        Set<String> seen = new LinkedHashSet<>();
+        for (PieceConnection connection : explicitConnections) {
+            seen.add(connectionKey(connection.parentEntrance(), connection.childEntrance()));
+        }
+
+        for (int leftIndex = 0; leftIndex < pieces.size(); leftIndex++) {
+            PlacedPiece left = pieces.get(leftIndex);
+            for (int rightIndex = leftIndex + 1; rightIndex < pieces.size(); rightIndex++) {
+                PlacedPiece right = pieces.get(rightIndex);
+                if (!areAdjacent(left.worldBounds(), right.worldBounds())) {
+                    continue;
+                }
+                if (!allowsAdjacency(left.template(), right.template())) {
+                    debugLogger.log("generation", "adjacent_connection_blocked", Map.of(
+                            "left", left.template().id(),
+                            "right", right.template().id(),
+                            "reason", "adjacent_piece_denied"
+                    ));
+                    continue;
+                }
+                for (PlacedEntrance leftEntrance : left.entrances()) {
+                    for (PlacedEntrance rightEntrance : right.entrances()) {
+                        if (!leftEntrance.canConnectTo(rightEntrance)) {
+                            continue;
+                        }
+                        String key = connectionKey(leftEntrance, rightEntrance);
+                        if (!seen.add(key)) {
+                            continue;
+                        }
+                        collected.add(new PieceConnection(leftEntrance, rightEntrance));
+                        debugLogger.log("generation", "adjacent_connection_detected", Map.of(
+                                "left", leftEntrance.key(),
+                                "right", rightEntrance.key(),
+                                "pieces", left.template().id() + "<->" + right.template().id()
+                        ));
+                    }
+                }
+            }
+        }
+        return collected;
+    }
+
+    private boolean areAdjacent(BlockBox left, BlockBox right) {
+        boolean adjacentOnX = left.maxX() + 1 == right.minX() || right.maxX() + 1 == left.minX();
+        boolean adjacentOnZ = left.maxZ() + 1 == right.minZ() || right.maxZ() + 1 == left.minZ();
+        boolean overlapY = overlapSize(left.minY(), left.maxY(), right.minY(), right.maxY()) > 0;
+        boolean overlapZ = overlapSize(left.minZ(), left.maxZ(), right.minZ(), right.maxZ()) > 0;
+        boolean overlapX = overlapSize(left.minX(), left.maxX(), right.minX(), right.maxX()) > 0;
+        return (adjacentOnX && overlapY && overlapZ) || (adjacentOnZ && overlapY && overlapX);
+    }
+
+    private String connectionKey(PlacedEntrance first, PlacedEntrance second) {
+        String left = first.key();
+        String right = second.key();
+        return left.compareTo(right) <= 0 ? left + "|" + right : right + "|" + left;
     }
 
     private List<PieceTemplate> weightedShuffle(List<PieceTemplate> templates, Random random) {
@@ -388,9 +616,80 @@ public final class DungeonGenerator {
         return format(box.min()) + "->" + format(box.max());
     }
 
+    private String format(int[] values) {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < values.length; index++) {
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append(index).append(':').append(values[index]);
+        }
+        return builder.toString();
+    }
+
     private record Frontier(PlacedEntrance entrance) {
     }
 
     private record PlacementAttempt(PlacedPiece piece, PlacedEntrance childEntrance) {
+    }
+
+    private record GenerationPlan(int maxDepth, int targetPieceCount, int[] targetPiecesPerDepth) {
+        private int remainingForDepth(int depth, int[] placedPerDepth) {
+            if (depth < 0 || depth >= targetPiecesPerDepth.length) {
+                return 0;
+            }
+            return Math.max(0, targetPiecesPerDepth[depth] - placedPerDepth[depth]);
+        }
+    }
+
+    private record TransformedPieceGeometry(BlockBox relativeBounds, List<TransformedEntranceGeometry> entrances) {
+        private TransformedEntranceGeometry findEntrance(String entranceId) {
+            for (TransformedEntranceGeometry entrance : entrances) {
+                if (entrance.template().id().equals(entranceId)) {
+                    return entrance;
+                }
+            }
+            throw new IllegalArgumentException("Entrance not found: " + entranceId);
+        }
+    }
+
+    private record TransformedEntranceGeometry(
+            EntranceTemplate template,
+            Direction worldFacing,
+            BlockBox relativePlane,
+            BlockBox relativeOpening
+    ) {
+    }
+
+    private TransformedPieceGeometry transformGeometry(PieceTemplate template, Rotation rotation) {
+        BlockBox normalizedBounds = normalizeBounds(template.bounds());
+        BlockBox rotatedBounds = normalizedBounds.rotate(rotation);
+        IntVector3 shift = negate(rotatedBounds.min());
+        BlockBox relativeBounds = rotatedBounds.offset(shift);
+        List<TransformedEntranceGeometry> entrances = new ArrayList<>(template.entrances().size());
+        for (EntranceTemplate entrance : template.entrances()) {
+            BlockBox normalizedPlane = normalizeBox(entrance.planeBox(), template.bounds().min());
+            BlockBox rotatedPlane = normalizedPlane.rotate(rotation);
+            BlockBox relativePlane = rotatedPlane.offset(shift);
+            Direction worldFacing = rotation.rotate(entrance.facing());
+            BlockBox relativeOpening = relativePlane.extend(worldFacing.opposite(), entrance.width() - 1);
+            entrances.add(new TransformedEntranceGeometry(entrance, worldFacing, relativePlane, relativeOpening));
+        }
+        return new TransformedPieceGeometry(relativeBounds, List.copyOf(entrances));
+    }
+
+    private BlockBox normalizeBounds(BlockBox bounds) {
+        return BlockBox.fromPoints(
+                new IntVector3(0, 0, 0),
+                new IntVector3(bounds.sizeX() - 1, bounds.sizeY() - 1, bounds.sizeZ() - 1)
+        );
+    }
+
+    private BlockBox normalizeBox(BlockBox box, IntVector3 baseMin) {
+        return BlockBox.fromPoints(box.min().subtract(baseMin), box.max().subtract(baseMin));
+    }
+
+    private IntVector3 negate(IntVector3 vector) {
+        return new IntVector3(-vector.x(), -vector.y(), -vector.z());
     }
 }

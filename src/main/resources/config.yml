@@ -11,8 +11,8 @@ generation:
   algorithm:
     max-depth: 8
     branch-chance: 0.45
-    target-piece-count: 18
-    piece-count-jitter: 2
+    entrance-branch-bonus: 0.15
+    depth-prediction-multiplier: 1.0
     min-piece-count: 12
     max-piece-count: 24
 door:

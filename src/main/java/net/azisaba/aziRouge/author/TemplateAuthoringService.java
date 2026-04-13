@@ -42,6 +42,8 @@ public final class TemplateAuthoringService {
         yaml.set(base + ".weight", weight);
         yaml.set(base + ".bounds.min", toList(bounds.min()));
         yaml.set(base + ".bounds.max", toList(bounds.max()));
+        yaml.set(base + ".authoring.world", selection.worldName());
+        yaml.set(base + ".authoring.origin", toList(origin));
         if (yaml.get(base + ".entrances") == null) {
             yaml.set(base + ".entrances", new ArrayList<>());
         }
@@ -59,9 +61,6 @@ public final class TemplateAuthoringService {
     public EntranceAuthoringResult upsertEntrance(Player player, String templatePath, String pieceId, String entranceId, Direction facing)
             throws TemplateAuthoringException, SelectionLookupException {
         SelectionSnapshot selection = requirePlayerSelection(player);
-        IntVector3 origin = playerOrigin(player);
-        BlockBox plane = BlockBox.fromPoints(selection.min().subtract(origin), selection.max().subtract(origin));
-        EntranceTemplate entrance = new EntranceTemplate(entranceId, facing, plane.min(), plane.max());
         Path file = resolveTemplateFile(templatePath);
         YamlConfiguration yaml = loadYaml(file);
         ConfigurationSection pieceSection = yaml.getConfigurationSection("pieces." + pieceId);
@@ -69,6 +68,16 @@ public final class TemplateAuthoringService {
             throw new TemplateAuthoringException("Piece not found: " + pieceId);
         }
 
+        String originWorld = pieceSection.getString("authoring.world");
+        if (originWorld != null && !originWorld.equals(selection.worldName())) {
+            throw new TemplateAuthoringException("Selection world does not match the stored piece authoring world");
+        }
+        if (pieceSection.getList("authoring.origin") == null) {
+            throw new TemplateAuthoringException("Piece has no saved authoring origin. Run `/azirouge author piece upsert ...` again first.");
+        }
+        IntVector3 origin = readVector(pieceSection.getList("authoring.origin"), "authoring.origin", pieceId);
+        BlockBox plane = BlockBox.fromPoints(selection.min().subtract(origin), selection.max().subtract(origin));
+        EntranceTemplate entrance = new EntranceTemplate(entranceId, facing, plane.min(), plane.max());
         BlockBox bounds = readBounds(pieceId, pieceSection);
         validateEntrance(pieceId, bounds, entrance);
         List<Map<String, Object>> entrances = normalizeMapList(yaml.getMapList("pieces." + pieceId + ".entrances"));
@@ -162,14 +171,6 @@ public final class TemplateAuthoringService {
         } catch (IOException ex) {
             throw new TemplateAuthoringException("Failed to save template file: " + file, ex);
         }
-    }
-
-    private IntVector3 playerOrigin(Player player) {
-        return new IntVector3(
-                player.getLocation().getBlockX(),
-                player.getLocation().getBlockY(),
-                player.getLocation().getBlockZ()
-        );
     }
 
     private BlockBox readBounds(String pieceId, ConfigurationSection pieceSection) throws TemplateAuthoringException {

@@ -40,8 +40,8 @@ public final class SettingsLoader {
                         config.getLong("generation.seed", 123456789L),
                         Math.max(1, config.getInt("generation.algorithm.max-depth", 8)),
                         clamp(config.getDouble("generation.algorithm.branch-chance", 0.45D), 0.0D, 1.0D),
-                        Math.max(1, config.getInt("generation.algorithm.target-piece-count", 18)),
-                        Math.max(0, config.getInt("generation.algorithm.piece-count-jitter", 2)),
+                        clamp(config.getDouble("generation.algorithm.entrance-branch-bonus", 0.15D), 0.0D, 1.0D),
+                        Math.max(0.1D, config.getDouble("generation.algorithm.depth-prediction-multiplier", 1.0D)),
                         minPieceCount,
                         maxPieceCount
                 ),

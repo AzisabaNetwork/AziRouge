@@ -2,6 +2,8 @@ pieces:
   start_room:
     schematic: schematics/example/start_room.schem
     weight: 1.0
+    denied-adjacent-pieces:
+      - dead_end_*
     bounds:
       min: [0, 0, 0]
       max: [8, 5, 8]
@@ -25,6 +27,8 @@ pieces:
   corridor_ns:
     schematic: schematics/example/corridor_ns.schem
     weight: 3.0
+    denied-adjacent-pieces:
+      - corner_room
     bounds:
       min: [0, 0, 0]
       max: [4, 4, 8]

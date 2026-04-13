@@ -127,6 +127,7 @@ public final class TemplateManager {
         }
         validateEntrancesWithinBounds(pieceId, bounds, entrances);
         List<EnemySocketTemplate> enemySockets = parseEnemySockets(section);
+        List<String> deniedAdjacentPieces = parseDeniedAdjacentPieces(pieceId, section);
         return new PieceTemplate(
                 pieceId,
                 templateFile,
@@ -134,7 +135,8 @@ public final class TemplateManager {
                 Math.max(0.0001D, section.getDouble("weight", 1.0D)),
                 bounds,
                 List.copyOf(entrances),
-                List.copyOf(enemySockets)
+                List.copyOf(enemySockets),
+                List.copyOf(deniedAdjacentPieces)
         );
     }
 
@@ -184,6 +186,20 @@ public final class TemplateManager {
             sockets.add(new EnemySocketTemplate(id, position, tag));
         }
         return sockets;
+    }
+
+    private List<String> parseDeniedAdjacentPieces(String pieceId, ConfigurationSection section) throws TemplateLoadException {
+        if (section.contains("allowed-adjacent-pieces")) {
+            throw new TemplateLoadException("Piece " + pieceId + " uses deprecated allowed-adjacent-pieces. Replace it with denied-adjacent-pieces.");
+        }
+        List<String> values = new ArrayList<>();
+        for (String raw : section.getStringList("denied-adjacent-pieces")) {
+            String value = raw == null ? "" : raw.trim();
+            if (!value.isEmpty()) {
+                values.add(value);
+            }
+        }
+        return values;
     }
 
     private void validateEntrancesWithinBounds(String pieceId, BlockBox bounds, List<EntranceTemplate> entrances) throws TemplateLoadException {

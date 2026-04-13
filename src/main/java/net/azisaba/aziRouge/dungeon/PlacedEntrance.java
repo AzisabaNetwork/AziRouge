@@ -31,29 +31,66 @@ public record PlacedEntrance(
         if (worldFacing != other.worldFacing.opposite()) {
             return false;
         }
-
-        Direction.Axis axis = worldFacing.axis();
-        int expectedOtherPlane = planeBox.min(axis) + (axis == Direction.Axis.X ? worldFacing.dx() : worldFacing.dz());
-        if (other.planeBox.min(axis) != expectedOtherPlane || other.planeBox.max(axis) != expectedOtherPlane) {
+        if (!isDirectlyAdjacent(other)) {
             return false;
         }
+        if (!isPieceAdjacentOnFacing(other)) {
+            return false;
+        }
+        if (overlapY(other) <= 0 || overlapLateral(other) <= 0) {
+            return false;
+        }
+        return isBottomAlignedOnY(other) && isCenteredOnLateral(other);
+    }
 
-        return switch (axis) {
-            case X -> fullyAdjacent(planeBox.minZ(), planeBox.maxZ(), other.planeBox.minZ(), other.planeBox.maxZ())
-                    && fullyAdjacent(planeBox.minY(), planeBox.maxY(), other.planeBox.minY(), other.planeBox.maxY());
-            case Y -> false;
-            case Z -> fullyAdjacent(planeBox.minX(), planeBox.maxX(), other.planeBox.minX(), other.planeBox.maxX())
-                    && fullyAdjacent(planeBox.minY(), planeBox.maxY(), other.planeBox.minY(), other.planeBox.maxY());
+    private boolean isDirectlyAdjacent(PlacedEntrance other) {
+        Direction.Axis axis = worldFacing.axis();
+        int expectedOtherPlane = planeBox.min(axis) + (axis == Direction.Axis.X ? worldFacing.dx() : worldFacing.dz());
+        return other.planeBox.min(axis) == expectedOtherPlane && other.planeBox.max(axis) == expectedOtherPlane;
+    }
+
+    private boolean isPieceAdjacentOnFacing(PlacedEntrance other) {
+        BlockBox own = piece.worldBounds();
+        BlockBox target = other.piece.worldBounds();
+        return switch (worldFacing) {
+            case NORTH -> own.minZ() == target.maxZ() + 1;
+            case SOUTH -> own.maxZ() + 1 == target.minZ();
+            case EAST -> own.maxX() + 1 == target.minX();
+            case WEST -> own.minX() == target.maxX() + 1;
         };
     }
 
-    private boolean fullyAdjacent(int minA, int maxA, int minB, int maxB) {
+    private int overlapY(PlacedEntrance other) {
+        return overlapSize(planeBox.minY(), planeBox.maxY(), other.planeBox.minY(), other.planeBox.maxY());
+    }
+
+    private int overlapLateral(PlacedEntrance other) {
+        return switch (worldFacing.axis()) {
+            case X -> overlapSize(planeBox.minZ(), planeBox.maxZ(), other.planeBox.minZ(), other.planeBox.maxZ());
+            case Y -> 0;
+            case Z -> overlapSize(planeBox.minX(), planeBox.maxX(), other.planeBox.minX(), other.planeBox.maxX());
+        };
+    }
+
+    private boolean isBottomAlignedOnY(PlacedEntrance other) {
+        return planeBox.minY() == other.planeBox.minY();
+    }
+
+    private boolean isCenteredOnLateral(PlacedEntrance other) {
+        return switch (worldFacing.axis()) {
+            case X -> centerDifference(planeBox.minZ(), planeBox.maxZ(), other.planeBox.minZ(), other.planeBox.maxZ()) <= 1;
+            case Y -> false;
+            case Z -> centerDifference(planeBox.minX(), planeBox.maxX(), other.planeBox.minX(), other.planeBox.maxX()) <= 1;
+        };
+    }
+
+    private int centerDifference(int minA, int maxA, int minB, int maxB) {
+        return Math.abs((minA + maxA) - (minB + maxB));
+    }
+
+    private int overlapSize(int minA, int maxA, int minB, int maxB) {
         int overlapMin = Math.max(minA, minB);
         int overlapMax = Math.min(maxA, maxB);
-        if (overlapMin > overlapMax) {
-            return false;
-        }
-        int overlapSize = overlapMax - overlapMin + 1;
-        return overlapSize == Math.min(maxA - minA + 1, maxB - minB + 1);
+        return overlapMin > overlapMax ? 0 : overlapMax - overlapMin + 1;
     }
 }
