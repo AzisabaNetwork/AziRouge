@@ -24,3 +24,10 @@ debug:
 enemies:
   enabled: false
   mode: reserved
+azirouge:
+  mob-spawn-interval-seconds: 30
+  mob-spawn-count-per-interval: 3
+  chest:
+    base-spawn-chance: 0.1
+    depth-multiplier: 0.05
+    max-spawn-chance: 0.9

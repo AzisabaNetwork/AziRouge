@@ -7,12 +7,18 @@ softdepend:
   - WorldEdit
 commands:
   azirouge:
-    description: ダンジョン生成と設定リロードを行います
-    usage: /azirouge <generate|reload|debug|author>
+    description: ダンジョン生成とゲームセッション管理を行います
+    usage: /azirouge <start|end|generate|reload|debug|author>
     permission: azirouge.command
 permissions:
   azirouge.command:
     description: AziRouge のコマンド利用権限
+    default: op
+  azirouge.start:
+    description: AziRouge のゲームセッション開始権限
+    default: op
+  azirouge.end:
+    description: AziRouge のゲームセッション終了権限
     default: op
   azirouge.command.reload:
     description: AziRouge の設定再読込権限

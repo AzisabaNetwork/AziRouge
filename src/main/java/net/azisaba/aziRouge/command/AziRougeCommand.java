@@ -5,7 +5,9 @@ import net.azisaba.aziRouge.author.EntranceAuthoringResult;
 import net.azisaba.aziRouge.author.PieceAuthoringResult;
 import net.azisaba.aziRouge.author.SelectionLookupException;
 import net.azisaba.aziRouge.author.TemplateAuthoringException;
+import net.azisaba.aziRouge.game.GameSession;
 import net.azisaba.aziRouge.config.GenerationSettings;
+import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.dungeon.DungeonGenerationResult;
 import net.azisaba.aziRouge.dungeon.GenerationExecutionRequest;
 import net.azisaba.aziRouge.math.Direction;
@@ -13,17 +15,23 @@ import net.azisaba.aziRouge.math.IntVector3;
 import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
+import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-public final class AziRougeCommand implements CommandExecutor, TabCompleter {
+public final class AziRougeCommand implements TabExecutor {
+    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+
     private final AziRouge plugin;
 
     public AziRougeCommand(AziRouge plugin) {
@@ -33,17 +41,19 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage("Usage: /" + label + " <generate|reload|debug|author>");
+            info(sender, "Usage: /" + label + " <start|end|generate|reload|debug|author>");
             return true;
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "start" -> handleStart(sender);
+            case "end" -> handleEnd(sender);
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "reload" -> handleReload(sender);
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
             case "author" -> handleAuthor(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                sender.sendMessage("Unknown subcommand: " + args[0]);
+                error(sender, "Unknown subcommand: " + args[0]);
                 yield true;
             }
         };
@@ -52,7 +62,7 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("generate", "reload", "debug", "author").stream()
+            return List.of("start", "end", "generate", "reload", "debug", "author").stream()
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -81,9 +91,60 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
         return List.of();
     }
 
+    private boolean handleStart(CommandSender sender) {
+        if (!sender.hasPermission("azirouge.start")) {
+            error(sender, "You do not have permission to start an AziRouge session.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+        if (plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).isPresent()) {
+            error(sender, "You are already associated with an active session. Use /azirouge end first.");
+            return true;
+        }
+
+        try {
+            GameSession session = plugin.gameSessionManager().startSession(player);
+            success(sender, "Started a new session in world " + session.world().getName() + ".");
+        } catch (TemplateLoadException | SchematicPlacementException ex) {
+            error(sender, "Session start failed: " + ex.getMessage());
+            plugin.getLogger().warning("Session start failed: " + ex.getMessage());
+        } catch (IllegalStateException ex) {
+            error(sender, ex.getMessage());
+            plugin.getLogger().warning("Session start failed: " + ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleEnd(CommandSender sender) {
+        if (!sender.hasPermission("azirouge.end")) {
+            error(sender, "You do not have permission to end an AziRouge session.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null) {
+            error(sender, "You are not in an active session.");
+            return true;
+        }
+
+        if (plugin.gameSessionManager().endSession(session)) {
+            success(sender, "Ended session world " + session.world().getName() + ".");
+        } else {
+            error(sender, "Failed to fully end session world " + session.world().getName() + ". Check server logs.");
+        }
+        return true;
+    }
+
     private boolean handleGenerate(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.command.generate")) {
-            sender.sendMessage("You do not have permission to generate dungeons.");
+            error(sender, "You do not have permission to generate dungeons.");
             return true;
         }
 
@@ -99,13 +160,17 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
         String worldName = options.getOrDefault("world", defaults.worldName());
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            sender.sendMessage("World not found: " + worldName);
+            error(sender, "World not found: " + worldName);
             return true;
         }
 
         IntVector3 origin;
-        if (sender instanceof Player p) {
-            origin = new IntVector3(p.getLocation().getBlockX(), p.getLocation().getBlockY(), p.getLocation().getBlockZ());
+        if (sender instanceof Player player) {
+            origin = new IntVector3(
+                    player.getLocation().getBlockX(),
+                    player.getLocation().getBlockY(),
+                    player.getLocation().getBlockZ()
+            );
         } else {
             origin = defaults.origin();
         }
@@ -122,13 +187,13 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
                     new GenerationExecutionRequest(patterns, start, world, origin, seed, depthOverride),
                     plugin.settings()
             );
-            sender.sendMessage("Generated dungeon seed=" + result.seed()
+            success(sender, "Generated dungeon seed=" + result.seed()
                     + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
                     + " connections=" + result.connectionCount()
                     + " enemyReservations=" + result.enemyReservations().size()
                     + " depth=" + (depthOverride == null ? defaults.maxDepth() : depthOverride));
         } catch (TemplateLoadException | SchematicPlacementException ex) {
-            sender.sendMessage("Generation failed: " + ex.getMessage());
+            error(sender, "Generation failed: " + ex.getMessage());
             plugin.getLogger().warning("Generation failed: " + ex.getMessage());
         }
         return true;
@@ -136,17 +201,17 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleReload(CommandSender sender) {
         if (!sender.hasPermission("azirouge.command.reload")) {
-            sender.sendMessage("You do not have permission to reload AziRouge.");
+            error(sender, "You do not have permission to reload AziRouge.");
             return true;
         }
         plugin.reloadPluginState();
-        sender.sendMessage("AziRouge configuration reloaded.");
+        success(sender, "AziRouge configuration reloaded.");
         return true;
     }
 
     private boolean handleDebug(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.command.debug")) {
-            sender.sendMessage("You do not have permission to toggle debug logging.");
+            error(sender, "You do not have permission to toggle debug logging.");
             return true;
         }
         boolean enabled;
@@ -160,21 +225,21 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
             };
         }
         plugin.setDebugEnabled(enabled);
-        sender.sendMessage("AziRouge debug logging is now " + (enabled ? "enabled" : "disabled") + ".");
+        success(sender, "AziRouge debug logging is now " + (enabled ? "enabled" : "disabled") + ".");
         return true;
     }
 
     private boolean handleAuthor(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.command.author")) {
-            sender.sendMessage("You do not have permission to edit templates in-game.");
+            error(sender, "You do not have permission to edit templates in-game.");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Authoring commands can only be run by a player.");
+            error(sender, "Authoring commands can only be run by a player.");
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage("Usage: /azirouge author <piece|entrance> ...");
+            info(sender, "Usage: /azirouge author <piece|entrance> ...");
             return true;
         }
 
@@ -182,7 +247,7 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
             case "piece" -> handleAuthorPiece(player, Arrays.copyOfRange(args, 1, args.length));
             case "entrance" -> handleAuthorEntrance(player, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                sender.sendMessage("Unknown author target: " + args[0]);
+                error(sender, "Unknown author target: " + args[0]);
                 yield true;
             }
         };
@@ -190,8 +255,8 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleAuthorPiece(Player player, String[] args) {
         if (args.length < 4 || !"upsert".equalsIgnoreCase(args[0])) {
-            player.sendMessage("Usage: /azirouge author piece upsert <templateFile> <pieceId> <schematicPath> [weight]");
-            player.sendMessage("Select the whole piece with WorldEdit. The schematic origin will be fixed to the selection's minimum corner.");
+            info(player, "Usage: /azirouge author piece upsert <templateFile> <pieceId> <schematicPath> [weight]");
+            info(player, "Select the whole piece with WorldEdit. The schematic origin will be fixed to the selection's minimum corner.");
             return true;
         }
 
@@ -202,33 +267,33 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
 
         try {
             PieceAuthoringResult result = plugin.templateAuthoringService().upsertPiece(player, templateFile, pieceId, schematicPath, weight);
-            player.sendMessage("Piece saved: " + pieceId
+            success(player, "Piece saved: " + pieceId
                     + " template=" + result.templateFile()
                     + " origin=" + format(result.origin())
                     + " bounds=" + format(result.bounds()));
         } catch (TemplateAuthoringException | SelectionLookupException ex) {
-            player.sendMessage("Piece authoring failed: " + ex.getMessage());
+            error(player, "Piece authoring failed: " + ex.getMessage());
         }
         return true;
     }
 
     private boolean handleAuthorEntrance(Player player, String[] args) {
         if (args.length == 0) {
-            player.sendMessage("Usage: /azirouge author entrance <upsert|remove> ...");
+            info(player, "Usage: /azirouge author entrance <upsert|remove> ...");
             return true;
         }
 
         if ("upsert".equalsIgnoreCase(args[0])) {
             if (args.length < 5) {
-                player.sendMessage("Usage: /azirouge author entrance upsert <templateFile> <pieceId> <entranceId> <facing>");
-                player.sendMessage("Select the entrance plane with WorldEdit. The piece minimum corner saved by `piece upsert` will be reused automatically.");
+                info(player, "Usage: /azirouge author entrance upsert <templateFile> <pieceId> <entranceId> <facing>");
+                info(player, "Select the entrance plane with WorldEdit. The piece minimum corner saved by `piece upsert` will be reused automatically.");
                 return true;
             }
             Direction facing;
             try {
                 facing = Direction.valueOf(args[4].toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException ex) {
-                player.sendMessage("Facing must be one of: NORTH, EAST, SOUTH, WEST");
+                error(player, "Facing must be one of: NORTH, EAST, SOUTH, WEST");
                 return true;
             }
 
@@ -240,31 +305,31 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
                         args[3],
                         facing
                 );
-                player.sendMessage("Entrance saved: " + args[3]
+                success(player, "Entrance saved: " + args[3]
                         + " facing=" + result.facing()
                         + " origin=" + format(result.origin())
                         + " plane=" + format(result.plane()));
             } catch (TemplateAuthoringException | SelectionLookupException ex) {
-                player.sendMessage("Entrance authoring failed: " + ex.getMessage());
+                error(player, "Entrance authoring failed: " + ex.getMessage());
             }
             return true;
         }
 
         if ("remove".equalsIgnoreCase(args[0])) {
             if (args.length < 4) {
-                player.sendMessage("Usage: /azirouge author entrance remove <templateFile> <pieceId> <entranceId>");
+                info(player, "Usage: /azirouge author entrance remove <templateFile> <pieceId> <entranceId>");
                 return true;
             }
             try {
                 plugin.templateAuthoringService().removeEntrance(args[1], args[2], args[3]);
-                player.sendMessage("Entrance removed: " + args[3]);
+                success(player, "Entrance removed: " + args[3]);
             } catch (TemplateAuthoringException ex) {
-                player.sendMessage("Entrance removal failed: " + ex.getMessage());
+                error(player, "Entrance removal failed: " + ex.getMessage());
             }
             return true;
         }
 
-        player.sendMessage("Unknown entrance action: " + args[0]);
+        error(player, "Unknown entrance action: " + args[0]);
         return true;
     }
 
@@ -308,11 +373,23 @@ public final class AziRougeCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void info(CommandSender sender, String message) {
+        sender.sendMessage(PREFIX + ChatColor.YELLOW + message);
+    }
+
+    private void success(CommandSender sender, String message) {
+        sender.sendMessage(PREFIX + ChatColor.GREEN + message);
+    }
+
+    private void error(CommandSender sender, String message) {
+        sender.sendMessage(PREFIX + ChatColor.RED + message);
+    }
+
     private String format(IntVector3 vector) {
         return vector.x() + "," + vector.y() + "," + vector.z();
     }
 
-    private String format(net.azisaba.aziRouge.math.BlockBox box) {
+    private String format(BlockBox box) {
         return format(box.min()) + "->" + format(box.max());
     }
 }

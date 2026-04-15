@@ -105,6 +105,16 @@ public record BlockBox(IntVector3 min, IntVector3 max) {
                 && minZ() <= other.maxZ() && maxZ() >= other.minZ();
     }
 
+    public boolean contains(IntVector3 point) {
+        return contains(point.x(), point.y(), point.z());
+    }
+
+    public boolean contains(int x, int y, int z) {
+        return x >= minX() && x <= maxX()
+                && y >= minY() && y <= maxY()
+                && z >= minZ() && z <= maxZ();
+    }
+
     public int min(Direction.Axis axis) {
         return switch (axis) {
             case X -> minX();

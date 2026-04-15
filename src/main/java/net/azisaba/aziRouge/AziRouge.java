@@ -4,11 +4,17 @@ import net.azisaba.aziRouge.author.MissingSelectionProvider;
 import net.azisaba.aziRouge.author.SelectionProvider;
 import net.azisaba.aziRouge.author.TemplateAuthoringService;
 import net.azisaba.aziRouge.command.AziRougeCommand;
+import net.azisaba.aziRouge.config.ConfigManager;
 import net.azisaba.aziRouge.config.PluginSettings;
 import net.azisaba.aziRouge.config.SettingsLoader;
 import net.azisaba.aziRouge.debug.DebugLogger;
+import net.azisaba.aziRouge.dungeon.ChestPopulator;
 import net.azisaba.aziRouge.dungeon.DungeonGenerator;
 import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
+import net.azisaba.aziRouge.game.GameSessionManager;
+import net.azisaba.aziRouge.entity.MobDropListener;
+import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.game.SessionPlayerListener;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -23,6 +29,9 @@ public final class AziRouge extends JavaPlugin {
     private SelectionProvider selectionProvider;
     private TemplateAuthoringService templateAuthoringService;
     private DungeonGenerator dungeonGenerator;
+    private ConfigManager configManager;
+    private MobSpawnManager mobSpawnManager;
+    private GameSessionManager gameSessionManager;
 
     @Override
     public void onEnable() {
@@ -31,10 +40,14 @@ public final class AziRouge extends JavaPlugin {
         saveResource("schematics/README.txt", false);
         reloadPluginState();
         registerCommands();
+        registerListeners();
     }
 
     @Override
     public void onDisable() {
+        if (gameSessionManager != null) {
+            gameSessionManager.shutdown();
+        }
         if (schematicAdapter != null) {
             schematicAdapter.clearCache();
         }
@@ -42,19 +55,31 @@ public final class AziRouge extends JavaPlugin {
 
     public void reloadPluginState() {
         reloadConfig();
+        if (configManager == null) {
+            this.configManager = new ConfigManager(this);
+        }
+        configManager.reload();
         this.settings = SettingsLoader.load(this);
         this.debugLogger = new DebugLogger(this, settings.debug().enabled());
         this.templateManager = new TemplateManager(this, debugLogger);
         this.schematicAdapter = createSchematicAdapter();
         this.selectionProvider = createSelectionProvider();
         this.templateAuthoringService = new TemplateAuthoringService(this, selectionProvider, debugLogger);
+        ChestPopulator chestPopulator = new ChestPopulator(this, configManager);
         this.dungeonGenerator = new DungeonGenerator(
                 this,
                 debugLogger,
                 templateManager,
                 schematicAdapter,
-                new EnemyPlacementService(debugLogger)
+                new EnemyPlacementService(debugLogger),
+                chestPopulator
         );
+        if (mobSpawnManager == null) {
+            this.mobSpawnManager = new MobSpawnManager(this, configManager);
+        }
+        if (gameSessionManager == null) {
+            this.gameSessionManager = new GameSessionManager(this, mobSpawnManager);
+        }
         getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
                 + " schematic=" + schematicAdapter.describeAvailability()
                 + " selection=" + selectionProvider.describeAvailability());
@@ -66,6 +91,14 @@ public final class AziRouge extends JavaPlugin {
 
     public DungeonGenerator dungeonGenerator() {
         return dungeonGenerator;
+    }
+
+    public ConfigManager configManager() {
+        return configManager;
+    }
+
+    public GameSessionManager gameSessionManager() {
+        return gameSessionManager;
     }
 
     public TemplateAuthoringService templateAuthoringService() {
@@ -88,6 +121,11 @@ public final class AziRouge extends JavaPlugin {
         AziRougeCommand executor = new AziRougeCommand(this);
         command.setExecutor(executor);
         command.setTabCompleter(executor);
+    }
+
+    private void registerListeners() {
+        getServer().getPluginManager().registerEvents(new MobDropListener(gameSessionManager), this);
+        getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
     }
 
     private SchematicAdapter createSchematicAdapter() {

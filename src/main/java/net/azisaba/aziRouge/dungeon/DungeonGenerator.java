@@ -15,8 +15,10 @@ import net.azisaba.aziRouge.template.LoadedTemplates;
 import net.azisaba.aziRouge.template.PieceTemplate;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import net.azisaba.aziRouge.template.TemplateManager;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Bisected;
 import org.bukkit.block.data.BlockData;
@@ -38,19 +40,22 @@ public final class DungeonGenerator {
     private final TemplateManager templateManager;
     private final SchematicAdapter schematicAdapter;
     private final EnemyPlacementService enemyPlacementService;
+    private final ChestPopulator chestPopulator;
 
     public DungeonGenerator(
             JavaPlugin plugin,
             DebugLogger debugLogger,
             TemplateManager templateManager,
             SchematicAdapter schematicAdapter,
-            EnemyPlacementService enemyPlacementService
+            EnemyPlacementService enemyPlacementService,
+            ChestPopulator chestPopulator
     ) {
         this.plugin = plugin;
         this.debugLogger = debugLogger;
         this.templateManager = templateManager;
         this.schematicAdapter = schematicAdapter;
         this.enemyPlacementService = enemyPlacementService;
+        this.chestPopulator = chestPopulator;
     }
 
     public DungeonGenerationResult generate(GenerationExecutionRequest request, PluginSettings settings)
@@ -121,7 +126,12 @@ public final class DungeonGenerator {
             maybePlaceDoor(request.world(), connection, random, settings.door());
         }
 
+        for (PlacedPiece piece : pieces) {
+            chestPopulator.populateRoom(request.world(), piece);
+        }
+
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
+        Location spawnLocation = resolveSpawnLocation(request.world(), startPiece);
         debugLogger.log("generation", "complete", Map.of(
                 "connections", allConnections.size(),
                 "maxDepth", maxDepth,
@@ -135,7 +145,9 @@ public final class DungeonGenerator {
                 targetPieceCount,
                 pieces.size(),
                 allConnections.size(),
-                reservations
+                reservations,
+                List.copyOf(pieces),
+                spawnLocation
         );
     }
 
@@ -614,6 +626,53 @@ public final class DungeonGenerator {
 
     private String format(BlockBox box) {
         return format(box.min()) + "->" + format(box.max());
+    }
+
+    private Location resolveSpawnLocation(World world, PlacedPiece piece) {
+        BlockBox bounds = piece.worldBounds();
+        int minX = interiorMin(bounds.minX(), bounds.maxX());
+        int maxX = interiorMax(bounds.minX(), bounds.maxX());
+        int minZ = interiorMin(bounds.minZ(), bounds.maxZ());
+        int maxZ = interiorMax(bounds.minZ(), bounds.maxZ());
+        int centerX = (bounds.minX() + bounds.maxX()) / 2;
+        int centerZ = (bounds.minZ() + bounds.maxZ()) / 2;
+        int minFeetY = Math.max(bounds.minY() + 1, world.getMinHeight() + 1);
+        int maxFeetY = Math.min(bounds.maxY() - 1, world.getMaxHeight() - 2);
+        Location best = null;
+        int bestDistance = Integer.MAX_VALUE;
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                int distance = Math.abs(x - centerX) + Math.abs(z - centerZ);
+                if (best != null && distance > bestDistance) {
+                    continue;
+                }
+                for (int y = minFeetY; y <= maxFeetY; y++) {
+                    Block floor = world.getBlockAt(x, y - 1, z);
+                    Block feet = world.getBlockAt(x, y, z);
+                    Block head = world.getBlockAt(x, y + 1, z);
+                    if (!floor.getType().isSolid() || !feet.isPassable() || !head.isPassable()) {
+                        continue;
+                    }
+                    best = new Location(world, x + 0.5D, y, z + 0.5D, 0.0F, 0.0F);
+                    bestDistance = distance;
+                    break;
+                }
+            }
+        }
+
+        if (best != null) {
+            return best;
+        }
+        return new Location(world, centerX + 0.5D, Math.max(bounds.minY() + 1, world.getMinHeight() + 1), centerZ + 0.5D, 0.0F, 0.0F);
+    }
+
+    private int interiorMin(int min, int max) {
+        return max - min >= 2 ? min + 1 : min;
+    }
+
+    private int interiorMax(int min, int max) {
+        return max - min >= 2 ? max - 1 : max;
     }
 
     private String format(int[] values) {

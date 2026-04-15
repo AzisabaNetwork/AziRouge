@@ -1,5 +1,7 @@
 package net.azisaba.aziRouge.dungeon;
 
+import org.bukkit.Location;
+
 import java.util.List;
 
 public record DungeonGenerationResult(
@@ -7,6 +9,8 @@ public record DungeonGenerationResult(
         int targetPieceCount,
         int placedPieceCount,
         int connectionCount,
-        List<EnemySpawnReservation> enemyReservations
+        List<EnemySpawnReservation> enemyReservations,
+        List<PlacedPiece> placedPieces,
+        Location spawnLocation
 ) {
 }
