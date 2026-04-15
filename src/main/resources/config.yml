@@ -31,3 +31,83 @@ azirouge:
     base-spawn-chance: 0.1
     depth-multiplier: 0.05
     max-spawn-chance: 0.9
+    tiers:
+      tier-1:
+        min-rolls: 2
+        max-rolls: 4
+        entries:
+          - material: BREAD
+            weight: 14
+            min-amount: 2
+            max-amount: 4
+          - material: COOKED_BEEF
+            weight: 12
+            min-amount: 2
+            max-amount: 4
+          - material: WOODEN_SWORD
+            weight: 10
+          - material: WOODEN_AXE
+            weight: 10
+          - material: LEATHER_HELMET
+            weight: 8
+          - material: LEATHER_CHESTPLATE
+            weight: 8
+          - material: TORCH
+            weight: 6
+            min-amount: 8
+            max-amount: 16
+      tier-2:
+        min-rolls: 3
+        max-rolls: 5
+        entries:
+          - material: IRON_SWORD
+            weight: 12
+          - material: IRON_AXE
+            weight: 11
+          - material: IRON_HELMET
+            weight: 10
+          - material: IRON_CHESTPLATE
+            weight: 10
+          - material: POTION
+            weight: 8
+            potion-type: HEALING
+          - material: POTION
+            weight: 7
+            potion-type: SWIFTNESS
+          - material: GOLDEN_APPLE
+            weight: 6
+          - material: ARROW
+            weight: 5
+            min-amount: 8
+            max-amount: 16
+      tier-3:
+        min-rolls: 4
+        max-rolls: 6
+        entries:
+          - material: DIAMOND_SWORD
+            weight: 11
+          - material: DIAMOND_AXE
+            weight: 10
+          - material: DIAMOND_HELMET
+            weight: 9
+          - material: DIAMOND_CHESTPLATE
+            weight: 9
+          - material: GOLDEN_APPLE
+            weight: 8
+            min-amount: 1
+            max-amount: 2
+          - material: ENCHANTED_BOOK
+            weight: 7
+            stored-enchantments:
+              sharpness: 3
+          - material: ENCHANTED_BOOK
+            weight: 7
+            stored-enchantments:
+              protection: 3
+          - material: ENCHANTED_BOOK
+            weight: 5
+            stored-enchantments:
+              unbreaking: 3
+          - material: POTION
+            weight: 5
+            potion-type: STRENGTH

@@ -3,6 +3,7 @@ package net.azisaba.aziRouge.game;
 import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 public final class SessionPlayerListener implements Listener {
@@ -24,6 +25,15 @@ public final class SessionPlayerListener implements Listener {
             return;
         }
 
-        sessionManager.capturePlayerJoin(event.getPlayer(), event.getFrom(), destinationWorld);
+        sessionManager.handlePlayerWorldChange(event.getPlayer(), event.getFrom(), event.getTo());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        if (event.getRespawnLocation().getWorld() == null) {
+            return;
+        }
+
+        sessionManager.handlePlayerWorldChange(event.getPlayer(), event.getPlayer().getLocation(), event.getRespawnLocation());
     }
 }

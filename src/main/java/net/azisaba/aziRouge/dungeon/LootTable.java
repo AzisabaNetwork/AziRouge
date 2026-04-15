@@ -1,5 +1,8 @@
 package net.azisaba.aziRouge.dungeon;
 
+import net.azisaba.aziRouge.config.ChestLootEntrySettings;
+import net.azisaba.aziRouge.config.ChestLootTierSettings;
+import net.azisaba.aziRouge.config.ChestSettings;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -11,48 +14,44 @@ import org.bukkit.potion.PotionType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
-import java.util.function.Function;
 
 public final class LootTable {
-    private final Map<Tier, List<WeightedLootEntry>> lootByTier = Map.of(
-            Tier.TIER_1, tierOneEntries(),
-            Tier.TIER_2, tierTwoEntries(),
-            Tier.TIER_3, tierThreeEntries()
-    );
-
-    public Tier tierForDepth(int depth) {
-        if (depth <= 2) {
-            return Tier.TIER_1;
+    public List<ItemStack> roll(int depth, ChestSettings chestSettings, Random random) {
+        ChestLootTierSettings tier = chestSettings.tierForDepth(depth);
+        if (tier.entries().isEmpty()) {
+            return List.of();
         }
-        if (depth <= 5) {
-            return Tier.TIER_2;
-        }
-        return Tier.TIER_3;
-    }
 
-    public List<ItemStack> roll(Tier tier, Random random) {
-        int rolls = switch (tier) {
-            case TIER_1 -> 2 + random.nextInt(3);
-            case TIER_2 -> 3 + random.nextInt(3);
-            case TIER_3 -> 4 + random.nextInt(3);
-        };
-        List<WeightedLootEntry> entries = lootByTier.get(tier);
+        int rolls = randomRollCount(tier, random);
         List<ItemStack> results = new ArrayList<>(rolls);
         for (int index = 0; index < rolls; index++) {
-            results.add(select(entries, random).createItem(random));
+            ItemStack itemStack = createItem(select(tier.entries(), random), random);
+            if (itemStack != null && itemStack.getType() != Material.AIR) {
+                results.add(itemStack);
+            }
         }
         return results;
     }
 
-    private WeightedLootEntry select(List<WeightedLootEntry> entries, Random random) {
+    private int randomRollCount(ChestLootTierSettings tier, Random random) {
+        int minRolls = Math.max(0, tier.minRolls());
+        int maxRolls = Math.max(minRolls, tier.maxRolls());
+        if (maxRolls <= minRolls) {
+            return minRolls;
+        }
+        return minRolls + random.nextInt(maxRolls - minRolls + 1);
+    }
+
+    private ChestLootEntrySettings select(List<ChestLootEntrySettings> entries, Random random) {
         int totalWeight = 0;
-        for (WeightedLootEntry entry : entries) {
+        for (ChestLootEntrySettings entry : entries) {
             totalWeight += entry.weight();
         }
         int cursor = random.nextInt(totalWeight);
-        for (WeightedLootEntry entry : entries) {
+        for (ChestLootEntrySettings entry : entries) {
             cursor -= entry.weight();
             if (cursor < 0) {
                 return entry;
@@ -61,90 +60,40 @@ public final class LootTable {
         return entries.get(0);
     }
 
-    private List<WeightedLootEntry> tierOneEntries() {
-        return List.of(
-                entry(14, random -> stack(Material.BREAD, 2, 4, random)),
-                entry(12, random -> stack(Material.COOKED_BEEF, 2, 4, random)),
-                entry(10, random -> stack(Material.WOODEN_SWORD)),
-                entry(10, random -> stack(Material.WOODEN_AXE)),
-                entry(8, random -> stack(Material.LEATHER_HELMET)),
-                entry(8, random -> stack(Material.LEATHER_CHESTPLATE)),
-                entry(6, random -> stack(Material.TORCH, 8, 16, random))
-        );
-    }
+    private ItemStack createItem(ChestLootEntrySettings entry, Random random) {
+        Material material = Material.matchMaterial(entry.material());
+        if (material == null || material == Material.AIR) {
+            return null;
+        }
 
-    private List<WeightedLootEntry> tierTwoEntries() {
-        return List.of(
-                entry(12, random -> stack(Material.IRON_SWORD)),
-                entry(11, random -> stack(Material.IRON_AXE)),
-                entry(10, random -> stack(Material.IRON_HELMET)),
-                entry(10, random -> stack(Material.IRON_CHESTPLATE)),
-                entry(8, random -> potion(PotionType.HEALING)),
-                entry(7, random -> potion(PotionType.SWIFTNESS)),
-                entry(6, random -> stack(Material.GOLDEN_APPLE)),
-                entry(5, random -> stack(Material.ARROW, 8, 16, random))
-        );
-    }
-
-    private List<WeightedLootEntry> tierThreeEntries() {
-        return List.of(
-                entry(11, random -> stack(Material.DIAMOND_SWORD)),
-                entry(10, random -> stack(Material.DIAMOND_AXE)),
-                entry(9, random -> stack(Material.DIAMOND_HELMET)),
-                entry(9, random -> stack(Material.DIAMOND_CHESTPLATE)),
-                entry(8, random -> stack(Material.GOLDEN_APPLE, 1, 2, random)),
-                entry(7, random -> enchantedBook("sharpness", 3)),
-                entry(7, random -> enchantedBook("protection", 3)),
-                entry(5, random -> enchantedBook("unbreaking", 3)),
-                entry(5, random -> potion(PotionType.STRENGTH))
-        );
-    }
-
-    private WeightedLootEntry entry(int weight, Function<Random, ItemStack> factory) {
-        return new WeightedLootEntry(weight, factory);
-    }
-
-    private static ItemStack stack(Material material) {
-        return new ItemStack(material, 1);
-    }
-
-    private static ItemStack stack(Material material, int minAmount, int maxAmount, Random random) {
+        int minAmount = Math.max(1, entry.minAmount());
+        int maxAmount = Math.max(minAmount, entry.maxAmount());
         int amount = minAmount == maxAmount ? minAmount : minAmount + random.nextInt(maxAmount - minAmount + 1);
-        return new ItemStack(material, amount);
-    }
-
-    private static ItemStack potion(PotionType potionType) {
-        ItemStack itemStack = new ItemStack(Material.POTION, 1);
-        PotionMeta meta = (PotionMeta) itemStack.getItemMeta();
-        if (meta != null) {
-            meta.setBasePotionType(potionType);
-            itemStack.setItemMeta(meta);
-        }
+        ItemStack itemStack = new ItemStack(material, amount);
+        applyMetadata(itemStack, entry);
         return itemStack;
     }
 
-    private static ItemStack enchantedBook(String enchantmentKey, int level) {
-        ItemStack itemStack = new ItemStack(Material.ENCHANTED_BOOK, 1);
-        EnchantmentStorageMeta meta = (EnchantmentStorageMeta) itemStack.getItemMeta();
-        if (meta != null) {
-            Enchantment enchantment = Registry.ENCHANTMENT.get(NamespacedKey.minecraft(enchantmentKey));
-            if (enchantment != null) {
-                meta.addStoredEnchant(enchantment, level, true);
+    private void applyMetadata(ItemStack itemStack, ChestLootEntrySettings entry) {
+        if (itemStack.getItemMeta() instanceof PotionMeta potionMeta && entry.potionType() != null) {
+            try {
+                potionMeta.setBasePotionType(PotionType.valueOf(entry.potionType().toUpperCase(Locale.ROOT)));
+                itemStack.setItemMeta(potionMeta);
+            } catch (IllegalArgumentException ignored) {
+                return;
             }
-            itemStack.setItemMeta(meta);
         }
-        return itemStack;
-    }
 
-    public enum Tier {
-        TIER_1,
-        TIER_2,
-        TIER_3
-    }
-
-    private record WeightedLootEntry(int weight, Function<Random, ItemStack> factory) {
-        private ItemStack createItem(Random random) {
-            return factory.apply(random).clone();
+        if (itemStack.getItemMeta() instanceof EnchantmentStorageMeta storageMeta && !entry.storedEnchantments().isEmpty()) {
+            for (Map.Entry<String, Integer> enchantmentEntry : entry.storedEnchantments().entrySet()) {
+                Enchantment enchantment = Registry.ENCHANTMENT.get(
+                        NamespacedKey.minecraft(enchantmentEntry.getKey().toLowerCase(Locale.ROOT))
+                );
+                if (enchantment != null) {
+                    storageMeta.addStoredEnchant(enchantment, Math.max(1, enchantmentEntry.getValue()), true);
+                }
+            }
+            itemStack.setItemMeta(storageMeta);
         }
     }
 }

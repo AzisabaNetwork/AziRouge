@@ -13,6 +13,8 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldType;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -33,11 +35,18 @@ import java.util.stream.Stream;
 
 public final class GameSessionManager {
     private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+    private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
+            Attribute.MAX_HEALTH, 20.0D,
+            Attribute.MOVEMENT_SPEED, 0.11D,
+            Attribute.ATTACK_SPEED, 5.0D,
+            Attribute.ENTITY_INTERACTION_RANGE, 1D
+    );
 
     private final AziRouge plugin;
     private final MobSpawnManager mobSpawnManager;
     private final Map<UUID, GameSession> sessionsByWorld = new HashMap<>();
     private final Map<UUID, UUID> playerToSessionWorld = new HashMap<>();
+    private final Map<UUID, PlayerAttributeSnapshot> playerAttributeSnapshots = new HashMap<>();
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
         this.plugin = plugin;
@@ -98,6 +107,7 @@ public final class GameSessionManager {
         if (world == null) {
             throw new IllegalStateException("Failed to create session world " + worldName + ".");
         }
+        world.setAutoSave(false);
 
         try {
             GenerationSettings generation = plugin.settings().generation();
@@ -115,17 +125,23 @@ public final class GameSessionManager {
 
             GameSession session = new GameSession(world, result.spawnLocation(), result.placedPieces());
             session.saveLocation(player.getUniqueId(), player.getLocation());
+            sessionsByWorld.put(world.getUID(), session);
+            playerToSessionWorld.put(player.getUniqueId(), world.getUID());
 
             if (!player.teleport(result.spawnLocation().clone())) {
+                sessionsByWorld.remove(world.getUID());
+                playerToSessionWorld.remove(player.getUniqueId());
+                restorePlayerAttributes(player);
                 throw new IllegalStateException("Failed to teleport player into session world.");
             }
 
-            sessionsByWorld.put(world.getUID(), session);
-            playerToSessionWorld.put(player.getUniqueId(), world.getUID());
             BukkitTask mobSpawnTask = mobSpawnManager.start(session);
             session.setMobSpawnTask(mobSpawnTask);
             return session;
         } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
+            sessionsByWorld.remove(world.getUID());
+            playerToSessionWorld.remove(player.getUniqueId());
+            restorePlayerAttributes(player);
             cleanupWorld(world);
             throw ex;
         }
@@ -193,6 +209,28 @@ public final class GameSessionManager {
         playerToSessionWorld.put(playerId, sessionWorld.getUID());
     }
 
+    public void handlePlayerWorldChange(Player player, Location from, Location to) {
+        World sourceWorld = from.getWorld();
+        World destinationWorld = to.getWorld();
+        GameSession sourceSession = sourceWorld == null ? null : sessionsByWorld.get(sourceWorld.getUID());
+        GameSession targetSession = destinationWorld == null ? null : sessionsByWorld.get(destinationWorld.getUID());
+
+        if (sourceSession == null && targetSession == null) {
+            return;
+        }
+        if (sourceSession != null && targetSession != null && sourceSession.world().getUID().equals(targetSession.world().getUID())) {
+            return;
+        }
+
+        if (targetSession != null) {
+            capturePlayerJoin(player, from, targetSession.world());
+            applyPlayerAttributes(player);
+            return;
+        }
+
+        restorePlayerAttributes(player);
+    }
+
     public int resolveDepth(World world, Location location) {
         GameSession session = sessionsByWorld.get(world.getUID());
         return session == null ? 0 : session.resolveDepth(location);
@@ -202,6 +240,9 @@ public final class GameSessionManager {
         for (GameSession session : sessionsByWorld.values()) {
             cancelMobTask(session);
         }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            restorePlayerAttributes(player);
+        }
     }
 
     private void evacuatePlayers(GameSession session) {
@@ -210,6 +251,7 @@ public final class GameSessionManager {
             Location returnLocation = resolveReturnLocation(session, player.getUniqueId());
             boolean teleported = returnLocation != null && player.teleport(returnLocation);
             if (!teleported) {
+                restorePlayerAttributes(player);
                 player.kickPlayer(PREFIX + ChatColor.RED + "Session world is shutting down.");
             }
         }
@@ -243,6 +285,34 @@ public final class GameSessionManager {
         }
     }
 
+    private void applyPlayerAttributes(Player player) {
+        playerAttributeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> PlayerAttributeSnapshot.capture(player));
+        for (Map.Entry<Attribute, Double> entry : SESSION_ATTRIBUTE_VALUES.entrySet()) {
+            AttributeInstance attributeInstance = player.getAttribute(entry.getKey());
+            if (attributeInstance != null) {
+                attributeInstance.setBaseValue(entry.getValue());
+            }
+        }
+
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && player.getHealth() > maxHealth.getValue()) {
+            player.setHealth(maxHealth.getValue());
+        }
+    }
+
+    private void restorePlayerAttributes(Player player) {
+        PlayerAttributeSnapshot snapshot = playerAttributeSnapshots.remove(player.getUniqueId());
+        if (snapshot == null) {
+            return;
+        }
+
+        snapshot.restore(player);
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && player.getHealth() > maxHealth.getValue()) {
+            player.setHealth(maxHealth.getValue());
+        }
+    }
+
     private void cleanupWorld(World world) {
         File worldFolder = world.getWorldFolder();
         if (!Bukkit.unloadWorld(world, false)) {
@@ -264,6 +334,28 @@ public final class GameSessionManager {
             }
         } catch (IOException ex) {
             plugin.getLogger().severe("Failed to delete session world folder for " + worldName + ": " + ex.getMessage());
+        }
+    }
+
+    private record PlayerAttributeSnapshot(Map<Attribute, Double> baseValues) {
+        private static PlayerAttributeSnapshot capture(Player player) {
+            Map<Attribute, Double> baseValues = new HashMap<>();
+            for (Attribute attribute : SESSION_ATTRIBUTE_VALUES.keySet()) {
+                AttributeInstance attributeInstance = player.getAttribute(attribute);
+                if (attributeInstance != null) {
+                    baseValues.put(attribute, attributeInstance.getBaseValue());
+                }
+            }
+            return new PlayerAttributeSnapshot(Map.copyOf(baseValues));
+        }
+
+        private void restore(Player player) {
+            for (Map.Entry<Attribute, Double> entry : baseValues.entrySet()) {
+                AttributeInstance attributeInstance = player.getAttribute(entry.getKey());
+                if (attributeInstance != null) {
+                    attributeInstance.setBaseValue(entry.getValue());
+                }
+            }
         }
     }
 }

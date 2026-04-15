@@ -43,9 +43,9 @@ public final class ChestPopulator {
             return;
         }
 
-        Inventory inventory = chest.getBlockInventory();
+        Inventory inventory = chest.getSnapshotInventory();
         inventory.clear();
-        List<ItemStack> loot = lootTable.roll(lootTable.tierForDepth(piece.depth()), random);
+        List<ItemStack> loot = lootTable.roll(piece.depth(), plugin.settings().azirouge().chest(), random);
         List<Integer> slots = availableSlots(inventory.getSize());
         Collections.shuffle(slots, random);
         for (int index = 0; index < loot.size() && index < slots.size(); index++) {

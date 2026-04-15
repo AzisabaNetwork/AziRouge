@@ -13,6 +13,7 @@ import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
 import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
@@ -115,6 +116,7 @@ public final class AziRouge extends JavaPlugin {
 
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(new MobDropListener(gameSessionManager), this);
+        getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
     }
 
