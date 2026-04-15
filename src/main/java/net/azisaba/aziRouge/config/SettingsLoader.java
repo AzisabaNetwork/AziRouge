@@ -30,7 +30,7 @@ public final class SettingsLoader {
         return new PluginSettings(
                 new GenerationSettings(
                         List.copyOf(patterns),
-                        requireText(config.getString("generation.start-piece"), "start_room"),
+                        requireText(config.getString("generation.start-piece"), "root"),
                         requireText(config.getString("generation.world"), "world"),
                         new IntVector3(
                                 config.getInt("generation.origin.x", 0),
@@ -54,6 +54,21 @@ public final class SettingsLoader {
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
+                ),
+                new AziRougeSettings(
+                        new MobSpawnSettings(
+                                Math.max(1L, config.getLong("azirouge.mob-spawn-interval-seconds", 30L)),
+                                Math.max(1, config.getInt("azirouge.mob-spawn-count-per-interval", 3))
+                        ),
+                        new ChestSettings(
+                                clamp(config.getDouble("azirouge.chest.base-spawn-chance", 0.1D), 0.0D, 1.0D),
+                                Math.max(0.0D, config.getDouble("azirouge.chest.depth-multiplier", 0.05D)),
+                                clamp(
+                                        config.getDouble("azirouge.chest.max-spawn-chance", 0.9D),
+                                        clamp(config.getDouble("azirouge.chest.base-spawn-chance", 0.1D), 0.0D, 1.0D),
+                                        1.0D
+                                )
+                        )
                 )
         );
     }

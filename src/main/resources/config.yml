@@ -1,7 +1,7 @@
 generation:
   template-patterns:
     - templates/*.yml
-  start-piece: start_room
+  start-piece: root
   world: world
   origin:
     x: 0

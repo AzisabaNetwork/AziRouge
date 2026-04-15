@@ -27,10 +27,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements TabExecutor {
     private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+    // Hardcoded for now; add more presets here as additional template sets are authored.
+    private static final Map<String, TemplatePreset> TEMPLATE_PRESETS = Map.of(
+            "test", new TemplatePreset(List.of("templates/test.yml"), "root")
+    );
 
     private final AziRouge plugin;
 
@@ -46,7 +51,7 @@ public final class AziRougeCommand implements TabExecutor {
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "start" -> handleStart(sender);
+            case "start" -> handleStart(sender, Arrays.copyOfRange(args, 1, args.length));
             case "end" -> handleEnd(sender);
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "reload" -> handleReload(sender);
@@ -66,8 +71,20 @@ public final class AziRougeCommand implements TabExecutor {
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
+        if (args.length == 2 && "start".equalsIgnoreCase(args[0])) {
+            return templatePresetNames().stream()
+                    .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
+        }
         if (args.length >= 2 && "generate".equalsIgnoreCase(args[0])) {
-            List<String> options = List.of("--patterns=", "--start=", "--world=", "--x=", "--y=", "--z=", "--seed=", "--depth=");
+            if (args[args.length - 1].startsWith("--preset=")) {
+                String prefix = args[args.length - 1].substring("--preset=".length()).toLowerCase(Locale.ROOT);
+                return templatePresetNames().stream()
+                        .map(name -> "--preset=" + name)
+                        .filter(option -> option.substring("--preset=".length()).startsWith(prefix))
+                        .toList();
+            }
+            List<String> options = List.of("--preset=", "--patterns=", "--start=", "--world=", "--x=", "--y=", "--z=", "--seed=", "--depth=");
             return options.stream().filter(option -> option.startsWith(args[args.length - 1])).toList();
         }
         if (args.length == 2 && "debug".equalsIgnoreCase(args[0])) {
@@ -91,7 +108,7 @@ public final class AziRougeCommand implements TabExecutor {
         return List.of();
     }
 
-    private boolean handleStart(CommandSender sender) {
+    private boolean handleStart(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.start")) {
             error(sender, "You do not have permission to start an AziRouge session.");
             return true;
@@ -100,17 +117,35 @@ public final class AziRougeCommand implements TabExecutor {
             error(sender, "This command can only be run by a player.");
             return true;
         }
+        if (args.length > 1) {
+            info(sender, "Usage: /azirouge start [template-preset]");
+            info(sender, "Available presets: " + String.join(", ", templatePresetNames()));
+            return true;
+        }
         if (plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).isPresent()) {
             error(sender, "You are already associated with an active session. Use /azirouge end first.");
             return true;
         }
 
         try {
-            GameSession session = plugin.gameSessionManager().startSession(player);
-            success(sender, "Started a new session in world " + session.world().getName() + ".");
+            TemplateSelection templateSelection = resolveTemplateSelection(
+                    plugin.settings().generation(),
+                    args.length == 0 ? null : args[0],
+                    null,
+                    null
+            );
+            GameSession session = plugin.gameSessionManager().startSession(
+                    player,
+                    templateSelection.templatePatterns(),
+                    templateSelection.startPieceId()
+            );
+            success(sender, "Started a new session in world " + session.world().getName()
+                    + " using template preset " + templateSelection.presetName() + ".");
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             error(sender, "Session start failed: " + ex.getMessage());
             plugin.getLogger().warning("Session start failed: " + ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            error(sender, ex.getMessage());
         } catch (IllegalStateException ex) {
             error(sender, ex.getMessage());
             plugin.getLogger().warning("Session start failed: " + ex.getMessage());
@@ -150,13 +185,25 @@ public final class AziRougeCommand implements TabExecutor {
 
         GenerationSettings defaults = plugin.settings().generation();
         Map<String, String> options = parseOptions(args);
-        List<String> patterns = options.containsKey("patterns")
+        List<String> overriddenPatterns = options.containsKey("patterns")
                 ? Arrays.stream(options.get("patterns").split(","))
                 .map(String::trim)
                 .filter(text -> !text.isEmpty())
                 .collect(Collectors.toCollection(ArrayList::new))
-                : defaults.templatePatterns();
-        String start = options.getOrDefault("start", defaults.startPieceId());
+                : null;
+        TemplateSelection templateSelection;
+        try {
+            templateSelection = resolveTemplateSelection(
+                    defaults,
+                    options.get("preset"),
+                    overriddenPatterns,
+                    options.get("start")
+            );
+        } catch (IllegalArgumentException ex) {
+            error(sender, ex.getMessage());
+            return true;
+        }
+
         String worldName = options.getOrDefault("world", defaults.worldName());
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
@@ -184,14 +231,22 @@ public final class AziRougeCommand implements TabExecutor {
 
         try {
             DungeonGenerationResult result = plugin.dungeonGenerator().generate(
-                    new GenerationExecutionRequest(patterns, start, world, origin, seed, depthOverride),
+                    new GenerationExecutionRequest(
+                            templateSelection.templatePatterns(),
+                            templateSelection.startPieceId(),
+                            world,
+                            origin,
+                            seed,
+                            depthOverride
+                    ),
                     plugin.settings()
             );
             success(sender, "Generated dungeon seed=" + result.seed()
                     + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
                     + " connections=" + result.connectionCount()
                     + " enemyReservations=" + result.enemyReservations().size()
-                    + " depth=" + (depthOverride == null ? defaults.maxDepth() : depthOverride));
+                    + " depth=" + (depthOverride == null ? defaults.maxDepth() : depthOverride)
+                    + " preset=" + templateSelection.presetName());
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             error(sender, "Generation failed: " + ex.getMessage());
             plugin.getLogger().warning("Generation failed: " + ex.getMessage());
@@ -385,11 +440,60 @@ public final class AziRougeCommand implements TabExecutor {
         sender.sendMessage(PREFIX + ChatColor.RED + message);
     }
 
+    private TemplateSelection resolveTemplateSelection(
+            GenerationSettings defaults,
+            String presetName,
+            List<String> overriddenPatterns,
+            String overriddenStart
+    ) {
+        String normalizedPreset = presetName == null || presetName.isBlank()
+                ? "default"
+                : presetName.toLowerCase(Locale.ROOT);
+        List<String> patterns = defaults.templatePatterns();
+        String startPieceId = defaults.startPieceId();
+
+        if (!"default".equals(normalizedPreset)) {
+            TemplatePreset preset = TEMPLATE_PRESETS.get(normalizedPreset);
+            if (preset == null) {
+                throw new IllegalArgumentException("Unknown template preset: " + presetName
+                        + ". Available presets: " + String.join(", ", templatePresetNames()));
+            }
+            patterns = preset.templatePatterns();
+            startPieceId = preset.startPieceId();
+        }
+
+        if (overriddenPatterns != null && !overriddenPatterns.isEmpty()) {
+            patterns = List.copyOf(overriddenPatterns);
+        }
+        if (overriddenStart != null && !overriddenStart.isBlank()) {
+            startPieceId = overriddenStart;
+        }
+
+        return new TemplateSelection(List.copyOf(patterns), startPieceId, normalizedPreset);
+    }
+
+    private List<String> templatePresetNames() {
+        List<String> names = new ArrayList<>();
+        names.add("default");
+        names.addAll(TEMPLATE_PRESETS.keySet().stream().sorted().toList());
+        return names;
+    }
+
     private String format(IntVector3 vector) {
         return vector.x() + "," + vector.y() + "," + vector.z();
     }
 
     private String format(BlockBox box) {
         return format(box.min()) + "->" + format(box.max());
+    }
+
+    private record TemplatePreset(List<String> templatePatterns, String startPieceId) {
+        private TemplatePreset {
+            Objects.requireNonNull(templatePatterns, "templatePatterns");
+            Objects.requireNonNull(startPieceId, "startPieceId");
+        }
+    }
+
+    private record TemplateSelection(List<String> templatePatterns, String startPieceId, String presetName) {
     }
 }

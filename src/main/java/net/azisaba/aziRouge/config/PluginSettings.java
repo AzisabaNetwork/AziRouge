@@ -4,6 +4,7 @@ public record PluginSettings(
         GenerationSettings generation,
         DoorSettings door,
         DebugSettings debug,
-        EnemySettings enemies
+        EnemySettings enemies,
+        AziRougeSettings azirouge
 ) {
 }

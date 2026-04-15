@@ -4,7 +4,6 @@ import net.azisaba.aziRouge.author.MissingSelectionProvider;
 import net.azisaba.aziRouge.author.SelectionProvider;
 import net.azisaba.aziRouge.author.TemplateAuthoringService;
 import net.azisaba.aziRouge.command.AziRougeCommand;
-import net.azisaba.aziRouge.config.ConfigManager;
 import net.azisaba.aziRouge.config.PluginSettings;
 import net.azisaba.aziRouge.config.SettingsLoader;
 import net.azisaba.aziRouge.debug.DebugLogger;
@@ -29,7 +28,6 @@ public final class AziRouge extends JavaPlugin {
     private SelectionProvider selectionProvider;
     private TemplateAuthoringService templateAuthoringService;
     private DungeonGenerator dungeonGenerator;
-    private ConfigManager configManager;
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
 
@@ -55,17 +53,13 @@ public final class AziRouge extends JavaPlugin {
 
     public void reloadPluginState() {
         reloadConfig();
-        if (configManager == null) {
-            this.configManager = new ConfigManager(this);
-        }
-        configManager.reload();
         this.settings = SettingsLoader.load(this);
         this.debugLogger = new DebugLogger(this, settings.debug().enabled());
         this.templateManager = new TemplateManager(this, debugLogger);
         this.schematicAdapter = createSchematicAdapter();
         this.selectionProvider = createSelectionProvider();
         this.templateAuthoringService = new TemplateAuthoringService(this, selectionProvider, debugLogger);
-        ChestPopulator chestPopulator = new ChestPopulator(this, configManager);
+        ChestPopulator chestPopulator = new ChestPopulator(this);
         this.dungeonGenerator = new DungeonGenerator(
                 this,
                 debugLogger,
@@ -75,7 +69,7 @@ public final class AziRouge extends JavaPlugin {
                 chestPopulator
         );
         if (mobSpawnManager == null) {
-            this.mobSpawnManager = new MobSpawnManager(this, configManager);
+            this.mobSpawnManager = new MobSpawnManager(this);
         }
         if (gameSessionManager == null) {
             this.gameSessionManager = new GameSessionManager(this, mobSpawnManager);
@@ -91,10 +85,6 @@ public final class AziRouge extends JavaPlugin {
 
     public DungeonGenerator dungeonGenerator() {
         return dungeonGenerator;
-    }
-
-    public ConfigManager configManager() {
-        return configManager;
     }
 
     public GameSessionManager gameSessionManager() {
