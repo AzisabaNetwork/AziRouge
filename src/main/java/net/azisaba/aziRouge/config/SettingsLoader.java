@@ -1,5 +1,6 @@
 package net.azisaba.aziRouge.config;
 
+import net.azisaba.aziRouge.entity.MobProfile;
 import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -60,12 +61,103 @@ public final class SettingsLoader {
                         requireText(config.getString("enemies.mode"), "reserved")
                 ),
                 new AziRougeSettings(
-                        new MobSpawnSettings(
-                                Math.max(1L, config.getLong("azirouge.mob-spawn-interval-seconds", 30L)),
-                                Math.max(1, config.getInt("azirouge.mob-spawn-count-per-interval", 3))
-                        ),
+                        loadMobSpawnSettings(config),
                         loadChestSettings(plugin, config)
                 )
+        );
+    }
+
+    private static MobSpawnSettings loadMobSpawnSettings(FileConfiguration config) {
+        return new MobSpawnSettings(
+                Math.max(1L, config.getLong("azirouge.mob-spawn-interval-seconds", 30L)),
+                Math.max(1, config.getInt("azirouge.mob-spawn-count-per-interval", 3)),
+                Math.max(0, config.getInt("azirouge.mob-spawn-max-alive-power", 48)),
+                loadMobProfiles(config.getConfigurationSection("azirouge.mobs"))
+        );
+    }
+
+    private static Map<String, MobProfileSettings> loadMobProfiles(ConfigurationSection section) {
+        Map<String, MobProfileSettings> profiles = new LinkedHashMap<>();
+        for (MobProfile profile : MobProfile.values()) {
+            MobProfileSettings defaults = profile.defaultSettings();
+            ConfigurationSection profileSection = section == null ? null : section.getConfigurationSection(profile.key());
+            MobAiSettings defaultAi = defaults.ai();
+            MobAiSettings ai = profileSection == null
+                    ? defaultAi
+                    : loadMobAiSettings(profileSection.getConfigurationSection("ai"), defaultAi);
+            List<MobDropEntrySettings> drops = profileSection == null
+                    ? defaults.drops()
+                    : loadMobDrops(profileSection.getList("drops"), defaults.drops());
+            MobProfileSettings settings = profileSection == null
+                    ? defaults
+                    : new MobProfileSettings(
+                            Math.max(0, profileSection.getInt("weight", defaults.weight())),
+                            Math.max(0, profileSection.getInt("power", defaults.power())),
+                            Math.max(1.0D, profileSection.getDouble("max-health", defaults.maxHealth())),
+                            Math.max(0.0D, profileSection.getDouble("movement-speed", defaults.movementSpeed())),
+                            Math.max(0.0D, profileSection.getDouble("attack-damage", defaults.attackDamage())),
+                            ai,
+                            drops
+                    );
+            profiles.put(profile.key(), settings);
+        }
+        return Map.copyOf(profiles);
+    }
+
+    private static MobAiSettings loadMobAiSettings(ConfigurationSection section, MobAiSettings defaults) {
+        if (section == null) {
+            return defaults;
+        }
+        return new MobAiSettings(
+                section.getBoolean("enabled", defaults.enabled()),
+                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks()))
+        );
+    }
+
+    private static List<MobDropEntrySettings> loadMobDrops(
+            List<?> rawEntries,
+            List<MobDropEntrySettings> defaults
+    ) {
+        if (rawEntries == null || rawEntries.isEmpty()) {
+            return defaults;
+        }
+
+        List<MobDropEntrySettings> entries = new ArrayList<>();
+        for (Object rawEntry : rawEntries) {
+            MobDropEntrySettings entry = loadMobDropEntry(rawEntry);
+            if (entry != null) {
+                entries.add(entry);
+            }
+        }
+        return entries.isEmpty() ? defaults : List.copyOf(entries);
+    }
+
+    private static MobDropEntrySettings loadMobDropEntry(Object rawEntry) {
+        Map<?, ?> values = asMap(rawEntry);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+
+        String material = normalizeRequiredText(stringValue(values.get("material")));
+        if (material == null || Material.matchMaterial(material) == null) {
+            return null;
+        }
+
+        int minAmount = Math.max(1, intValue(values.get("min-amount"), 1));
+        int maxAmount = Math.max(minAmount, intValue(values.get("max-amount"), minAmount));
+        int minDepth = Math.max(0, intValue(values.get("min-depth"), 0));
+        int rawMaxDepth = intValue(values.get("max-depth"), -1);
+        int maxDepth = rawMaxDepth < 0 ? Integer.MAX_VALUE : Math.max(minDepth, rawMaxDepth);
+        return new MobDropEntrySettings(
+                material,
+                clamp(doubleValue(values.get("chance"), 1.0D), 0.0D, 1.0D),
+                doubleValue(values.get("depth-chance-multiplier"), 0.0D),
+                minAmount,
+                maxAmount,
+                minDepth,
+                maxDepth,
+                normalizeOptionalText(stringValue(values.get("potion-type"))),
+                loadStoredEnchantments(values.get("stored-enchantments"))
         );
     }
 
@@ -209,6 +301,21 @@ public final class SettingsLoader {
         }
         try {
             return Integer.parseInt(text.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static double doubleValue(Object value, double fallback) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(text.trim());
         } catch (NumberFormatException ignored) {
             return fallback;
         }

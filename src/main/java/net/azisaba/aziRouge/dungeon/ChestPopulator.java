@@ -43,7 +43,7 @@ public final class ChestPopulator {
             return;
         }
 
-        Inventory inventory = chest.getSnapshotInventory();
+        Inventory inventory = chest.getBlockInventory();
         inventory.clear();
         List<ItemStack> loot = lootTable.roll(piece.depth(), plugin.settings().azirouge().chest(), random);
         List<Integer> slots = availableSlots(inventory.getSize());
@@ -51,7 +51,6 @@ public final class ChestPopulator {
         for (int index = 0; index < loot.size() && index < slots.size(); index++) {
             inventory.setItem(slots.get(index), loot.get(index));
         }
-        chest.update(true, false);
     }
 
     private Block findChestBlock(World world, BlockBox bounds, Random random) {
@@ -89,7 +88,7 @@ public final class ChestPopulator {
     private boolean isValidChestBlock(Block block) {
         Block floor = block.getRelative(BlockFace.DOWN);
         Block head = block.getRelative(BlockFace.UP);
-        return floor.getType().isSolid() && block.isPassable() && head.isPassable();
+        return floor.getType().isSolid() && block.isPassable() && head.isPassable() && block.getLightFromSky() == 0;
     }
 
     private List<Integer> availableSlots(int inventorySize) {

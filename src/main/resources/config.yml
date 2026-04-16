@@ -27,6 +27,72 @@ enemies:
 azirouge:
   mob-spawn-interval-seconds: 30
   mob-spawn-count-per-interval: 3
+  mob-spawn-max-alive-power: 48
+  mobs:
+    zombie_brute:
+      weight: 12
+      power: 12
+      max-health: 20.0
+      movement-speed: 0.4
+      attack-damage: 5.0
+      drops:
+        - material: ROTTEN_FLESH
+          chance: 1.0
+          min-amount: 1
+          max-amount: 3
+        - material: IRON_INGOT
+          chance: 0.15
+          depth-chance-multiplier: 0.03
+        - material: EMERALD
+          chance: 0.12
+          min-depth: 6
+      ai:
+        enabled: true
+        tick-interval-ticks: 20
+    skeleton_archer:
+      weight: 10
+      power: 10
+      max-health: 32.0
+      movement-speed: 0.28
+      attack-damage: 5.0
+      drops:
+        - material: BONE
+          chance: 1.0
+          min-amount: 1
+          max-amount: 3
+        - material: ARROW
+          chance: 1.0
+          min-amount: 2
+          max-amount: 6
+        - material: BOW
+          chance: 0.10
+          depth-chance-multiplier: 0.02
+        - material: EXPERIENCE_BOTTLE
+          chance: 0.10
+          min-depth: 5
+      ai:
+        enabled: true
+        tick-interval-ticks: 20
+    spider_stalker:
+      weight: 9
+      power: 8
+      max-health: 28.0
+      movement-speed: 0.38
+      attack-damage: 4.5
+      drops:
+        - material: STRING
+          chance: 1.0
+          min-amount: 1
+          max-amount: 4
+        - material: SPIDER_EYE
+          chance: 0.4
+        - material: FERMENTED_SPIDER_EYE
+          chance: 0.10
+          depth-chance-multiplier: 0.02
+          min-depth: 3
+      ai:
+        enabled: true
+        tick-interval-ticks: 20
   chest:
     base-spawn-chance: 0.1
     depth-multiplier: 0.05

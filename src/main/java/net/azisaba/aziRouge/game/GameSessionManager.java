@@ -37,9 +37,9 @@ public final class GameSessionManager {
     private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
-            Attribute.MOVEMENT_SPEED, 0.11D,
+            Attribute.MOVEMENT_SPEED, 0.1D,
             Attribute.ATTACK_SPEED, 5.0D,
-            Attribute.ENTITY_INTERACTION_RANGE, 1D
+            Attribute.ENTITY_INTERACTION_RANGE, 2D
     );
 
     private final AziRouge plugin;
@@ -224,7 +224,7 @@ public final class GameSessionManager {
 
         if (targetSession != null) {
             capturePlayerJoin(player, from, targetSession.world());
-            applyPlayerAttributes(player);
+            applyPlayerAttributesAndParams(player);
             return;
         }
 
@@ -285,7 +285,7 @@ public final class GameSessionManager {
         }
     }
 
-    private void applyPlayerAttributes(Player player) {
+    private void applyPlayerAttributesAndParams(Player player) {
         playerAttributeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> PlayerAttributeSnapshot.capture(player));
         for (Map.Entry<Attribute, Double> entry : SESSION_ATTRIBUTE_VALUES.entrySet()) {
             AttributeInstance attributeInstance = player.getAttribute(entry.getKey());
@@ -295,9 +295,11 @@ public final class GameSessionManager {
         }
 
         AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
-        if (maxHealth != null && player.getHealth() > maxHealth.getValue()) {
+        if (maxHealth != null) {
             player.setHealth(maxHealth.getValue());
         }
+
+        player.setFoodLevel(0);
     }
 
     private void restorePlayerAttributes(Player player) {
@@ -308,9 +310,11 @@ public final class GameSessionManager {
 
         snapshot.restore(player);
         AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
-        if (maxHealth != null && player.getHealth() > maxHealth.getValue()) {
+        if (maxHealth != null) {
             player.setHealth(maxHealth.getValue());
         }
+
+        player.setFoodLevel(20);
     }
 
     private void cleanupWorld(World world) {

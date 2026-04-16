@@ -1,21 +1,33 @@
 package net.azisaba.aziRouge.entity;
 
+import net.azisaba.aziRouge.config.MobAiSettings;
+import net.azisaba.aziRouge.config.MobDropEntrySettings;
+import net.azisaba.aziRouge.config.MobProfileSettings;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mob;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.EnchantmentStorageMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Locale;
 import java.util.Random;
 
 public enum MobProfile {
-    ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 40.0D, 0.30D, 6.0D),
-    SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 32.0D, 0.28D, 5.0D),
-    SPIDER_STALKER("spider_stalker", EntityType.SPIDER, 9, 28.0D, 0.38D, 4.5D);
+    ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 12, 20.0D, 0.40D, 5.0D),
+    SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D),
+    SPIDER_STALKER("spider_stalker", EntityType.SPIDER, 9, 8, 28.0D, 0.38D, 4.5D);
 
     public static final String MOB_TAG = "azirouge_mob";
     private static final String PROFILE_TAG_PREFIX = "azirouge_profile:";
@@ -23,17 +35,37 @@ public enum MobProfile {
     private final String key;
     private final EntityType entityType;
     private final int weight;
+    private final int power;
     private final double maxHealth;
     private final double movementSpeed;
     private final double attackDamage;
+    private final MobProfileSettings defaultSettings;
 
-    MobProfile(String key, EntityType entityType, int weight, double maxHealth, double movementSpeed, double attackDamage) {
+    MobProfile(String key, EntityType entityType, int weight, int power, double maxHealth, double movementSpeed, double attackDamage) {
         this.key = key;
         this.entityType = entityType;
         this.weight = weight;
+        this.power = power;
         this.maxHealth = maxHealth;
         this.movementSpeed = movementSpeed;
         this.attackDamage = attackDamage;
+        this.defaultSettings = new MobProfileSettings(
+                weight,
+                power,
+                maxHealth,
+                movementSpeed,
+                attackDamage,
+                new MobAiSettings(true, 20L),
+                defaultDropsFor(key)
+        );
+    }
+
+    public String key() {
+        return key;
+    }
+
+    public MobProfileSettings defaultSettings() {
+        return defaultSettings;
     }
 
     public EntityType entityType() {
@@ -41,37 +73,41 @@ public enum MobProfile {
     }
 
     public void apply(LivingEntity mob) {
+        apply(mob, defaultSettings);
+    }
+
+    public void apply(LivingEntity mob, MobProfileSettings settings) {
         mob.setRemoveWhenFarAway(false);
         mob.setCanPickupItems(false);
         mob.addScoreboardTag(MOB_TAG);
         mob.addScoreboardTag(PROFILE_TAG_PREFIX + key);
-        applyAttribute(mob, Attribute.MAX_HEALTH, maxHealth);
-        applyAttribute(mob, Attribute.MOVEMENT_SPEED, movementSpeed);
-        applyAttribute(mob, Attribute.ATTACK_DAMAGE, attackDamage);
-        mob.setHealth(Math.min(maxHealth, mob.getMaxHealth()));
+        applyAttribute(mob, Attribute.MAX_HEALTH, settings.maxHealth());
+        applyAttribute(mob, Attribute.MOVEMENT_SPEED, settings.movementSpeed());
+        applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
+        mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
+        ((Mob) mob).getPathfinder().setCanOpenDoors(true);
     }
 
     public List<ItemStack> createDrops(Random random, int depth) {
-        return switch (this) {
-            case ZOMBIE_BRUTE -> zombieDrops(random, depth);
-            case SKELETON_ARCHER -> skeletonDrops(random, depth);
-            case SPIDER_STALKER -> spiderDrops(random, depth);
-        };
+        return createDrops(random, depth, defaultSettings);
     }
 
-    public static MobProfile random(Random random) {
-        int totalWeight = 0;
-        for (MobProfile profile : values()) {
-            totalWeight += profile.weight;
-        }
-        int cursor = random.nextInt(totalWeight);
-        for (MobProfile profile : values()) {
-            cursor -= profile.weight;
-            if (cursor < 0) {
-                return profile;
+    public List<ItemStack> createDrops(Random random, int depth, MobProfileSettings settings) {
+        List<ItemStack> drops = new ArrayList<>();
+        for (MobDropEntrySettings entry : settings.drops()) {
+            if (!entry.matchesDepth(depth)) {
+                continue;
+            }
+            if (random.nextDouble() > entry.chanceAtDepth(depth)) {
+                continue;
+            }
+
+            ItemStack itemStack = createDropItem(entry, random);
+            if (itemStack != null && itemStack.getType() != Material.AIR) {
+                drops.add(itemStack);
             }
         }
-        return values()[0];
+        return drops;
     }
 
     public static MobProfile fromEntity(Entity entity) {
@@ -101,40 +137,62 @@ public enum MobProfile {
         }
     }
 
-    private List<ItemStack> zombieDrops(Random random, int depth) {
-        List<ItemStack> drops = new ArrayList<>();
-        drops.add(new ItemStack(Material.ROTTEN_FLESH, 1 + random.nextInt(3)));
-        if (random.nextDouble() < 0.15D + depth * 0.03D) {
-            drops.add(new ItemStack(Material.IRON_INGOT, 1));
+    private ItemStack createDropItem(MobDropEntrySettings entry, Random random) {
+        Material material = Material.matchMaterial(entry.material());
+        if (material == null || material == Material.AIR) {
+            return null;
         }
-        if (depth >= 6 && random.nextDouble() < 0.12D) {
-            drops.add(new ItemStack(Material.EMERALD, 1));
-        }
-        return drops;
+
+        int minAmount = Math.max(1, entry.minAmount());
+        int maxAmount = Math.max(minAmount, entry.maxAmount());
+        int amount = minAmount == maxAmount ? minAmount : minAmount + random.nextInt(maxAmount - minAmount + 1);
+        ItemStack itemStack = new ItemStack(material, amount);
+        applyMetadata(itemStack, entry);
+        return itemStack;
     }
 
-    private List<ItemStack> skeletonDrops(Random random, int depth) {
-        List<ItemStack> drops = new ArrayList<>();
-        drops.add(new ItemStack(Material.BONE, 1 + random.nextInt(3)));
-        drops.add(new ItemStack(Material.ARROW, 2 + random.nextInt(5)));
-        if (random.nextDouble() < 0.10D + depth * 0.02D) {
-            drops.add(new ItemStack(Material.BOW, 1));
+    private void applyMetadata(ItemStack itemStack, MobDropEntrySettings entry) {
+        if (itemStack.getItemMeta() instanceof PotionMeta potionMeta && entry.potionType() != null) {
+            try {
+                potionMeta.setBasePotionType(PotionType.valueOf(entry.potionType().toUpperCase(Locale.ROOT)));
+                itemStack.setItemMeta(potionMeta);
+            } catch (IllegalArgumentException ignored) {
+                return;
+            }
         }
-        if (depth >= 5 && random.nextDouble() < 0.10D) {
-            drops.add(new ItemStack(Material.EXPERIENCE_BOTTLE, 1));
+
+        if (itemStack.getItemMeta() instanceof EnchantmentStorageMeta storageMeta && !entry.storedEnchantments().isEmpty()) {
+            for (Map.Entry<String, Integer> enchantmentEntry : entry.storedEnchantments().entrySet()) {
+                Enchantment enchantment = Registry.ENCHANTMENT.get(
+                        NamespacedKey.minecraft(enchantmentEntry.getKey().toLowerCase(Locale.ROOT))
+                );
+                if (enchantment != null) {
+                    storageMeta.addStoredEnchant(enchantment, Math.max(1, enchantmentEntry.getValue()), true);
+                }
+            }
+            itemStack.setItemMeta(storageMeta);
         }
-        return drops;
     }
 
-    private List<ItemStack> spiderDrops(Random random, int depth) {
-        List<ItemStack> drops = new ArrayList<>();
-        drops.add(new ItemStack(Material.STRING, 1 + random.nextInt(4)));
-        if (random.nextDouble() < 0.40D) {
-            drops.add(new ItemStack(Material.SPIDER_EYE, 1));
-        }
-        if (depth >= 3 && random.nextDouble() < 0.10D + depth * 0.02D) {
-            drops.add(new ItemStack(Material.FERMENTED_SPIDER_EYE, 1));
-        }
-        return drops;
+    private static List<MobDropEntrySettings> defaultDropsFor(String key) {
+        return switch (key) {
+            case "zombie_brute" -> List.of(
+                    new MobDropEntrySettings("ROTTEN_FLESH", 1.0D, 0.0D, 1, 3, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("IRON_INGOT", 0.15D, 0.03D, 1, 1, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("EMERALD", 0.12D, 0.0D, 1, 1, 6, Integer.MAX_VALUE, null, Map.of())
+            );
+            case "skeleton_archer" -> List.of(
+                    new MobDropEntrySettings("BONE", 1.0D, 0.0D, 1, 3, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("ARROW", 1.0D, 0.0D, 2, 6, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("BOW", 0.10D, 0.02D, 1, 1, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("EXPERIENCE_BOTTLE", 0.10D, 0.0D, 1, 1, 5, Integer.MAX_VALUE, null, Map.of())
+            );
+            case "spider_stalker" -> List.of(
+                    new MobDropEntrySettings("STRING", 1.0D, 0.0D, 1, 4, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("SPIDER_EYE", 0.40D, 0.0D, 1, 1, 0, Integer.MAX_VALUE, null, Map.of()),
+                    new MobDropEntrySettings("FERMENTED_SPIDER_EYE", 0.10D, 0.02D, 1, 1, 3, Integer.MAX_VALUE, null, Map.of())
+            );
+            default -> List.of();
+        };
     }
 }

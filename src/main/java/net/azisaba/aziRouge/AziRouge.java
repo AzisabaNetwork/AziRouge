@@ -11,6 +11,7 @@ import net.azisaba.aziRouge.dungeon.ChestPopulator;
 import net.azisaba.aziRouge.dungeon.DungeonGenerator;
 import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
 import net.azisaba.aziRouge.game.GameSessionManager;
+import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
@@ -29,6 +30,7 @@ public final class AziRouge extends JavaPlugin {
     private SelectionProvider selectionProvider;
     private TemplateAuthoringService templateAuthoringService;
     private DungeonGenerator dungeonGenerator;
+    private MobAiManager mobAiManager;
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
 
@@ -46,6 +48,9 @@ public final class AziRouge extends JavaPlugin {
     public void onDisable() {
         if (gameSessionManager != null) {
             gameSessionManager.shutdown();
+        }
+        if (mobAiManager != null) {
+            mobAiManager.shutdown();
         }
         if (schematicAdapter != null) {
             schematicAdapter.clearCache();
@@ -69,8 +74,11 @@ public final class AziRouge extends JavaPlugin {
                 new EnemyPlacementService(debugLogger),
                 chestPopulator
         );
+        if (mobAiManager == null) {
+            this.mobAiManager = new MobAiManager(this);
+        }
         if (mobSpawnManager == null) {
-            this.mobSpawnManager = new MobSpawnManager(this);
+            this.mobSpawnManager = new MobSpawnManager(this, mobAiManager);
         }
         if (gameSessionManager == null) {
             this.gameSessionManager = new GameSessionManager(this, mobSpawnManager);
@@ -115,7 +123,8 @@ public final class AziRouge extends JavaPlugin {
     }
 
     private void registerListeners() {
-        getServer().getPluginManager().registerEvents(new MobDropListener(gameSessionManager), this);
+        getServer().getPluginManager().registerEvents(mobAiManager, this);
+        getServer().getPluginManager().registerEvents(new MobDropListener(this, gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
     }

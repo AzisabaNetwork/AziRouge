@@ -1,6 +1,8 @@
 package net.azisaba.aziRouge.entity;
 
 import net.azisaba.aziRouge.AziRouge;
+import net.azisaba.aziRouge.config.MobProfileSettings;
+import net.azisaba.aziRouge.config.MobSpawnSettings;
 import net.azisaba.aziRouge.game.GameSession;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
@@ -18,9 +20,11 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public final class MobSpawnManager {
     private final AziRouge plugin;
+    private final MobAiManager mobAiManager;
 
-    public MobSpawnManager(AziRouge plugin) {
+    public MobSpawnManager(AziRouge plugin, MobAiManager mobAiManager) {
         this.plugin = plugin;
+        this.mobAiManager = mobAiManager;
     }
 
     public BukkitTask start(GameSession session) {
@@ -38,20 +42,54 @@ public final class MobSpawnManager {
 
     private void spawnWave(GameSession session) {
         Random random = ThreadLocalRandom.current();
-        for (int index = 0; index < plugin.settings().azirouge().mobSpawn().countPerInterval(); index++) {
+        MobSpawnSettings mobSpawnSettings = plugin.settings().azirouge().mobSpawn();
+        int maxAlivePower = mobSpawnSettings.maxAlivePower();
+        if (maxAlivePower <= 0) {
+            return;
+        }
+
+        int alivePower = currentAlivePower(session.world(), mobSpawnSettings);
+        if (alivePower >= maxAlivePower) {
+            return;
+        }
+
+        for (int index = 0; index < mobSpawnSettings.countPerInterval(); index++) {
+            int remainingPower = maxAlivePower - alivePower;
+            MobProfile profile = mobSpawnSettings.selectRandomProfile(random, remainingPower);
+            if (profile == null) {
+                break;
+            }
+            MobProfileSettings profileSettings = mobSpawnSettings.profile(profile);
+
             Location spawnLocation = findSpawnLocation(session, random);
             if (spawnLocation == null) {
                 continue;
             }
 
-            MobProfile profile = MobProfile.random(random);
             Entity entity = session.world().spawnEntity(spawnLocation, profile.entityType());
             if (entity instanceof LivingEntity livingEntity) {
-                profile.apply(livingEntity);
+                profile.apply(livingEntity, profileSettings);
+                mobAiManager.track(livingEntity, profile);
+                alivePower += profileSettings.power();
             } else {
                 entity.remove();
             }
         }
+    }
+
+    private int currentAlivePower(World world, MobSpawnSettings settings) {
+        int totalPower = 0;
+        for (LivingEntity entity : world.getLivingEntities()) {
+            if (!entity.getScoreboardTags().contains(MobProfile.MOB_TAG)) {
+                continue;
+            }
+
+            MobProfile profile = MobProfile.fromEntity(entity);
+            if (profile != null) {
+                totalPower += settings.profile(profile).power();
+            }
+        }
+        return totalPower;
     }
 
     private Location findSpawnLocation(GameSession session, Random random) {
