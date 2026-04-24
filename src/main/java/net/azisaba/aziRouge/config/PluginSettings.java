@@ -6,6 +6,7 @@ public record PluginSettings(
         DebugSettings debug,
         SessionSettings sessions,
         HomeSettings home,
+        DungeonSettings dungeon,
         EnemySettings enemies,
         AziRougeSettings azirouge
 ) {

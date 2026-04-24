@@ -6,6 +6,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 
 public final class SessionPlayerHealthListener implements Listener {
     private final GameSessionManager sessionManager;
@@ -42,5 +43,10 @@ public final class SessionPlayerHealthListener implements Listener {
         }
 
         event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        sessionManager.handlePlayerDeath(event.getEntity());
     }
 }

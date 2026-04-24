@@ -2,6 +2,7 @@ package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
+import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.scheduler.BukkitTask;
@@ -23,13 +24,21 @@ public final class GameSession {
     private final int maxPlayers;
     private final Set<UUID> members = new HashSet<>();
     private final Set<UUID> onlineMembers = new HashSet<>();
+    private final Set<UUID> alivePlayers = new HashSet<>();
+    private final Set<UUID> deadPlayers = new HashSet<>();
+    private final Set<UUID> pendingPlayersNextRound = new HashSet<>();
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
-    private final List<PlacedPiece> placedPieces;
+    private List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
     private final BlockBox homeArea;
     private final Instant createdAt;
     private SessionState state = SessionState.LOBBY;
+    private RoundState roundState = RoundState.ENDED;
     private int currentRound;
+    private IntVector3 currentDungeonOrigin;
+    private BlockBox currentDungeonBounds;
+    private String selectedPreset = "default";
+    private String selectedDifficulty;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
 
@@ -84,12 +93,64 @@ public final class GameSession {
         return Collections.unmodifiableSet(onlineMembers);
     }
 
+    public Set<UUID> alivePlayers() {
+        return Collections.unmodifiableSet(alivePlayers);
+    }
+
+    public Set<UUID> deadPlayers() {
+        return Collections.unmodifiableSet(deadPlayers);
+    }
+
+    public Set<UUID> pendingPlayersNextRound() {
+        return Collections.unmodifiableSet(pendingPlayersNextRound);
+    }
+
+    public RoundState roundState() {
+        return roundState;
+    }
+
+    public void setRoundState(RoundState roundState) {
+        this.roundState = roundState;
+    }
+
     public int currentRound() {
         return currentRound;
     }
 
     public void setCurrentRound(int currentRound) {
         this.currentRound = Math.max(0, currentRound);
+    }
+
+    public IntVector3 currentDungeonOrigin() {
+        return currentDungeonOrigin;
+    }
+
+    public void setCurrentDungeonOrigin(IntVector3 currentDungeonOrigin) {
+        this.currentDungeonOrigin = currentDungeonOrigin;
+    }
+
+    public BlockBox currentDungeonBounds() {
+        return currentDungeonBounds;
+    }
+
+    public void setCurrentDungeonBounds(BlockBox currentDungeonBounds) {
+        this.currentDungeonBounds = currentDungeonBounds;
+    }
+
+    public String selectedPreset() {
+        return selectedPreset;
+    }
+
+    public void setSelectedPreset(String selectedPreset) {
+        this.selectedPreset = selectedPreset;
+    }
+
+    public String selectedDifficulty() {
+        return selectedDifficulty;
+    }
+
+    public void setSelectedDifficulty(String selectedDifficulty) {
+        this.selectedDifficulty = selectedDifficulty;
     }
 
     public Map<UUID, Location> savedLocations() {
@@ -128,6 +189,10 @@ public final class GameSession {
         return placedPieces;
     }
 
+    public void setPlacedPieces(List<PlacedPiece> placedPieces) {
+        this.placedPieces = List.copyOf(placedPieces);
+    }
+
     public void setMobSpawnTask(BukkitTask mobSpawnTask) {
         this.mobSpawnTask = mobSpawnTask;
     }
@@ -151,6 +216,9 @@ public final class GameSession {
     public void removeMember(UUID playerId) {
         members.remove(playerId);
         onlineMembers.remove(playerId);
+        alivePlayers.remove(playerId);
+        deadPlayers.remove(playerId);
+        pendingPlayersNextRound.remove(playerId);
         savedReturnLocations.remove(playerId);
     }
 
@@ -162,6 +230,35 @@ public final class GameSession {
 
     public void markOffline(UUID playerId) {
         onlineMembers.remove(playerId);
+    }
+
+    public void setActiveParticipants(Set<UUID> playerIds) {
+        alivePlayers.clear();
+        alivePlayers.addAll(playerIds);
+        deadPlayers.clear();
+        pendingPlayersNextRound.clear();
+    }
+
+    public void markDead(UUID playerId) {
+        if (alivePlayers.remove(playerId)) {
+            deadPlayers.add(playerId);
+        }
+    }
+
+    public void markPendingNextRound(UUID playerId) {
+        if (!alivePlayers.contains(playerId) && !deadPlayers.contains(playerId)) {
+            pendingPlayersNextRound.add(playerId);
+        }
+    }
+
+    public void clearRoundPlayers() {
+        alivePlayers.clear();
+        deadPlayers.clear();
+        pendingPlayersNextRound.clear();
+    }
+
+    public void clearAlivePlayers() {
+        alivePlayers.clear();
     }
 
     public boolean hasRoomFor(UUID playerId) {

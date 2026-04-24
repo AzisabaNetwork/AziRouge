@@ -52,6 +52,7 @@ public final class SessionPlayerListener implements Listener {
             }
         }
         sessionManager.handlePlayerWorldChange(event.getPlayer(), event.getPlayer().getLocation(), event.getRespawnLocation());
+        sessionManager.handlePlayerRespawn(event.getPlayer());
     }
 
     @EventHandler

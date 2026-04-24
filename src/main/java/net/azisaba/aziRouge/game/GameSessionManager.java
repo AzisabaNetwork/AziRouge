@@ -4,12 +4,15 @@ import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.GenerationSettings;
 import net.azisaba.aziRouge.dungeon.DungeonGenerationResult;
 import net.azisaba.aziRouge.dungeon.GenerationExecutionRequest;
+import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -56,6 +59,7 @@ public final class GameSessionManager {
     private final Map<UUID, GameSession> sessionsByWorld = new HashMap<>();
     private final Map<UUID, String> playerToSessionId = new HashMap<>();
     private final Map<UUID, PlayerAttributeSnapshot> playerAttributeSnapshots = new HashMap<>();
+    private final Map<UUID, GameMode> playerGameModeSnapshots = new HashMap<>();
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
         this.plugin = plugin;
@@ -163,19 +167,6 @@ public final class GameSessionManager {
         world.setAutoSave(false);
 
         try {
-            GenerationSettings generation = plugin.settings().generation();
-            DungeonGenerationResult result = plugin.dungeonGenerator().generate(
-                    new GenerationExecutionRequest(
-                            List.copyOf(templatePatterns),
-                            startPieceId,
-                            world,
-                            generation.origin(),
-                            ThreadLocalRandom.current().nextLong(),
-                            null
-                    ),
-                    plugin.settings()
-            );
-
             GameSession session = new GameSession(
                     sessionId,
                     player.getUniqueId(),
@@ -183,8 +174,10 @@ public final class GameSessionManager {
                     maxPlayers,
                     homeSpawn(world),
                     plugin.settings().home().area(),
-                    result.placedPieces()
+                    List.of()
             );
+            session.setSelectedDifficulty(plugin.settings().dungeon().defaultDifficulty());
+            session.setSelectedPreset(plugin.settings().dungeon().difficulty(session.selectedDifficulty()).templatePreset());
             registerSession(session);
             addPlayerToSession(session, player, player.getLocation());
 
@@ -198,7 +191,7 @@ public final class GameSessionManager {
             BukkitTask mobSpawnTask = mobSpawnManager.start(session);
             session.setMobSpawnTask(mobSpawnTask);
             return session;
-        } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
+        } catch (RuntimeException ex) {
             GameSession registered = sessionsByWorld.get(world.getUID());
             if (registered != null) {
                 unregisterSession(registered);
@@ -212,7 +205,7 @@ public final class GameSessionManager {
     public GameSession joinSession(Player player, String sessionId) {
         GameSession session = sessionById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
-        if (!canChangeMembership(session)) {
+        if (!canJoinSession(session)) {
             throw new IllegalStateException("Cannot join session " + session.sessionId() + " while it is " + session.state() + ".");
         }
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
@@ -232,16 +225,21 @@ public final class GameSessionManager {
             throw new IllegalStateException("Failed to teleport into session " + session.sessionId() + ".");
         }
         applyPlayerAttributesAndParams(player);
+        if (session.state() == SessionState.IN_ROUND) {
+            session.markPendingNextRound(player.getUniqueId());
+            setSpectator(player);
+        }
         return session;
     }
 
     public GameSession leaveSession(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
                 .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
-        if (!canChangeMembership(session)) {
+        if (session.state() == SessionState.CLOSING) {
             throw new IllegalStateException("Cannot leave session " + session.sessionId() + " while it is " + session.state() + ".");
         }
 
+        boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
         boolean inSessionWorld = player.getWorld().getUID().equals(session.world().getUID());
         if (inSessionWorld) {
             Location returnLocation = resolveReturnLocation(session, player.getUniqueId());
@@ -252,9 +250,153 @@ public final class GameSessionManager {
         }
 
         restorePlayerAttributes(player);
+        restoreGameMode(player);
         removePlayerFromSession(session, player.getUniqueId());
+        if (wasAlive) {
+            session.markDead(player.getUniqueId());
+            updateRoundAfterAliveChange(session);
+        }
         scheduleIdleTimeoutIfNeeded(session);
         return session;
+    }
+
+    public DungeonGenerationResult startRound(
+            GameSession session,
+            List<String> templatePatterns,
+            String startPieceId,
+            String preset,
+            String difficulty,
+            int maxDepth
+    ) throws TemplateLoadException, SchematicPlacementException {
+        if (!Bukkit.isPrimaryThread()) {
+            try {
+                return Bukkit.getScheduler().callSyncMethod(
+                        plugin,
+                        () -> startRound(session, templatePatterns, startPieceId, preset, difficulty, maxDepth)
+                ).get();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while starting round.", ex);
+            } catch (ExecutionException ex) {
+                Throwable cause = ex.getCause();
+                if (cause instanceof TemplateLoadException templateLoadException) {
+                    throw templateLoadException;
+                }
+                if (cause instanceof SchematicPlacementException schematicPlacementException) {
+                    throw schematicPlacementException;
+                }
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
+                }
+                throw new IllegalStateException("Failed to start round.", cause);
+            }
+        }
+
+        if (!sessionsById.containsKey(session.sessionId())) {
+            throw new IllegalStateException("Session is not active.");
+        }
+        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
+            throw new IllegalStateException("Round can only be started from LOBBY or BETWEEN_ROUNDS.");
+        }
+
+        List<UUID> participants = session.onlineMembers().stream()
+                .filter(playerId -> Bukkit.getPlayer(playerId) != null)
+                .toList();
+        if (participants.isEmpty()) {
+            throw new IllegalStateException("No online members are available to start the round.");
+        }
+
+        SessionState previousState = session.state();
+        RoundState previousRoundState = session.roundState();
+        int previousRound = session.currentRound();
+        IntVector3 previousOrigin = session.currentDungeonOrigin();
+        BlockBox previousBounds = session.currentDungeonBounds();
+        List<PlacedPiece> previousPieces = session.placedPieces();
+
+        session.setState(SessionState.BETWEEN_ROUNDS);
+        session.setRoundState(RoundState.PREPARING);
+        session.setCurrentRound(previousRound + 1);
+        IntVector3 origin = allocateDungeonOrigin(session);
+        session.setCurrentDungeonOrigin(origin);
+        try {
+            DungeonGenerationResult result = plugin.dungeonGenerator().generate(
+                    new GenerationExecutionRequest(
+                            List.copyOf(templatePatterns),
+                            startPieceId,
+                            session.world(),
+                            origin,
+                            ThreadLocalRandom.current().nextLong(),
+                            maxDepth
+                    ),
+                    plugin.settings()
+            );
+
+            session.setPlacedPieces(result.placedPieces());
+            session.setCurrentDungeonBounds(resolveDungeonBounds(result.placedPieces(), origin));
+            session.setSelectedPreset(preset);
+            session.setSelectedDifficulty(difficulty);
+            session.setActiveParticipants(new java.util.HashSet<>(participants));
+            session.setRoundState(RoundState.ACTIVE);
+            session.setState(SessionState.IN_ROUND);
+
+            for (UUID playerId : participants) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player == null) {
+                    session.markDead(playerId);
+                    continue;
+                }
+                restoreGameMode(player);
+                applyPlayerAttributesAndParams(player);
+                if (!player.teleport(result.spawnLocation().clone())) {
+                    session.markDead(playerId);
+                }
+            }
+            updateRoundAfterAliveChange(session);
+            return result;
+        } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
+            session.setState(previousState);
+            session.setRoundState(previousRoundState);
+            session.setCurrentRound(previousRound);
+            session.setCurrentDungeonOrigin(previousOrigin);
+            session.setCurrentDungeonBounds(previousBounds);
+            session.setPlacedPieces(previousPieces);
+            throw ex;
+        }
+    }
+
+    public void endRound(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId())
+                .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
+        if (session.state() != SessionState.IN_ROUND) {
+            throw new IllegalStateException("There is no active round in this session.");
+        }
+        if (!isInHomeArea(session, player.getLocation())) {
+            throw new IllegalStateException("Round end can only be run from the home area.");
+        }
+
+        session.setRoundState(RoundState.ENDING);
+        for (UUID playerId : List.copyOf(session.alivePlayers())) {
+            Player alivePlayer = Bukkit.getPlayer(playerId);
+            if (alivePlayer != null && session.currentDungeonBounds() != null
+                    && session.currentDungeonBounds().contains(
+                    alivePlayer.getLocation().getBlockX(),
+                    alivePlayer.getLocation().getBlockY(),
+                    alivePlayer.getLocation().getBlockZ())) {
+                session.markDead(playerId);
+            }
+        }
+        moveOnlineMembersHome(session);
+        session.clearAlivePlayers();
+        session.setRoundState(RoundState.ENDED);
+        session.setState(SessionState.BETWEEN_ROUNDS);
+    }
+
+    public void selectDungeon(GameSession session, String preset, String difficulty) {
+        if (session.state() == SessionState.CLOSING) {
+            throw new IllegalStateException("Cannot select dungeon for a closing session.");
+        }
+        session.setSelectedPreset(preset);
+        session.setSelectedDifficulty(difficulty);
     }
 
     public boolean endSession(GameSession session) {
@@ -355,6 +497,10 @@ public final class GameSessionManager {
             if (associatedSession != null) {
                 associatedSession.markOnline(player.getUniqueId());
                 cancelIdleTimeout(associatedSession);
+                if (associatedSession.state() == SessionState.IN_ROUND) {
+                    associatedSession.markPendingNextRound(player.getUniqueId());
+                    setSpectator(player);
+                }
             }
             return;
         }
@@ -373,6 +519,10 @@ public final class GameSessionManager {
         session.markOnline(player.getUniqueId());
         cancelIdleTimeout(session);
         applyPlayerAttributesAndParams(player);
+        if (session.state() == SessionState.IN_ROUND && !session.alivePlayers().contains(player.getUniqueId())) {
+            session.markPendingNextRound(player.getUniqueId());
+            setSpectator(player);
+        }
     }
 
     public void handlePlayerQuit(Player player) {
@@ -381,9 +531,33 @@ public final class GameSessionManager {
             return;
         }
 
+        boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
         session.markOffline(player.getUniqueId());
         restorePlayerAttributes(player);
+        if (wasAlive) {
+            session.markDead(player.getUniqueId());
+            updateRoundAfterAliveChange(session);
+        }
         scheduleIdleTimeoutIfNeeded(session);
+    }
+
+    public void handlePlayerDeath(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND) {
+            return;
+        }
+        session.markDead(player.getUniqueId());
+        session.markPendingNextRound(player.getUniqueId());
+        updateRoundAfterAliveChange(session);
+    }
+
+    public void handlePlayerRespawn(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
+            return;
+        }
+        session.markPendingNextRound(player.getUniqueId());
+        setSpectator(player);
     }
 
     public int resolveDepth(World world, Location location) {
@@ -441,12 +615,90 @@ public final class GameSessionManager {
         return session.state() != SessionState.IN_ROUND && session.state() != SessionState.CLOSING;
     }
 
+    private boolean canJoinSession(GameSession session) {
+        return session.state() != SessionState.CLOSING
+                && session.state() != SessionState.GAME_OVER
+                && session.roundState() != RoundState.PREPARING
+                && session.roundState() != RoundState.ENDING;
+    }
+
     private int validateMaxPlayers(int requestedMaxPlayers) {
         int maxAllowed = plugin.settings().sessions().maxMaxPlayers();
         if (requestedMaxPlayers > maxAllowed) {
             throw new IllegalArgumentException("maxPlayers must be " + maxAllowed + " or less.");
         }
         return Math.max(1, requestedMaxPlayers);
+    }
+
+    private IntVector3 allocateDungeonOrigin(GameSession session) {
+        int roundIndex = Math.max(1, session.currentRound());
+        int x = session.homeArea().maxX()
+                + plugin.settings().dungeon().baseDistanceFromHome()
+                + ((roundIndex - 1) * plugin.settings().dungeon().roundSpacing());
+        return new IntVector3(x, plugin.settings().generation().origin().y(), session.homeArea().minZ());
+    }
+
+    private BlockBox resolveDungeonBounds(List<PlacedPiece> placedPieces, IntVector3 origin) {
+        if (placedPieces.isEmpty()) {
+            return new BlockBox(origin, origin);
+        }
+
+        BlockBox bounds = placedPieces.get(0).worldBounds();
+        int minX = bounds.minX();
+        int minY = bounds.minY();
+        int minZ = bounds.minZ();
+        int maxX = bounds.maxX();
+        int maxY = bounds.maxY();
+        int maxZ = bounds.maxZ();
+        for (int index = 1; index < placedPieces.size(); index++) {
+            BlockBox next = placedPieces.get(index).worldBounds();
+            minX = Math.min(minX, next.minX());
+            minY = Math.min(minY, next.minY());
+            minZ = Math.min(minZ, next.minZ());
+            maxX = Math.max(maxX, next.maxX());
+            maxY = Math.max(maxY, next.maxY());
+            maxZ = Math.max(maxZ, next.maxZ());
+        }
+        return new BlockBox(new IntVector3(minX, minY, minZ), new IntVector3(maxX, maxY, maxZ));
+    }
+
+    private boolean isInHomeArea(GameSession session, Location location) {
+        return location.getWorld() != null
+                && location.getWorld().getUID().equals(session.world().getUID())
+                && session.homeArea().contains(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+    }
+
+    private void moveOnlineMembersHome(GameSession session) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) {
+                continue;
+            }
+            restoreGameMode(player);
+            player.teleport(session.spawnLocation());
+        }
+    }
+
+    private void updateRoundAfterAliveChange(GameSession session) {
+        if (session.state() != SessionState.IN_ROUND || !session.alivePlayers().isEmpty()) {
+            return;
+        }
+
+        moveOnlineMembersHome(session);
+        session.setRoundState(RoundState.ENDED);
+        session.setState(SessionState.GAME_OVER);
+    }
+
+    private void setSpectator(Player player) {
+        playerGameModeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> player.getGameMode());
+        player.setGameMode(GameMode.SPECTATOR);
+    }
+
+    private void restoreGameMode(Player player) {
+        GameMode gameMode = playerGameModeSnapshots.remove(player.getUniqueId());
+        if (gameMode != null) {
+            player.setGameMode(gameMode);
+        }
     }
 
     private Location homeSpawn(World world) {
@@ -559,6 +811,7 @@ public final class GameSessionManager {
             Location returnLocation = resolveReturnLocation(session, player.getUniqueId());
             boolean teleported = returnLocation != null && player.teleport(returnLocation);
             restorePlayerAttributes(player);
+            restoreGameMode(player);
             if (!teleported) {
                 player.kickPlayer(PREFIX + ChatColor.RED + "Session world is shutting down.");
             }
@@ -570,6 +823,7 @@ public final class GameSessionManager {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
                 restorePlayerAttributes(player);
+                restoreGameMode(player);
             }
         }
     }
