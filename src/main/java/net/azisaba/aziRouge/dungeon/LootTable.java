@@ -3,6 +3,7 @@ package net.azisaba.aziRouge.dungeon;
 import net.azisaba.aziRouge.config.ChestLootEntrySettings;
 import net.azisaba.aziRouge.config.ChestLootTierSettings;
 import net.azisaba.aziRouge.config.ChestSettings;
+import net.azisaba.aziRouge.config.TreasureSettings;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -21,6 +22,28 @@ import java.util.Random;
 public final class LootTable {
     public List<ItemStack> roll(int depth, ChestSettings chestSettings, Random random) {
         ChestLootTierSettings tier = chestSettings.tierForDepth(depth);
+        if (tier.entries().isEmpty()) {
+            return List.of();
+        }
+
+        int rolls = randomRollCount(tier, random);
+        List<ItemStack> results = new ArrayList<>(rolls);
+        for (int index = 0; index < rolls; index++) {
+            ItemStack itemStack = createItem(select(tier.entries(), random), random);
+            if (itemStack != null && itemStack.getType() != Material.AIR) {
+                results.add(itemStack);
+            }
+        }
+        return results;
+    }
+
+    public ItemStack rollSingle(int depth, TreasureSettings treasureSettings, Random random) {
+        List<ItemStack> items = roll(depth, treasureSettings, random);
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public List<ItemStack> roll(int depth, TreasureSettings treasureSettings, Random random) {
+        ChestLootTierSettings tier = treasureSettings.tierForDepth(depth);
         if (tier.entries().isEmpty()) {
             return List.of();
         }

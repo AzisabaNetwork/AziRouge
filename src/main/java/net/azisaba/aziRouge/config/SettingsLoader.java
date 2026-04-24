@@ -62,7 +62,9 @@ public final class SettingsLoader {
                 ),
                 new AziRougeSettings(
                         loadMobSpawnSettings(config),
-                        loadChestSettings(plugin, config)
+                        loadChestSettings(plugin, config),
+                        loadTreasureSettings(plugin, config),
+                        loadTrapSettings(config)
                 )
         );
     }
@@ -182,6 +184,94 @@ public final class SettingsLoader {
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-1"), defaultTier1, "tier-1"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-2"), defaultTier2, "tier-2"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-3"), defaultTier3, "tier-3")
+        );
+    }
+
+    private static TreasureSettings loadTreasureSettings(JavaPlugin plugin, FileConfiguration config) {
+        double baseSpawnChance = clamp(config.getDouble("azirouge.treasure.base-spawn-chance", 0.08D), 0.0D, 1.0D);
+        double depthMultiplier = Math.max(0.0D, config.getDouble("azirouge.treasure.depth-multiplier", 0.04D));
+        double maxSpawnChance = clamp(
+                config.getDouble("azirouge.treasure.max-spawn-chance", 0.65D),
+                baseSpawnChance,
+                1.0D
+        );
+
+        ConfigurationSection tiers = config.getConfigurationSection("azirouge.treasure.tiers");
+        ChestLootTierSettings defaultTier1 = defaultTreasureTier1();
+        ChestLootTierSettings defaultTier2 = defaultTreasureTier2();
+        ChestLootTierSettings defaultTier3 = defaultTreasureTier3();
+        return new TreasureSettings(
+                baseSpawnChance,
+                depthMultiplier,
+                maxSpawnChance,
+                loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-1"), defaultTier1, "treasure.tier-1"),
+                loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-2"), defaultTier2, "treasure.tier-2"),
+                loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-3"), defaultTier3, "treasure.tier-3")
+        );
+    }
+
+    private static TrapSettings loadTrapSettings(FileConfiguration config) {
+        double baseSpawnChance = clamp(config.getDouble("azirouge.traps.base-spawn-chance", 0.06D), 0.0D, 1.0D);
+        double depthMultiplier = Math.max(0.0D, config.getDouble("azirouge.traps.depth-multiplier", 0.03D));
+        double maxSpawnChance = clamp(
+                config.getDouble("azirouge.traps.max-spawn-chance", 0.35D),
+                baseSpawnChance,
+                1.0D
+        );
+        return new TrapSettings(
+                baseSpawnChance,
+                depthMultiplier,
+                maxSpawnChance,
+                loadTrapDefinitions(config.getList("azirouge.traps.definitions"))
+        );
+    }
+
+    private static List<TrapDefinitionSettings> loadTrapDefinitions(List<?> rawDefinitions) {
+        List<TrapDefinitionSettings> defaults = defaultTrapDefinitions();
+        if (rawDefinitions == null || rawDefinitions.isEmpty()) {
+            return defaults;
+        }
+
+        List<TrapDefinitionSettings> definitions = new ArrayList<>();
+        for (Object rawDefinition : rawDefinitions) {
+            TrapDefinitionSettings definition = loadTrapDefinition(rawDefinition);
+            if (definition != null) {
+                definitions.add(definition);
+            }
+        }
+        return definitions.isEmpty() ? defaults : List.copyOf(definitions);
+    }
+
+    private static TrapDefinitionSettings loadTrapDefinition(Object rawDefinition) {
+        Map<?, ?> values = asMap(rawDefinition);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+
+        String key = normalizeOptionalText(stringValue(values.get("key")));
+        String material = normalizeRequiredText(stringValue(values.get("display-material")));
+        if (key == null || material == null) {
+            return null;
+        }
+
+        Material blockMaterial = Material.matchMaterial(material);
+        if (blockMaterial == null || !blockMaterial.isBlock()) {
+            return null;
+        }
+
+        int minDepth = Math.max(0, intValue(values.get("min-depth"), 0));
+        int rawMaxDepth = intValue(values.get("max-depth"), -1);
+        int maxDepth = rawMaxDepth < 0 ? Integer.MAX_VALUE : Math.max(minDepth, rawMaxDepth);
+        return new TrapDefinitionSettings(
+                key.toLowerCase(Locale.ROOT),
+                Math.max(0, intValue(values.get("weight"), 1)),
+                material,
+                Math.max(0.1D, doubleValue(values.get("trigger-radius"), 0.9D)),
+                (float) Math.max(0.1D, doubleValue(values.get("explosion-power"), 2.5D)),
+                booleanValue(values.get("set-fire"), false),
+                booleanValue(values.get("break-blocks"), false),
+                minDepth,
+                maxDepth
         );
     }
 
@@ -321,6 +411,17 @@ public final class SettingsLoader {
         }
     }
 
+    private static boolean booleanValue(Object value, boolean fallback) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(text.trim());
+    }
+
     private static ChestLootTierSettings defaultTier1() {
         return new ChestLootTierSettings(
                 2,
@@ -369,6 +470,52 @@ public final class SettingsLoader {
                         new ChestLootEntrySettings("ENCHANTED_BOOK", 5, 1, 1, null, Map.of("unbreaking", 3)),
                         new ChestLootEntrySettings("POTION", 5, 1, 1, "STRENGTH", Map.of())
                 )
+        );
+    }
+
+    private static ChestLootTierSettings defaultTreasureTier1() {
+        return new ChestLootTierSettings(
+                1,
+                1,
+                List.of(
+                        new ChestLootEntrySettings("IRON_INGOT", 12, 1, 2, null, Map.of()),
+                        new ChestLootEntrySettings("GOLD_NUGGET", 11, 4, 8, null, Map.of()),
+                        new ChestLootEntrySettings("LAPIS_LAZULI", 9, 3, 6, null, Map.of()),
+                        new ChestLootEntrySettings("AMETHYST_SHARD", 7, 2, 5, null, Map.of())
+                )
+        );
+    }
+
+    private static ChestLootTierSettings defaultTreasureTier2() {
+        return new ChestLootTierSettings(
+                1,
+                1,
+                List.of(
+                        new ChestLootEntrySettings("GOLD_INGOT", 11, 1, 2, null, Map.of()),
+                        new ChestLootEntrySettings("EMERALD", 10, 1, 2, null, Map.of()),
+                        new ChestLootEntrySettings("ENDER_PEARL", 7, 1, 1, null, Map.of()),
+                        new ChestLootEntrySettings("POTION", 6, 1, 1, "INVISIBILITY", Map.of())
+                )
+        );
+    }
+
+    private static ChestLootTierSettings defaultTreasureTier3() {
+        return new ChestLootTierSettings(
+                1,
+                1,
+                List.of(
+                        new ChestLootEntrySettings("DIAMOND", 10, 1, 2, null, Map.of()),
+                        new ChestLootEntrySettings("NETHERITE_SCRAP", 4, 1, 1, null, Map.of()),
+                        new ChestLootEntrySettings("ENCHANTED_BOOK", 7, 1, 1, null, Map.of("fortune", 3)),
+                        new ChestLootEntrySettings("GOLDEN_APPLE", 8, 1, 1, null, Map.of())
+                )
+        );
+    }
+
+    private static List<TrapDefinitionSettings> defaultTrapDefinitions() {
+        return List.of(
+                new TrapDefinitionSettings("landmine", 10, "HEAVY_WEIGHTED_PRESSURE_PLATE", 0.9D, 2.5F, false, false, 0, Integer.MAX_VALUE),
+                new TrapDefinitionSettings("ember_mine", 5, "LIGHT_WEIGHTED_PRESSURE_PLATE", 0.85D, 1.75F, true, false, 4, Integer.MAX_VALUE)
         );
     }
 

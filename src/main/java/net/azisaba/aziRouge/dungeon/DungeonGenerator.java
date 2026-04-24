@@ -41,6 +41,8 @@ public final class DungeonGenerator {
     private final SchematicAdapter schematicAdapter;
     private final EnemyPlacementService enemyPlacementService;
     private final ChestPopulator chestPopulator;
+    private final TreasurePopulator treasurePopulator;
+    private final TrapPopulator trapPopulator;
 
     public DungeonGenerator(
             JavaPlugin plugin,
@@ -48,7 +50,9 @@ public final class DungeonGenerator {
             TemplateManager templateManager,
             SchematicAdapter schematicAdapter,
             EnemyPlacementService enemyPlacementService,
-            ChestPopulator chestPopulator
+            ChestPopulator chestPopulator,
+            TreasurePopulator treasurePopulator,
+            TrapPopulator trapPopulator
     ) {
         this.plugin = plugin;
         this.debugLogger = debugLogger;
@@ -56,6 +60,8 @@ public final class DungeonGenerator {
         this.schematicAdapter = schematicAdapter;
         this.enemyPlacementService = enemyPlacementService;
         this.chestPopulator = chestPopulator;
+        this.treasurePopulator = treasurePopulator;
+        this.trapPopulator = trapPopulator;
     }
 
     public DungeonGenerationResult generate(GenerationExecutionRequest request, PluginSettings settings)
@@ -128,6 +134,8 @@ public final class DungeonGenerator {
 
         for (PlacedPiece piece : pieces) {
             chestPopulator.populateRoom(request.world(), piece);
+            treasurePopulator.populateRoom(request.world(), piece);
+            trapPopulator.populateRoom(request.world(), piece);
         }
 
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());

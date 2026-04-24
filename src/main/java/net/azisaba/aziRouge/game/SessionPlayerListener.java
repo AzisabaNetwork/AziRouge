@@ -3,6 +3,7 @@ package net.azisaba.aziRouge.game;
 import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
@@ -35,5 +36,10 @@ public final class SessionPlayerListener implements Listener {
         }
 
         sessionManager.handlePlayerWorldChange(event.getPlayer(), event.getPlayer().getLocation(), event.getRespawnLocation());
+    }
+
+    @EventHandler
+    public void onCraft(CraftItemEvent e) {
+        e.setCancelled(true);
     }
 }

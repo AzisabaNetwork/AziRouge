@@ -28,6 +28,84 @@ azirouge:
   mob-spawn-interval-seconds: 30
   mob-spawn-count-per-interval: 3
   mob-spawn-max-alive-power: 48
+  treasure:
+    base-spawn-chance: 0.08
+    depth-multiplier: 0.04
+    max-spawn-chance: 0.65
+    tiers:
+      tier-1:
+        min-rolls: 1
+        max-rolls: 1
+        entries:
+          - material: IRON_INGOT
+            weight: 12
+            min-amount: 1
+            max-amount: 2
+          - material: GOLD_NUGGET
+            weight: 11
+            min-amount: 4
+            max-amount: 8
+          - material: LAPIS_LAZULI
+            weight: 9
+            min-amount: 3
+            max-amount: 6
+          - material: AMETHYST_SHARD
+            weight: 7
+            min-amount: 2
+            max-amount: 5
+      tier-2:
+        min-rolls: 1
+        max-rolls: 1
+        entries:
+          - material: GOLD_INGOT
+            weight: 11
+            min-amount: 1
+            max-amount: 2
+          - material: EMERALD
+            weight: 10
+            min-amount: 1
+            max-amount: 2
+          - material: ENDER_PEARL
+            weight: 7
+          - material: POTION
+            weight: 6
+            potion-type: INVISIBILITY
+      tier-3:
+        min-rolls: 1
+        max-rolls: 1
+        entries:
+          - material: DIAMOND
+            weight: 10
+            min-amount: 1
+            max-amount: 2
+          - material: NETHERITE_SCRAP
+            weight: 4
+          - material: ENCHANTED_BOOK
+            weight: 7
+            stored-enchantments:
+              fortune: 3
+          - material: GOLDEN_APPLE
+            weight: 8
+  traps:
+    base-spawn-chance: 0.06
+    depth-multiplier: 0.03
+    max-spawn-chance: 0.35
+    definitions:
+      - key: landmine
+        weight: 10
+        display-material: HEAVY_WEIGHTED_PRESSURE_PLATE
+        trigger-radius: 0.9
+        explosion-power: 2.5
+        set-fire: false
+        break-blocks: false
+      - key: ember_mine
+        weight: 5
+        display-material: LIGHT_WEIGHTED_PRESSURE_PLATE
+        trigger-radius: 0.85
+        explosion-power: 1.75
+        set-fire: true
+        break-blocks: false
+        min-depth: 4
   mobs:
     zombie_brute:
       weight: 12
