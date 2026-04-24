@@ -7,28 +7,34 @@ softdepend:
   - WorldEdit
 commands:
   azirouge:
-    description: ダンジョン生成とゲームセッション管理を行います
-    usage: /azirouge <start|end|generate|reload|debug|author>
+    description: Manage AziRouge dungeon generation and game sessions.
+    usage: /azirouge <start|end|session|generate|reload|debug|author>
     permission: azirouge.command
 permissions:
   azirouge.command:
-    description: AziRouge のコマンド利用権限
+    description: Allows using the AziRouge command.
     default: op
   azirouge.start:
-    description: AziRouge のゲームセッション開始権限
+    description: Allows creating an AziRouge session with the legacy start command.
     default: op
   azirouge.end:
-    description: AziRouge のゲームセッション終了権限
+    description: Allows ending AziRouge sessions.
+    default: op
+  azirouge.session:
+    description: Allows creating, joining, leaving, and listing AziRouge sessions.
+    default: op
+  azirouge.session.forceend:
+    description: Allows force-ending any AziRouge session.
     default: op
   azirouge.command.reload:
-    description: AziRouge の設定再読込権限
+    description: Allows reloading AziRouge configuration.
     default: op
   azirouge.command.debug:
-    description: AziRouge のデバッグ切替権限
+    description: Allows toggling AziRouge debug logging.
     default: op
   azirouge.command.generate:
-    description: AziRouge のダンジョン生成権限
+    description: Allows generating dungeons.
     default: op
   azirouge.command.author:
-    description: AziRouge のゲーム内テンプレート編集権限
+    description: Allows editing templates in-game.
     default: op

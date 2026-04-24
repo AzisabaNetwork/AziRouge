@@ -56,6 +56,7 @@ public final class SettingsLoader {
                         doorMaterial
                 ),
                 new DebugSettings(config.getBoolean("debug.enabled", false)),
+                loadSessionSettings(config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -66,6 +67,17 @@ public final class SettingsLoader {
                         loadTreasureSettings(plugin, config),
                         loadTrapSettings(config)
                 )
+        );
+    }
+
+    private static SessionSettings loadSessionSettings(FileConfiguration config) {
+        int maxMaxPlayers = Math.max(1, config.getInt("sessions.max-max-players", 8));
+        int defaultMaxPlayers = clampInt(config.getInt("sessions.default-max-players", 4), 1, maxMaxPlayers);
+        return new SessionSettings(
+                defaultMaxPlayers,
+                maxMaxPlayers,
+                Math.max(1, config.getInt("sessions.idle-timeout-seconds", 60)),
+                requireText(config.getString("sessions.world-name-prefix"), "azirouge_")
         );
     }
 
@@ -524,6 +536,10 @@ public final class SettingsLoader {
     }
 
     private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static int clampInt(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
 }

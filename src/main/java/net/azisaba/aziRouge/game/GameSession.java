@@ -9,40 +9,101 @@ import org.bukkit.scheduler.BukkitTask;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 public final class GameSession {
+    private final String sessionId;
+    private final UUID owner;
     private final World world;
-    private final Map<UUID, Location> savedLocations = new HashMap<>();
+    private final int maxPlayers;
+    private final Set<UUID> members = new HashSet<>();
+    private final Set<UUID> onlineMembers = new HashSet<>();
+    private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
     private final List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
-    private final Instant startedAt;
+    private final Instant createdAt;
+    private SessionState state = SessionState.LOBBY;
+    private int currentRound;
     private BukkitTask mobSpawnTask;
+    private BukkitTask idleTimeoutTask;
 
-    public GameSession(World world, Location spawnLocation, List<PlacedPiece> placedPieces) {
+    public GameSession(String sessionId, UUID owner, World world, int maxPlayers, Location spawnLocation, List<PlacedPiece> placedPieces) {
+        this.sessionId = sessionId;
+        this.owner = owner;
         this.world = world;
+        this.maxPlayers = maxPlayers;
         this.spawnLocation = spawnLocation.clone();
         this.placedPieces = List.copyOf(placedPieces);
-        this.startedAt = Instant.now();
+        this.createdAt = Instant.now();
+    }
+
+    public String sessionId() {
+        return sessionId;
+    }
+
+    public UUID owner() {
+        return owner;
     }
 
     public World world() {
         return world;
     }
 
+    public SessionState state() {
+        return state;
+    }
+
+    public void setState(SessionState state) {
+        this.state = state;
+    }
+
+    public int maxPlayers() {
+        return maxPlayers;
+    }
+
+    public Set<UUID> members() {
+        return Collections.unmodifiableSet(members);
+    }
+
+    public Set<UUID> onlineMembers() {
+        return Collections.unmodifiableSet(onlineMembers);
+    }
+
+    public int currentRound() {
+        return currentRound;
+    }
+
+    public void setCurrentRound(int currentRound) {
+        this.currentRound = Math.max(0, currentRound);
+    }
+
     public Map<UUID, Location> savedLocations() {
-        return Collections.unmodifiableMap(savedLocations);
+        return savedReturnLocations();
+    }
+
+    public Map<UUID, Location> savedReturnLocations() {
+        return Collections.unmodifiableMap(savedReturnLocations);
     }
 
     public BukkitTask mobSpawnTask() {
         return mobSpawnTask;
     }
 
+    public BukkitTask idleTimeoutTask() {
+        return idleTimeoutTask;
+    }
+
     public Instant startedAt() {
-        return startedAt;
+        return createdAt;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
     }
 
     public Location spawnLocation() {
@@ -57,19 +118,55 @@ public final class GameSession {
         this.mobSpawnTask = mobSpawnTask;
     }
 
+    public void setIdleTimeoutTask(BukkitTask idleTimeoutTask) {
+        this.idleTimeoutTask = idleTimeoutTask;
+    }
+
+    public boolean isMember(UUID playerId) {
+        return members.contains(playerId);
+    }
+
+    public boolean isOnlineMember(UUID playerId) {
+        return onlineMembers.contains(playerId);
+    }
+
+    public boolean addMember(UUID playerId) {
+        return members.add(playerId);
+    }
+
+    public void removeMember(UUID playerId) {
+        members.remove(playerId);
+        onlineMembers.remove(playerId);
+        savedReturnLocations.remove(playerId);
+    }
+
+    public void markOnline(UUID playerId) {
+        if (members.contains(playerId)) {
+            onlineMembers.add(playerId);
+        }
+    }
+
+    public void markOffline(UUID playerId) {
+        onlineMembers.remove(playerId);
+    }
+
+    public boolean hasRoomFor(UUID playerId) {
+        return members.contains(playerId) || members.size() < maxPlayers;
+    }
+
     public void saveLocation(UUID playerId, Location location) {
         if (location != null) {
-            savedLocations.put(playerId, location.clone());
+            savedReturnLocations.put(playerId, location.clone());
         }
     }
 
     public Location savedLocation(UUID playerId) {
-        Location location = savedLocations.get(playerId);
+        Location location = savedReturnLocations.get(playerId);
         return location == null ? null : location.clone();
     }
 
     public void removeSavedLocation(UUID playerId) {
-        savedLocations.remove(playerId);
+        savedReturnLocations.remove(playerId);
     }
 
     public PlacedPiece randomRoom(Random random) {

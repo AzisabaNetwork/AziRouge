@@ -4,6 +4,8 @@ import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.CraftItemEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
@@ -22,6 +24,11 @@ public final class SessionPlayerListener implements Listener {
 
         World destinationWorld = event.getTo().getWorld();
         World sourceWorld = event.getFrom().getWorld();
+        if (!sessionManager.isSessionWorldEntryAllowed(event.getPlayer(), destinationWorld)) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage("You are not a member of that AziRouge session.");
+            return;
+        }
         if (sourceWorld != null && sourceWorld.getUID().equals(destinationWorld.getUID())) {
             return;
         }
@@ -35,7 +42,26 @@ public final class SessionPlayerListener implements Listener {
             return;
         }
 
+        if (!sessionManager.isSessionWorldEntryAllowed(event.getPlayer(), event.getRespawnLocation().getWorld())) {
+            GameSession session = sessionManager.sessionForWorld(event.getRespawnLocation().getWorld()).orElse(null);
+            if (session != null) {
+                org.bukkit.Location fallback = sessionManager.fallbackLocation(session);
+                if (fallback != null) {
+                    event.setRespawnLocation(fallback);
+                }
+            }
+        }
         sessionManager.handlePlayerWorldChange(event.getPlayer(), event.getPlayer().getLocation(), event.getRespawnLocation());
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        sessionManager.handlePlayerJoin(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        sessionManager.handlePlayerQuit(event.getPlayer());
     }
 
     @EventHandler

@@ -46,13 +46,14 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /" + label + " <start|end|generate|reload|debug|author>");
+            info(sender, "Usage: /" + label + " <start|end|session|generate|reload|debug|author>");
             return true;
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "start" -> handleStart(sender, Arrays.copyOfRange(args, 1, args.length));
             case "end" -> handleEnd(sender);
+            case "session" -> handleSession(sender, Arrays.copyOfRange(args, 1, args.length));
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "reload" -> handleReload(sender);
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -67,7 +68,7 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("start", "end", "generate", "reload", "debug", "author").stream()
+            return List.of("start", "end", "session", "generate", "reload", "debug", "author").stream()
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -89,6 +90,18 @@ public final class AziRougeCommand implements TabExecutor {
         }
         if (args.length == 2 && "debug".equalsIgnoreCase(args[0])) {
             return List.of("on", "off").stream().filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
+        }
+        if (args.length == 2 && "session".equalsIgnoreCase(args[0])) {
+            return List.of("create", "join", "leave", "list", "forceend").stream()
+                    .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
+        }
+        if (args.length == 3 && "session".equalsIgnoreCase(args[0])
+                && ("join".equalsIgnoreCase(args[1]) || "forceend".equalsIgnoreCase(args[1]))) {
+            return plugin.gameSessionManager().sessions().stream()
+                    .map(GameSession::sessionId)
+                    .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
+                    .toList();
         }
         if (args.length == 2 && "author".equalsIgnoreCase(args[0])) {
             return List.of("piece", "entrance").stream().filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT))).toList();
@@ -140,6 +153,7 @@ public final class AziRougeCommand implements TabExecutor {
                     templateSelection.startPieceId()
             );
             success(sender, "Started a new session in world " + session.world().getName()
+                    + " id=" + session.sessionId()
                     + " using template preset " + templateSelection.presetName() + ".");
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             error(sender, "Session start failed: " + ex.getMessage());
@@ -149,6 +163,151 @@ public final class AziRougeCommand implements TabExecutor {
         } catch (IllegalStateException ex) {
             error(sender, ex.getMessage());
             plugin.getLogger().warning("Session start failed: " + ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleSession(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            info(sender, "Usage: /azirouge session <create|join|leave|list|forceend>");
+            return true;
+        }
+
+        return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "create" -> handleSessionCreate(sender, Arrays.copyOfRange(args, 1, args.length));
+            case "join" -> handleSessionJoin(sender, Arrays.copyOfRange(args, 1, args.length));
+            case "leave" -> handleSessionLeave(sender);
+            case "list" -> handleSessionList(sender);
+            case "forceend" -> handleSessionForceEnd(sender, Arrays.copyOfRange(args, 1, args.length));
+            default -> {
+                error(sender, "Unknown session subcommand: " + args[0]);
+                yield true;
+            }
+        };
+    }
+
+    private boolean handleSessionCreate(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("azirouge.session")) {
+            error(sender, "You do not have permission to manage AziRouge sessions.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+        if (args.length > 1) {
+            info(sender, "Usage: /azirouge session create [maxPlayers]");
+            return true;
+        }
+
+        int maxPlayers = args.length == 0
+                ? plugin.settings().sessions().defaultMaxPlayers()
+                : parseInt(args[0], plugin.settings().sessions().defaultMaxPlayers());
+        try {
+            GameSession session = plugin.gameSessionManager().startSession(player,
+                    plugin.settings().generation().templatePatterns(),
+                    plugin.settings().generation().startPieceId(),
+                    maxPlayers);
+            success(sender, "Created session " + session.sessionId()
+                    + " players=1/" + session.maxPlayers()
+                    + " world=" + session.world().getName() + ".");
+        } catch (TemplateLoadException | SchematicPlacementException ex) {
+            error(sender, "Session creation failed: " + ex.getMessage());
+            plugin.getLogger().warning("Session creation failed: " + ex.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            error(sender, ex.getMessage());
+            plugin.getLogger().warning("Session creation failed: " + ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleSessionJoin(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("azirouge.session")) {
+            error(sender, "You do not have permission to manage AziRouge sessions.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+        if (args.length != 1) {
+            info(sender, "Usage: /azirouge session join <sessionId>");
+            return true;
+        }
+
+        try {
+            GameSession session = plugin.gameSessionManager().joinSession(player, args[0]);
+            success(sender, "Joined session " + session.sessionId()
+                    + " players=" + session.members().size() + "/" + session.maxPlayers() + ".");
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            error(sender, ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleSessionLeave(CommandSender sender) {
+        if (!sender.hasPermission("azirouge.session")) {
+            error(sender, "You do not have permission to manage AziRouge sessions.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+
+        try {
+            GameSession session = plugin.gameSessionManager().leaveSession(player);
+            success(sender, "Left session " + session.sessionId() + ".");
+        } catch (IllegalStateException ex) {
+            error(sender, ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleSessionList(CommandSender sender) {
+        if (!sender.hasPermission("azirouge.session")) {
+            error(sender, "You do not have permission to manage AziRouge sessions.");
+            return true;
+        }
+        List<GameSession> sessions = plugin.gameSessionManager().sessions().stream()
+                .sorted((left, right) -> left.sessionId().compareTo(right.sessionId()))
+                .toList();
+        if (sessions.isEmpty()) {
+            info(sender, "No active sessions.");
+            return true;
+        }
+
+        info(sender, "Active sessions:");
+        for (GameSession session : sessions) {
+            info(sender, session.sessionId()
+                    + " state=" + session.state()
+                    + " players=" + session.onlineMembers().size() + "/" + session.members().size() + "/" + session.maxPlayers()
+                    + " round=" + session.currentRound()
+                    + " world=" + session.world().getName()
+                    + " owner=" + session.owner());
+        }
+        return true;
+    }
+
+    private boolean handleSessionForceEnd(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("azirouge.session.forceend") && !sender.hasPermission("azirouge.end")) {
+            error(sender, "You do not have permission to force-end AziRouge sessions.");
+            return true;
+        }
+        if (args.length != 1) {
+            info(sender, "Usage: /azirouge session forceend <sessionId>");
+            return true;
+        }
+
+        GameSession session = plugin.gameSessionManager().sessionById(args[0]).orElse(null);
+        if (session == null) {
+            error(sender, "Session not found: " + args[0]);
+            return true;
+        }
+        if (plugin.gameSessionManager().endSession(session)) {
+            success(sender, "Force-ended session " + session.sessionId() + ".");
+        } else {
+            error(sender, "Failed to fully end session " + session.sessionId() + ". Check server logs.");
         }
         return true;
     }

@@ -21,6 +21,11 @@ door:
   material: SPRUCE_DOOR
 debug:
   enabled: false
+sessions:
+  default-max-players: 4
+  max-max-players: 8
+  idle-timeout-seconds: 60
+  world-name-prefix: azirouge_
 enemies:
   enabled: false
   mode: reserved
