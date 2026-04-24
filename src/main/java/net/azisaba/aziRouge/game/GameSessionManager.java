@@ -60,6 +60,7 @@ public final class GameSessionManager {
     private final Map<UUID, String> playerToSessionId = new HashMap<>();
     private final Map<UUID, PlayerAttributeSnapshot> playerAttributeSnapshots = new HashMap<>();
     private final Map<UUID, GameMode> playerGameModeSnapshots = new HashMap<>();
+    private final Map<UUID, PlayerVitalsSnapshot> playerVitalsSnapshots = new HashMap<>();
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
         this.plugin = plugin;
@@ -184,10 +185,11 @@ public final class GameSessionManager {
             if (!player.teleport(session.spawnLocation())) {
                 unregisterSession(session);
                 restorePlayerAttributes(player);
+                restorePlayerVitals(player);
                 throw new IllegalStateException("Failed to teleport player into session world.");
             }
 
-            applyPlayerAttributesAndParams(player);
+            initializeSessionPlayerState(player);
             BukkitTask mobSpawnTask = mobSpawnManager.start(session);
             session.setMobSpawnTask(mobSpawnTask);
             return session;
@@ -197,6 +199,7 @@ public final class GameSessionManager {
                 unregisterSession(registered);
             }
             restorePlayerAttributes(player);
+            restorePlayerVitals(player);
             cleanupWorld(world);
             throw ex;
         }
@@ -221,13 +224,16 @@ public final class GameSessionManager {
         if (!player.teleport(session.spawnLocation())) {
             removePlayerFromSession(session, player.getUniqueId());
             restorePlayerAttributes(player);
+            restorePlayerVitals(player);
             scheduleIdleTimeoutIfNeeded(session);
             throw new IllegalStateException("Failed to teleport into session " + session.sessionId() + ".");
         }
-        applyPlayerAttributesAndParams(player);
+        initializeSessionPlayerState(player);
         if (session.state() == SessionState.IN_ROUND) {
             session.markPendingNextRound(player.getUniqueId());
-            setSpectator(player);
+            makeRoundSpectatorAtHome(session, player);
+        } else {
+            restoreGameMode(player);
         }
         return session;
     }
@@ -251,9 +257,12 @@ public final class GameSessionManager {
 
         restorePlayerAttributes(player);
         restoreGameMode(player);
-        removePlayerFromSession(session, player.getUniqueId());
+        restorePlayerVitals(player);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
+        }
+        removePlayerFromSession(session, player.getUniqueId());
+        if (wasAlive) {
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
@@ -306,6 +315,8 @@ public final class GameSessionManager {
             throw new IllegalStateException("No online members are available to start the round.");
         }
 
+        restoreRoundInactivePlayersForNextRound(session);
+
         SessionState previousState = session.state();
         RoundState previousRoundState = session.roundState();
         int previousRound = session.currentRound();
@@ -345,8 +356,8 @@ public final class GameSessionManager {
                     session.markDead(playerId);
                     continue;
                 }
-                restoreGameMode(player);
-                applyPlayerAttributesAndParams(player);
+                setRoundSurvival(player);
+                initializeSessionPlayerState(player);
                 if (!player.teleport(result.spawnLocation().clone())) {
                     session.markDead(playerId);
                 }
@@ -483,11 +494,17 @@ public final class GameSessionManager {
                 return;
             }
             capturePlayerJoin(player, from, targetSession);
-            applyPlayerAttributesAndParams(player);
+            initializeSessionPlayerState(player);
+            if (targetSession.state() == SessionState.IN_ROUND && !targetSession.alivePlayers().contains(player.getUniqueId())) {
+                targetSession.markPendingNextRound(player.getUniqueId());
+                makeRoundSpectatorAtHome(targetSession, player);
+            }
             return;
         }
 
         restorePlayerAttributes(player);
+        restoreGameMode(player);
+        restorePlayerVitals(player);
     }
 
     public void handlePlayerJoin(Player player) {
@@ -499,7 +516,11 @@ public final class GameSessionManager {
                 cancelIdleTimeout(associatedSession);
                 if (associatedSession.state() == SessionState.IN_ROUND) {
                     associatedSession.markPendingNextRound(player.getUniqueId());
-                    setSpectator(player);
+                    makeRoundSpectatorAtHome(associatedSession, player);
+                } else {
+                    restoreGameMode(player);
+                    initializeSessionPlayerState(player);
+                    player.teleport(associatedSession.spawnLocation());
                 }
             }
             return;
@@ -518,10 +539,12 @@ public final class GameSessionManager {
         playerToSessionId.put(player.getUniqueId(), session.sessionId());
         session.markOnline(player.getUniqueId());
         cancelIdleTimeout(session);
-        applyPlayerAttributesAndParams(player);
+        initializeSessionPlayerState(player);
         if (session.state() == SessionState.IN_ROUND && !session.alivePlayers().contains(player.getUniqueId())) {
             session.markPendingNextRound(player.getUniqueId());
-            setSpectator(player);
+            makeRoundSpectatorAtHome(session, player);
+        } else if (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS) {
+            restoreGameMode(player);
         }
     }
 
@@ -534,6 +557,8 @@ public final class GameSessionManager {
         boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
         session.markOffline(player.getUniqueId());
         restorePlayerAttributes(player);
+        restoreGameMode(player);
+        restorePlayerVitals(player);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
             updateRoundAfterAliveChange(session);
@@ -557,7 +582,15 @@ public final class GameSessionManager {
             return;
         }
         session.markPendingNextRound(player.getUniqueId());
-        setSpectator(player);
+        Bukkit.getScheduler().runTask(plugin, () -> makeRoundSpectatorAtHome(session, player));
+    }
+
+    public Location respawnLocationFor(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
+            return null;
+        }
+        return session.spawnLocation();
     }
 
     public int resolveDepth(World world, Location location) {
@@ -571,6 +604,8 @@ public final class GameSessionManager {
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
             restorePlayerAttributes(player);
+            restoreGameMode(player);
+            restorePlayerVitals(player);
         }
     }
 
@@ -674,7 +709,8 @@ public final class GameSessionManager {
             if (player == null) {
                 continue;
             }
-            restoreGameMode(player);
+            setRoundSurvival(player);
+            initializeSessionPlayerState(player);
             player.teleport(session.spawnLocation());
         }
     }
@@ -699,6 +735,79 @@ public final class GameSessionManager {
         if (gameMode != null) {
             player.setGameMode(gameMode);
         }
+    }
+
+    private void makeRoundSpectatorAtHome(GameSession session, Player player) {
+        initializeSessionPlayerState(player);
+        setSpectator(player);
+        player.teleport(session.spawnLocation());
+    }
+
+    private void restoreRoundInactivePlayersForNextRound(GameSession session) {
+        for (UUID playerId : session.deadPlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                setRoundSurvival(player);
+                initializeSessionPlayerState(player);
+                player.teleport(session.spawnLocation());
+            }
+        }
+        for (UUID playerId : session.pendingPlayersNextRound()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                setRoundSurvival(player);
+                initializeSessionPlayerState(player);
+                player.teleport(session.spawnLocation());
+            }
+        }
+    }
+
+    private void initializeSessionPlayerState(Player player) {
+        applyPlayerAttributesAndParams(player);
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null) {
+            player.setHealth(maxHealth.getValue());
+        }
+        player.setFoodLevel(20);
+        player.setSaturation(20.0F);
+        player.setExhaustion(0.0F);
+    }
+
+    private void setRoundSurvival(Player player) {
+        playerGameModeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> player.getGameMode());
+        player.setGameMode(GameMode.SURVIVAL);
+    }
+
+    private void restorePlayerVitals(Player player) {
+        PlayerVitalsSnapshot snapshot = playerVitalsSnapshots.remove(player.getUniqueId());
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (snapshot != null) {
+            if (maxHealth != null) {
+                try {
+                    player.setHealth(Math.max(1.0D, Math.min(snapshot.health(), maxHealth.getValue())));
+                } catch (IllegalArgumentException ignored) {
+                    // A dead player may reject health updates until respawn; restore what we can.
+                }
+            }
+            player.setFoodLevel(snapshot.foodLevel());
+            player.setSaturation(snapshot.saturation());
+            player.setExhaustion(snapshot.exhaustion());
+            return;
+        }
+
+        if (maxHealth != null) {
+            double restoredHealth = player.isDead()
+                    ? maxHealth.getValue()
+                    : Math.max(1.0D, Math.min(player.getHealth(), maxHealth.getValue()));
+            try {
+                player.setHealth(restoredHealth);
+            } catch (IllegalArgumentException ignored) {
+                // A dead player may reject health updates until respawn; restore what we can.
+            }
+        }
+        player.setFoodLevel(20);
+        player.setSaturation(5.0F);
+        player.setExhaustion(0.0F);
     }
 
     private Location homeSpawn(World world) {
@@ -812,6 +921,7 @@ public final class GameSessionManager {
             boolean teleported = returnLocation != null && player.teleport(returnLocation);
             restorePlayerAttributes(player);
             restoreGameMode(player);
+            restorePlayerVitals(player);
             if (!teleported) {
                 player.kickPlayer(PREFIX + ChatColor.RED + "Session world is shutting down.");
             }
@@ -824,6 +934,7 @@ public final class GameSessionManager {
             if (player != null) {
                 restorePlayerAttributes(player);
                 restoreGameMode(player);
+                restorePlayerVitals(player);
             }
         }
     }
@@ -853,6 +964,7 @@ public final class GameSessionManager {
 
     private void applyPlayerAttributesAndParams(Player player) {
         playerAttributeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> PlayerAttributeSnapshot.capture(player));
+        playerVitalsSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> PlayerVitalsSnapshot.capture(player));
         for (Map.Entry<Attribute, Double> entry : SESSION_ATTRIBUTE_VALUES.entrySet()) {
             AttributeInstance attributeInstance = player.getAttribute(entry.getKey());
             if (attributeInstance != null) {
@@ -904,6 +1016,17 @@ public final class GameSessionManager {
             }
         } catch (IOException ex) {
             plugin.getLogger().severe("Failed to delete session world folder for " + worldName + ": " + ex.getMessage());
+        }
+    }
+
+    private record PlayerVitalsSnapshot(double health, int foodLevel, float saturation, float exhaustion) {
+        private static PlayerVitalsSnapshot capture(Player player) {
+            return new PlayerVitalsSnapshot(
+                    player.getHealth(),
+                    player.getFoodLevel(),
+                    player.getSaturation(),
+                    player.getExhaustion()
+            );
         }
     }
 

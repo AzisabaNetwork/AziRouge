@@ -246,7 +246,7 @@ public final class GameSession {
     }
 
     public void markPendingNextRound(UUID playerId) {
-        if (!alivePlayers.contains(playerId) && !deadPlayers.contains(playerId)) {
+        if (!alivePlayers.contains(playerId)) {
             pendingPlayersNextRound.add(playerId);
         }
     }
@@ -259,6 +259,10 @@ public final class GameSession {
 
     public void clearAlivePlayers() {
         alivePlayers.clear();
+    }
+
+    public boolean isRoundInactivePlayer(UUID playerId) {
+        return deadPlayers.contains(playerId) || pendingPlayersNextRound.contains(playerId);
     }
 
     public boolean hasRoomFor(UUID playerId) {

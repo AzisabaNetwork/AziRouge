@@ -42,6 +42,11 @@ public final class SessionPlayerListener implements Listener {
             return;
         }
 
+        org.bukkit.Location sessionRespawn = sessionManager.respawnLocationFor(event.getPlayer());
+        if (sessionRespawn != null) {
+            event.setRespawnLocation(sessionRespawn);
+        }
+
         if (!sessionManager.isSessionWorldEntryAllowed(event.getPlayer(), event.getRespawnLocation().getWorld())) {
             GameSession session = sessionManager.sessionForWorld(event.getRespawnLocation().getWorld()).orElse(null);
             if (session != null) {
