@@ -1,12 +1,14 @@
 package net.azisaba.aziRouge.config;
 
 import net.azisaba.aziRouge.entity.MobProfile;
+import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,7 +58,8 @@ public final class SettingsLoader {
                         doorMaterial
                 ),
                 new DebugSettings(config.getBoolean("debug.enabled", false)),
-                loadSessionSettings(config),
+                loadSessionSettings(plugin, config),
+                loadHomeSettings(config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -70,15 +73,44 @@ public final class SettingsLoader {
         );
     }
 
-    private static SessionSettings loadSessionSettings(FileConfiguration config) {
+    private static SessionSettings loadSessionSettings(JavaPlugin plugin, FileConfiguration config) {
         int maxMaxPlayers = Math.max(1, config.getInt("sessions.max-max-players", 8));
         int defaultMaxPlayers = clampInt(config.getInt("sessions.default-max-players", 4), 1, maxMaxPlayers);
         return new SessionSettings(
                 defaultMaxPlayers,
                 maxMaxPlayers,
                 Math.max(1, config.getInt("sessions.idle-timeout-seconds", 60)),
-                requireText(config.getString("sessions.world-name-prefix"), "azirouge_")
+                requireText(config.getString("sessions.world-name-prefix"), "azirouge_"),
+                resolvePath(plugin, requireText(config.getString("sessions.home-template-world-path"), "azirouge_home_template")),
+                config.getBoolean("sessions.cleanup-leftover-worlds-on-startup", true)
         );
+    }
+
+    private static HomeSettings loadHomeSettings(FileConfiguration config) {
+        IntVector3 spawn = new IntVector3(
+                config.getInt("home.spawn.x", 0),
+                config.getInt("home.spawn.y", 64),
+                config.getInt("home.spawn.z", 0)
+        );
+        IntVector3 min = new IntVector3(
+                config.getInt("home.area.min.x", -16),
+                config.getInt("home.area.min.y", 0),
+                config.getInt("home.area.min.z", -16)
+        );
+        IntVector3 max = new IntVector3(
+                config.getInt("home.area.max.x", 16),
+                config.getInt("home.area.max.y", 255),
+                config.getInt("home.area.max.z", 16)
+        );
+        return new HomeSettings(spawn, BlockBox.fromPoints(min, max));
+    }
+
+    private static Path resolvePath(JavaPlugin plugin, String value) {
+        Path path = Path.of(value);
+        if (path.isAbsolute()) {
+            return path.toAbsolutePath().normalize();
+        }
+        return plugin.getServer().getWorldContainer().toPath().resolve(path).toAbsolutePath().normalize();
     }
 
     private static MobSpawnSettings loadMobSpawnSettings(FileConfiguration config) {

@@ -26,6 +26,22 @@ sessions:
   max-max-players: 8
   idle-timeout-seconds: 60
   world-name-prefix: azirouge_
+  home-template-world-path: azirouge_home_template
+  cleanup-leftover-worlds-on-startup: true
+home:
+  spawn:
+    x: 0
+    y: 64
+    z: 0
+  area:
+    min:
+      x: -16
+      y: 0
+      z: -16
+    max:
+      x: 16
+      y: 255
+      z: 16
 enemies:
   enabled: false
   mode: reserved

@@ -5,6 +5,7 @@ public record PluginSettings(
         DoorSettings door,
         DebugSettings debug,
         SessionSettings sessions,
+        HomeSettings home,
         EnemySettings enemies,
         AziRougeSettings azirouge
 ) {

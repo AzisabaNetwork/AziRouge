@@ -44,6 +44,7 @@ public final class AziRouge extends JavaPlugin {
         saveResource("templates/example-basic.yml", false);
         saveResource("schematics/README.txt", false);
         reloadPluginState();
+        gameSessionManager.cleanupLeftoverWorldFoldersOnStartup();
         registerCommands();
         registerListeners();
     }

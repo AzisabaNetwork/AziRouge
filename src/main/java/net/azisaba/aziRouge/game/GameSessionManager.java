@@ -5,6 +5,7 @@ import net.azisaba.aziRouge.config.GenerationSettings;
 import net.azisaba.aziRouge.dungeon.DungeonGenerationResult;
 import net.azisaba.aziRouge.dungeon.GenerationExecutionRequest;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.math.IntVector3;
 import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import org.bukkit.Bukkit;
@@ -12,7 +13,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
-import org.bukkit.WorldType;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
@@ -20,8 +20,12 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -37,6 +41,8 @@ import java.util.stream.Stream;
 
 public final class GameSessionManager {
     private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+    private static final List<String> TEMPLATE_COPY_EXCLUDED_DIRECTORIES = List.of("playerdata", "stats", "advancements");
+    private static final List<String> TEMPLATE_COPY_EXCLUDED_FILES = List.of("uid.dat", "session.lock");
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
@@ -79,6 +85,29 @@ public final class GameSessionManager {
 
     public Collection<GameSession> sessions() {
         return List.copyOf(sessionsById.values());
+    }
+
+    public void cleanupLeftoverWorldFoldersOnStartup() {
+        if (!plugin.settings().sessions().cleanupLeftoverWorldsOnStartup()) {
+            return;
+        }
+
+        Path worldContainer = plugin.getServer().getWorldContainer().toPath().toAbsolutePath().normalize();
+        Path templatePath = plugin.settings().sessions().homeTemplateWorldPath().toAbsolutePath().normalize();
+        File[] children = worldContainer.toFile().listFiles(File::isDirectory);
+        if (children == null) {
+            return;
+        }
+
+        String prefix = plugin.settings().sessions().worldNamePrefix();
+        for (File child : children) {
+            String worldName = child.getName();
+            Path path = child.toPath().toAbsolutePath().normalize();
+            if (!worldName.startsWith(prefix) || path.equals(templatePath) || Bukkit.getWorld(worldName) != null) {
+                continue;
+            }
+            deleteWorldFolder(path, worldName);
+        }
     }
 
     public GameSession startSession(Player player) throws TemplateLoadException, SchematicPlacementException {
@@ -124,12 +153,11 @@ public final class GameSessionManager {
         int maxPlayers = validateMaxPlayers(requestedMaxPlayers);
         String sessionId = allocateSessionId();
         String worldName = plugin.settings().sessions().worldNamePrefix() + sessionId;
-        WorldCreator creator = new WorldCreator(worldName)
-                .type(WorldType.FLAT)
-                .generatorSettings("{\"layers\":[{\"block\":\"minecraft:air\",\"height\":1}],\"biome\":\"minecraft:the_void\"}")
-                .generateStructures(false);
-        World world = Bukkit.createWorld(creator);
+        Path worldFolder = sessionWorldFolder(worldName);
+        copyTemplateWorld(worldFolder, worldName);
+        World world = Bukkit.createWorld(new WorldCreator(worldName));
         if (world == null) {
+            deleteWorldFolder(worldFolder, worldName);
             throw new IllegalStateException("Failed to create session world " + worldName + ".");
         }
         world.setAutoSave(false);
@@ -153,13 +181,14 @@ public final class GameSessionManager {
                     player.getUniqueId(),
                     world,
                     maxPlayers,
-                    result.spawnLocation(),
+                    homeSpawn(world),
+                    plugin.settings().home().area(),
                     result.placedPieces()
             );
             registerSession(session);
             addPlayerToSession(session, player, player.getLocation());
 
-            if (!player.teleport(result.spawnLocation().clone())) {
+            if (!player.teleport(session.spawnLocation())) {
                 unregisterSession(session);
                 restorePlayerAttributes(player);
                 throw new IllegalStateException("Failed to teleport player into session world.");
@@ -420,10 +449,75 @@ public final class GameSessionManager {
         return Math.max(1, requestedMaxPlayers);
     }
 
+    private Location homeSpawn(World world) {
+        IntVector3 spawn = plugin.settings().home().spawn();
+        return new Location(world, spawn.x() + 0.5D, spawn.y(), spawn.z() + 0.5D);
+    }
+
+    private Path sessionWorldFolder(String worldName) {
+        return plugin.getServer().getWorldContainer().toPath().resolve(worldName).toAbsolutePath().normalize();
+    }
+
+    private void copyTemplateWorld(Path destination, String worldName) {
+        Path source = plugin.settings().sessions().homeTemplateWorldPath().toAbsolutePath().normalize();
+        Path target = destination.toAbsolutePath().normalize();
+        if (!Files.isDirectory(source)) {
+            throw new IllegalStateException("Home template world folder not found: " + source);
+        }
+        if (source.equals(target) || target.startsWith(source)) {
+            throw new IllegalStateException("Home template world path must not point to a session world folder: " + source);
+        }
+        if (Files.exists(target)) {
+            deleteWorldFolder(target, worldName);
+        }
+
+        try {
+            Files.createDirectories(target);
+            Files.walkFileTree(source, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                    Path relative = source.relativize(dir);
+                    if (isExcludedTemplateDirectory(relative)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    Files.createDirectories(target.resolve(relative));
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Path relative = source.relativize(file);
+                    if (!isExcludedTemplateFile(relative)) {
+                        Files.copy(file, target.resolve(relative), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException ex) {
+            deleteWorldFolder(target, worldName);
+            throw new IllegalStateException("Failed to copy home template world for session " + worldName + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    private boolean isExcludedTemplateDirectory(Path relative) {
+        if (relative.getNameCount() == 0) {
+            return false;
+        }
+        return TEMPLATE_COPY_EXCLUDED_DIRECTORIES.contains(relative.getName(0).toString().toLowerCase(Locale.ROOT));
+    }
+
+    private boolean isExcludedTemplateFile(Path relative) {
+        if (relative.getNameCount() == 0) {
+            return false;
+        }
+        return TEMPLATE_COPY_EXCLUDED_FILES.contains(relative.getFileName().toString().toLowerCase(Locale.ROOT));
+    }
+
     private String allocateSessionId() {
+        String worldNamePrefix = plugin.settings().sessions().worldNamePrefix();
         for (int attempts = 0; attempts < 16; attempts++) {
             String id = UUID.randomUUID().toString().substring(0, 8).toLowerCase();
-            if (!sessionsById.containsKey(id)) {
+            if (!sessionsById.containsKey(id) && Bukkit.getWorld(worldNamePrefix + id) == null) {
                 return id;
             }
         }

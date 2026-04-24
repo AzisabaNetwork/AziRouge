@@ -26,18 +26,28 @@ public final class GameSession {
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
     private final List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
+    private final BlockBox homeArea;
     private final Instant createdAt;
     private SessionState state = SessionState.LOBBY;
     private int currentRound;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
 
-    public GameSession(String sessionId, UUID owner, World world, int maxPlayers, Location spawnLocation, List<PlacedPiece> placedPieces) {
+    public GameSession(
+            String sessionId,
+            UUID owner,
+            World world,
+            int maxPlayers,
+            Location spawnLocation,
+            BlockBox homeArea,
+            List<PlacedPiece> placedPieces
+    ) {
         this.sessionId = sessionId;
         this.owner = owner;
         this.world = world;
         this.maxPlayers = maxPlayers;
         this.spawnLocation = spawnLocation.clone();
+        this.homeArea = homeArea;
         this.placedPieces = List.copyOf(placedPieces);
         this.createdAt = Instant.now();
     }
@@ -108,6 +118,10 @@ public final class GameSession {
 
     public Location spawnLocation() {
         return spawnLocation.clone();
+    }
+
+    public BlockBox homeArea() {
+        return homeArea;
     }
 
     public List<PlacedPiece> placedPieces() {
