@@ -349,6 +349,7 @@ public final class GameSessionManager {
             session.setActiveParticipants(new java.util.HashSet<>(participants));
             session.setRoundState(RoundState.ACTIVE);
             session.setState(SessionState.IN_ROUND);
+            plugin.portalService().installRoundPortals(session);
 
             for (UUID playerId : participants) {
                 Player player = Bukkit.getPlayer(playerId);
@@ -371,6 +372,7 @@ public final class GameSessionManager {
             session.setCurrentDungeonOrigin(previousOrigin);
             session.setCurrentDungeonBounds(previousBounds);
             session.setPlacedPieces(previousPieces);
+            plugin.portalService().clearRoundPortals(session);
             throw ex;
         }
     }
@@ -400,6 +402,7 @@ public final class GameSessionManager {
         session.clearAlivePlayers();
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.BETWEEN_ROUNDS);
+        plugin.portalService().clearRoundPortals(session);
     }
 
     public void selectDungeon(GameSession session, String preset, String difficulty) {
@@ -433,6 +436,7 @@ public final class GameSessionManager {
 
         cancelMobTask(session);
         cancelIdleTimeout(session);
+        plugin.portalService().clearRoundPortals(session);
         evacuatePlayers(session);
         restoreOnlineMembers(session);
 
@@ -721,6 +725,7 @@ public final class GameSessionManager {
         }
 
         moveOnlineMembersHome(session);
+        plugin.portalService().clearRoundPortals(session);
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.GAME_OVER);
     }

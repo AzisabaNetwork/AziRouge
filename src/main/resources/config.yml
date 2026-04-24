@@ -50,6 +50,24 @@ dungeon:
     normal:
       max-depth: 8
       template-preset: default
+portals:
+  home-to-dungeon:
+    area:
+      min:
+        x: -1
+        y: 64
+        z: 2
+      max:
+        x: 1
+        y: 64
+        z: 2
+    destination-offset:
+      x: 0
+      y: 64
+      z: 0
+  dungeon-to-home:
+    material: LIGHT_WEIGHTED_PRESSURE_PLATE
+  cooldown-seconds: 3
 enemies:
   enabled: false
   mode: reserved

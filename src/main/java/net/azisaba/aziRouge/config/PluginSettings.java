@@ -7,6 +7,7 @@ public record PluginSettings(
         SessionSettings sessions,
         HomeSettings home,
         DungeonSettings dungeon,
+        PortalSettings portals,
         EnemySettings enemies,
         AziRougeSettings azirouge
 ) {

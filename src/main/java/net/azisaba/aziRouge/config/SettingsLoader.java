@@ -61,6 +61,7 @@ public final class SettingsLoader {
                 loadSessionSettings(plugin, config),
                 loadHomeSettings(config),
                 loadDungeonSettings(config),
+                loadPortalSettings(plugin, config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -124,6 +125,46 @@ public final class SettingsLoader {
                 defaultDifficulty,
                 difficulties
         );
+    }
+
+    private static PortalSettings loadPortalSettings(JavaPlugin plugin, FileConfiguration config) {
+        Material portalMaterial = Material.matchMaterial(config.getString("portals.dungeon-to-home.material", "LIGHT_WEIGHTED_PRESSURE_PLATE"));
+        if (portalMaterial == null || !portalMaterial.isBlock()) {
+            plugin.getLogger().warning("Invalid portals.dungeon-to-home.material. Falling back to LIGHT_WEIGHTED_PRESSURE_PLATE");
+            portalMaterial = Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
+        }
+
+        BlockBox homeToDungeonArea = loadBlockBox(
+                config,
+                "portals.home-to-dungeon.area",
+                new IntVector3(-1, 64, 2),
+                new IntVector3(1, 64, 2)
+        );
+        IntVector3 destinationOffset = new IntVector3(
+                config.getInt("portals.home-to-dungeon.destination-offset.x", 0),
+                config.getInt("portals.home-to-dungeon.destination-offset.y", 64),
+                config.getInt("portals.home-to-dungeon.destination-offset.z", 0)
+        );
+
+        return new PortalSettings(
+                new PortalHomeToDungeonSettings(homeToDungeonArea, destinationOffset),
+                new PortalDungeonToHomeSettings(portalMaterial),
+                Math.max(1, config.getInt("portals.cooldown-seconds", 3))
+        );
+    }
+
+    private static BlockBox loadBlockBox(FileConfiguration config, String path, IntVector3 defaultMin, IntVector3 defaultMax) {
+        IntVector3 min = new IntVector3(
+                config.getInt(path + ".min.x", defaultMin.x()),
+                config.getInt(path + ".min.y", defaultMin.y()),
+                config.getInt(path + ".min.z", defaultMin.z())
+        );
+        IntVector3 max = new IntVector3(
+                config.getInt(path + ".max.x", defaultMax.x()),
+                config.getInt(path + ".max.y", defaultMax.y()),
+                config.getInt(path + ".max.z", defaultMax.z())
+        );
+        return BlockBox.fromPoints(min, max);
     }
 
     private static Map<String, DungeonDifficultySettings> loadDungeonDifficulties(ConfigurationSection section) {

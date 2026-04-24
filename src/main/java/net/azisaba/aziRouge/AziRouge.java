@@ -20,6 +20,7 @@ import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
+import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -37,6 +38,7 @@ public final class AziRouge extends JavaPlugin {
     private MobAiManager mobAiManager;
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
+    private PortalService portalService;
 
     @Override
     public void onEnable() {
@@ -53,6 +55,9 @@ public final class AziRouge extends JavaPlugin {
     public void onDisable() {
         if (gameSessionManager != null) {
             gameSessionManager.shutdown();
+        }
+        if (portalService != null) {
+            portalService.shutdown();
         }
         if (mobAiManager != null) {
             mobAiManager.shutdown();
@@ -92,6 +97,9 @@ public final class AziRouge extends JavaPlugin {
         if (gameSessionManager == null) {
             this.gameSessionManager = new GameSessionManager(this, mobSpawnManager);
         }
+        if (portalService == null) {
+            this.portalService = new PortalService(this, gameSessionManager);
+        }
         getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
                 + " schematic=" + schematicAdapter.describeAvailability()
                 + " selection=" + selectionProvider.describeAvailability());
@@ -107,6 +115,10 @@ public final class AziRouge extends JavaPlugin {
 
     public GameSessionManager gameSessionManager() {
         return gameSessionManager;
+    }
+
+    public PortalService portalService() {
+        return portalService;
     }
 
     public TemplateAuthoringService templateAuthoringService() {
@@ -138,6 +150,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TrapTriggerListener(this), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
+        getServer().getPluginManager().registerEvents(portalService, this);
     }
 
     private SchematicAdapter createSchematicAdapter() {
