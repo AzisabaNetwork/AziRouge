@@ -5,7 +5,6 @@ import net.azisaba.aziRouge.config.ShopTradeSettings;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
@@ -16,7 +15,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
@@ -68,6 +66,10 @@ public final class ShopService implements Listener {
             return;
         }
 
+        handlePurchase(player, holder, trade, event.getView().getTopInventory());
+    }
+
+    private void handlePurchase(Player player, ShopHolder holder, ShopTradeSettings trade, Inventory inventory) {
         GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
         if (session == null || !canUseShop(player, session)) {
             player.closeInventory();
@@ -82,7 +84,7 @@ public final class ShopService implements Listener {
         }
 
         ItemStack purchased = new ItemStack(trade.material(), trade.amount());
-        if (!canFit(player.getInventory(), purchased)) {
+        if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
             player.sendMessage(PREFIX + ChatColor.RED + "Your inventory is full.");
             return;
         }
@@ -94,7 +96,7 @@ public final class ShopService implements Listener {
         player.getInventory().addItem(purchased);
         player.sendMessage(PREFIX + ChatColor.GREEN + "Bought " + trade.amount() + "x " + trade.material().name()
                 + " for " + trade.price() + ". balance=" + session.sharedBalance());
-        refreshShop(event.getView().getTopInventory(), holder, session);
+        refreshShop(inventory, holder, session);
     }
 
     private void openShop(Player player, GameSession session) {
@@ -109,12 +111,12 @@ public final class ShopService implements Listener {
             return;
         }
 
-        int size = Math.min(54, Math.max(9, ((trades.size() + 8) / 9) * 9));
+        int size = inventorySizeFor(trades.size());
         ShopHolder holder = new ShopHolder(session.sessionId(), trades, size);
         Inventory inventory = Bukkit.createInventory(
                 holder,
                 size,
-                ChatColor.DARK_GREEN + plugin.settings().shop().title() + ChatColor.GRAY + " $" + session.sharedBalance()
+                shopTitle(session)
         );
         holder.setInventory(inventory);
         refreshShop(inventory, holder, session);
@@ -157,28 +159,21 @@ public final class ShopService implements Listener {
         if (!player.getWorld().getUID().equals(session.world().getUID()) || !session.isMember(player.getUniqueId())) {
             return false;
         }
-        if (session.state() == SessionState.BETWEEN_ROUNDS) {
-            return true;
-        }
-        return session.state() == SessionState.IN_ROUND
-                && session.alivePlayers().contains(player.getUniqueId())
-                && player.getGameMode() != GameMode.SPECTATOR;
+        return switch (session.state()) {
+            case BETWEEN_ROUNDS -> true;
+            case IN_ROUND -> session.alivePlayers().contains(player.getUniqueId())
+                    && player.getGameMode() != GameMode.SPECTATOR;
+            default -> false;
+        };
     }
 
-    private boolean canFit(PlayerInventory inventory, ItemStack candidate) {
-        int remaining = candidate.getAmount();
-        for (ItemStack item : inventory.getStorageContents()) {
-            if (item == null || item.getType().isAir()) {
-                return true;
-            }
-            if (item.isSimilar(candidate)) {
-                remaining -= Math.max(0, item.getMaxStackSize() - item.getAmount());
-                if (remaining <= 0) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private int inventorySizeFor(int tradeCount) {
+        return Math.min(54, Math.max(9, ((tradeCount + 8) / 9) * 9));
+    }
+
+    private String shopTitle(GameSession session) {
+        return ChatColor.DARK_GREEN + plugin.settings().shop().title()
+                + ChatColor.GRAY + " $" + session.sharedBalance();
     }
 
     private static final class ShopHolder implements InventoryHolder {

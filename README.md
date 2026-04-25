@@ -203,3 +203,72 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 
 - このリポジトリには Gradle wrapper 実体が入っていないため、ビルドにはローカルの `gradle` か wrapper の追加が必要です
 - `src/main/resources/templates/example-basic.yml` にサンプル定義があります
+# Session / Round / Economy / Shop
+
+このブランチでは、従来の単一 GameSession 前提から、複数人・複数 session を同時に扱う基盤へ拡張しています。
+
+## Session
+
+- `/azirouge session create [maxPlayers]` で session を作成します。
+- `/azirouge session join <sessionId>` で参加します。
+- `/azirouge session leave` で退出します。
+- `/azirouge session list` で state、round、人数、共有資金などを確認します。
+- `/azirouge session forceend <sessionId>` で強制終了します。
+- session owner は表示・作成者記録用のみで、特別権限はありません。
+- `sessions.home-template-world-path` のテンプレート world を session 作成時にコピーし、`sessions.world-name-prefix + sessionId` の world としてロードします。
+- session 終了時は world unload 後に session world folder を削除します。
+- 起動時の残存 session world folder 削除は `sessions.cleanup-leftover-worlds-on-startup` で制御します。
+
+## Home / Round
+
+- `home.spawn` が session 参加時・帰還時の teleport 先です。
+- `home.area` は round end コマンドの実行可能範囲として使います。
+- `/azirouge round start [preset] [difficulty]` で round を開始します。
+- `/azirouge round end` で round を終了します。家エリア内の player なら誰でも実行できます。
+- DungeonGenerator は変更せず、session world 内の家から離れた未使用領域に dungeon を生成します。
+- 生成位置は `dungeon.base-distance-from-home` と `dungeon.round-spacing` を使って round ごとに割り当てます。
+- round 中の途中参加・再接続は spectator/pending 扱いになり、次 round 開始時に SURVIVAL、health/food 初期化、home spawn teleport で復帰します。
+
+## Portal
+
+- round 中のみ、家エリアと dungeon エリアを往復する portal が有効です。
+- dead、spectator、session 外 player は portal を使用できません。
+- `portals.home-to-dungeon.area` は家側 portal の範囲です。
+- `portals.home-to-dungeon.destination-offset` は dungeon origin からの teleport 先 offset です。
+- `portals.dungeon-to-home.material` は portal 設置 material です。
+- `portals.cooldown-seconds` で連続 teleport を抑制します。
+
+## Economy
+
+- 各 session は共有資金 `sharedBalance` を持ちます。
+- session 作成時に `economy.initial-balance` が付与されます。
+- `/azirouge money` で自分の session の共有資金と次 round 維持費を確認できます。
+- `/azirouge money set <sessionId> <amount>` で共有資金を設定します。
+- `/azirouge money add <sessionId> <amount>` で共有資金を加算します。
+- round start 前に `ceil((economy.maintenance.base + economy.maintenance.per-round * nextRound) * economy.maintenance.multiplier)` を徴収します。
+- round end 時に online member の player inventory だけを換金します。
+- 換金価格は `economy.sell-prices.<MATERIAL>` の Material name ベースです。
+
+## Villager Shop GUI
+
+- session world 内の村人を右クリックすると共有資金で購入する shop GUI が開きます。
+- shop は `IN_ROUND` と `BETWEEN_ROUNDS` で利用できます。
+- `IN_ROUND` では alive かつ非 spectator の session member のみ購入できます。
+- `BETWEEN_ROUNDS` では session member が利用できます。
+- 取引内容は `shop.trades.in-round` と `shop.trades.between-round` に分けて設定します。
+
+```yaml
+shop:
+  title: AziRouge Shop
+  trades:
+    in-round:
+      - id: bread
+        material: BREAD
+        amount: 4
+        price: 12
+    between-round:
+      - id: bread
+        material: BREAD
+        amount: 4
+        price: 24
+```

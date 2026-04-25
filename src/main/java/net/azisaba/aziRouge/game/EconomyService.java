@@ -4,8 +4,6 @@ import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.EconomyMaintenanceSettings;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 
 import java.util.Map;
 import java.util.UUID;
@@ -55,7 +53,8 @@ public final class EconomyService {
             if (player == null) {
                 continue;
             }
-            SellResult playerResult = sellStorageInventory(player, prices);
+            PlayerInventorySupport.SaleResult playerResult =
+                    PlayerInventorySupport.sellPricedStorageContents(player.getInventory(), prices);
             totalAmount += playerResult.totalAmount();
             totalItems += playerResult.itemCount();
         }
@@ -63,31 +62,6 @@ public final class EconomyService {
         if (totalAmount > 0L) {
             session.addSharedBalance(totalAmount);
         }
-        return new SellResult(totalAmount, totalItems);
-    }
-
-    private SellResult sellStorageInventory(Player player, Map<Material, Long> prices) {
-        PlayerInventory inventory = player.getInventory();
-        ItemStack[] contents = inventory.getStorageContents();
-        long totalAmount = 0L;
-        int totalItems = 0;
-        for (int index = 0; index < contents.length; index++) {
-            ItemStack item = contents[index];
-            if (item == null || item.getType().isAir()) {
-                continue;
-            }
-
-            Long unitPrice = prices.get(item.getType());
-            if (unitPrice == null) {
-                continue;
-            }
-
-            int amount = item.getAmount();
-            totalAmount += unitPrice * amount;
-            totalItems += amount;
-            contents[index] = null;
-        }
-        inventory.setStorageContents(contents);
         return new SellResult(totalAmount, totalItems);
     }
 

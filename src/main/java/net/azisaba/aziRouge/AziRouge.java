@@ -79,10 +79,18 @@ public final class AziRouge extends JavaPlugin {
         this.schematicAdapter = createSchematicAdapter();
         this.selectionProvider = createSelectionProvider();
         this.templateAuthoringService = new TemplateAuthoringService(this, selectionProvider, debugLogger);
+        this.dungeonGenerator = createDungeonGenerator();
+        ensureRuntimeServices();
+        getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
+                + " schematic=" + schematicAdapter.describeAvailability()
+                + " selection=" + selectionProvider.describeAvailability());
+    }
+
+    private DungeonGenerator createDungeonGenerator() {
         ChestPopulator chestPopulator = new ChestPopulator(this);
         TreasurePopulator treasurePopulator = new TreasurePopulator(this);
         TrapPopulator trapPopulator = new TrapPopulator(this);
-        this.dungeonGenerator = new DungeonGenerator(
+        return new DungeonGenerator(
                 this,
                 debugLogger,
                 templateManager,
@@ -92,6 +100,9 @@ public final class AziRouge extends JavaPlugin {
                 treasurePopulator,
                 trapPopulator
         );
+    }
+
+    private void ensureRuntimeServices() {
         if (mobAiManager == null) {
             this.mobAiManager = new MobAiManager(this);
         }
@@ -110,9 +121,6 @@ public final class AziRouge extends JavaPlugin {
         if (shopService == null) {
             this.shopService = new ShopService(this, gameSessionManager);
         }
-        getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
-                + " schematic=" + schematicAdapter.describeAvailability()
-                + " selection=" + selectionProvider.describeAvailability());
     }
 
     public PluginSettings settings() {
