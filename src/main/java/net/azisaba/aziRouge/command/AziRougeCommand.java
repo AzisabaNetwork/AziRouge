@@ -47,7 +47,7 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|generate|reload|debug|author>");
+            info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|money|generate|reload|debug|author>");
             return true;
         }
 
@@ -57,6 +57,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "session" -> handleSession(sender, Arrays.copyOfRange(args, 1, args.length));
             case "round" -> handleRound(sender, Arrays.copyOfRange(args, 1, args.length));
             case "dungeon" -> handleDungeon(sender, Arrays.copyOfRange(args, 1, args.length));
+            case "money" -> handleMoney(sender, Arrays.copyOfRange(args, 1, args.length));
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "reload" -> handleReload(sender);
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -71,7 +72,7 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("start", "end", "session", "round", "dungeon", "generate", "reload", "debug", "author").stream()
+            return List.of("start", "end", "session", "round", "dungeon", "money", "generate", "reload", "debug", "author").stream()
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -117,6 +118,18 @@ public final class AziRougeCommand implements TabExecutor {
         if (args.length == 2 && "dungeon".equalsIgnoreCase(args[0])) {
             return List.of("select").stream()
                     .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
+        }
+        if (args.length == 2 && "money".equalsIgnoreCase(args[0])) {
+            return List.of("set", "add").stream()
+                    .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
+        }
+        if (args.length == 3 && "money".equalsIgnoreCase(args[0])
+                && ("set".equalsIgnoreCase(args[1]) || "add".equalsIgnoreCase(args[1]))) {
+            return plugin.gameSessionManager().sessions().stream()
+                    .map(GameSession::sessionId)
+                    .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
                     .toList();
         }
         if (args.length == 3 && "dungeon".equalsIgnoreCase(args[0]) && "select".equalsIgnoreCase(args[1])) {
@@ -187,6 +200,7 @@ public final class AziRougeCommand implements TabExecutor {
             );
             success(sender, "Started a new session in world " + session.world().getName()
                     + " id=" + session.sessionId()
+                    + " money=" + session.sharedBalance()
                     + " using template preset " + templateSelection.presetName() + ".");
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             error(sender, "Session start failed: " + ex.getMessage());
@@ -243,6 +257,7 @@ public final class AziRougeCommand implements TabExecutor {
                     maxPlayers);
             success(sender, "Created session " + session.sessionId()
                     + " players=1/" + session.maxPlayers()
+                    + " money=" + session.sharedBalance()
                     + " world=" + session.world().getName() + ".");
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             error(sender, "Session creation failed: " + ex.getMessage());
@@ -315,6 +330,7 @@ public final class AziRougeCommand implements TabExecutor {
             info(sender, session.sessionId()
                     + " state=" + session.state()
                     + " roundState=" + session.roundState()
+                    + " money=" + session.sharedBalance()
                     + " players=" + session.onlineMembers().size() + "/" + session.members().size() + "/" + session.maxPlayers()
                     + " round=" + session.currentRound()
                     + " alive=" + session.alivePlayers().size()
@@ -415,6 +431,8 @@ public final class AziRougeCommand implements TabExecutor {
                     + " session=" + session.sessionId()
                     + " preset=" + templateSelection.presetName()
                     + " difficulty=" + difficultyId
+                    + " maintenance=" + plugin.economyService().maintenanceCostForRound(session.currentRound())
+                    + " balance=" + session.sharedBalance()
                     + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
                     + " origin=" + format(session.currentDungeonOrigin()));
         } catch (TemplateLoadException | SchematicPlacementException ex) {
@@ -432,11 +450,63 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
         try {
-            plugin.gameSessionManager().endRound(player);
+            var sellResult = plugin.gameSessionManager().endRound(player);
             GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-            success(sender, "Ended round" + (session == null ? "." : " " + session.currentRound() + "."));
+            success(sender, "Ended round" + (session == null ? "." : " " + session.currentRound()
+                    + ". soldItems=" + sellResult.itemCount()
+                    + " sold=" + sellResult.totalAmount()
+                    + " balance=" + session.sharedBalance() + "."));
         } catch (IllegalStateException ex) {
             error(sender, ex.getMessage());
+        }
+        return true;
+    }
+
+    private boolean handleMoney(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("azirouge.money")) {
+            error(sender, "You do not have permission to manage AziRouge money.");
+            return true;
+        }
+        if (args.length == 0) {
+            if (!(sender instanceof Player player)) {
+                info(sender, "Usage: /azirouge money <set|add> <sessionId> <amount>");
+                return true;
+            }
+            GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+            if (session == null) {
+                error(sender, "You are not in an active session.");
+                return true;
+            }
+            long nextMaintenance = plugin.economyService().maintenanceCostForRound(session.currentRound() + 1);
+            info(sender, "Session " + session.sessionId()
+                    + " money=" + session.sharedBalance()
+                    + " nextMaintenance=" + nextMaintenance + ".");
+            return true;
+        }
+
+        if (args.length != 3 || (!"set".equalsIgnoreCase(args[0]) && !"add".equalsIgnoreCase(args[0]))) {
+            info(sender, "Usage: /azirouge money [set|add] <sessionId> <amount>");
+            return true;
+        }
+
+        GameSession session = plugin.gameSessionManager().sessionById(args[1]).orElse(null);
+        if (session == null) {
+            error(sender, "Session not found: " + args[1]);
+            return true;
+        }
+        Long amount = parseNonNegativeLong(args[2]);
+        if (amount == null) {
+            error(sender, "Amount must be a non-negative integer.");
+            return true;
+        }
+
+        if ("set".equalsIgnoreCase(args[0])) {
+            session.setSharedBalance(amount);
+            success(sender, "Set session " + session.sessionId() + " money to " + session.sharedBalance() + ".");
+        } else {
+            session.addSharedBalance(amount);
+            success(sender, "Added " + amount + " to session " + session.sessionId()
+                    + ". money=" + session.sharedBalance() + ".");
         }
         return true;
     }
@@ -756,6 +826,18 @@ public final class AziRougeCommand implements TabExecutor {
             return Long.parseLong(value);
         } catch (NumberFormatException ex) {
             return fallback;
+        }
+    }
+
+    private Long parseNonNegativeLong(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            long parsed = Long.parseLong(value);
+            return parsed < 0L ? null : parsed;
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 

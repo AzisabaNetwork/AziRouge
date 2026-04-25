@@ -14,6 +14,7 @@ import net.azisaba.aziRouge.dungeon.TreasurePickupListener;
 import net.azisaba.aziRouge.dungeon.TreasurePopulator;
 import net.azisaba.aziRouge.dungeon.TrapPopulator;
 import net.azisaba.aziRouge.dungeon.TrapTriggerListener;
+import net.azisaba.aziRouge.game.EconomyService;
 import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
@@ -39,6 +40,7 @@ public final class AziRouge extends JavaPlugin {
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
     private PortalService portalService;
+    private EconomyService economyService;
 
     @Override
     public void onEnable() {
@@ -97,6 +99,9 @@ public final class AziRouge extends JavaPlugin {
         if (gameSessionManager == null) {
             this.gameSessionManager = new GameSessionManager(this, mobSpawnManager);
         }
+        if (economyService == null) {
+            this.economyService = new EconomyService(this);
+        }
         if (portalService == null) {
             this.portalService = new PortalService(this, gameSessionManager);
         }
@@ -119,6 +124,10 @@ public final class AziRouge extends JavaPlugin {
 
     public PortalService portalService() {
         return portalService;
+    }
+
+    public EconomyService economyService() {
+        return economyService;
     }
 
     public TemplateAuthoringService templateAuthoringService() {

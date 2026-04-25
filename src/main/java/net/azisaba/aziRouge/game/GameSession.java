@@ -39,6 +39,7 @@ public final class GameSession {
     private BlockBox currentDungeonBounds;
     private String selectedPreset = "default";
     private String selectedDifficulty;
+    private long sharedBalance;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
 
@@ -49,7 +50,8 @@ public final class GameSession {
             int maxPlayers,
             Location spawnLocation,
             BlockBox homeArea,
-            List<PlacedPiece> placedPieces
+            List<PlacedPiece> placedPieces,
+            long sharedBalance
     ) {
         this.sessionId = sessionId;
         this.owner = owner;
@@ -58,6 +60,7 @@ public final class GameSession {
         this.spawnLocation = spawnLocation.clone();
         this.homeArea = homeArea;
         this.placedPieces = List.copyOf(placedPieces);
+        this.sharedBalance = Math.max(0L, sharedBalance);
         this.createdAt = Instant.now();
     }
 
@@ -151,6 +154,29 @@ public final class GameSession {
 
     public void setSelectedDifficulty(String selectedDifficulty) {
         this.selectedDifficulty = selectedDifficulty;
+    }
+
+    public long sharedBalance() {
+        return sharedBalance;
+    }
+
+    public void setSharedBalance(long sharedBalance) {
+        this.sharedBalance = Math.max(0L, sharedBalance);
+    }
+
+    public void addSharedBalance(long amount) {
+        sharedBalance = Math.max(0L, sharedBalance + amount);
+    }
+
+    public boolean withdrawSharedBalance(long amount) {
+        if (amount < 0L) {
+            throw new IllegalArgumentException("amount must be >= 0");
+        }
+        if (sharedBalance < amount) {
+            return false;
+        }
+        sharedBalance -= amount;
+        return true;
     }
 
     public Map<UUID, Location> savedLocations() {

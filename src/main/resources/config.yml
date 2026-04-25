@@ -68,6 +68,21 @@ portals:
   dungeon-to-home:
     material: LIGHT_WEIGHTED_PRESSURE_PLATE
   cooldown-seconds: 3
+economy:
+  initial-balance: 100
+  maintenance:
+    base: 10
+    per-round: 5
+    multiplier: 1.0
+  sell-prices:
+    IRON_INGOT: 5
+    GOLD_NUGGET: 1
+    GOLD_INGOT: 12
+    EMERALD: 20
+    DIAMOND: 50
+    NETHERITE_SCRAP: 100
+    AMETHYST_SHARD: 3
+    LAPIS_LAZULI: 2
 enemies:
   enabled: false
   mode: reserved

@@ -62,6 +62,7 @@ public final class SettingsLoader {
                 loadHomeSettings(config),
                 loadDungeonSettings(config),
                 loadPortalSettings(plugin, config),
+                loadEconomySettings(plugin, config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -124,6 +125,32 @@ public final class SettingsLoader {
                 Math.max(1, config.getInt("dungeon.round-spacing", 512)),
                 defaultDifficulty,
                 difficulties
+        );
+    }
+
+    private static EconomySettings loadEconomySettings(JavaPlugin plugin, FileConfiguration config) {
+        Map<Material, Long> sellPrices = new LinkedHashMap<>();
+        ConfigurationSection prices = config.getConfigurationSection("economy.sell-prices");
+        if (prices != null) {
+            for (String key : prices.getKeys(false)) {
+                Material material = Material.matchMaterial(key);
+                long price = prices.getLong(key, 0L);
+                if (material == null || price <= 0L) {
+                    plugin.getLogger().warning("Ignoring invalid economy sell price: " + key);
+                    continue;
+                }
+                sellPrices.put(material, price);
+            }
+        }
+
+        return new EconomySettings(
+                Math.max(0L, config.getLong("economy.initial-balance", 0L)),
+                new EconomyMaintenanceSettings(
+                        Math.max(0L, config.getLong("economy.maintenance.base", 0L)),
+                        Math.max(0L, config.getLong("economy.maintenance.per-round", 0L)),
+                        Math.max(0.0D, config.getDouble("economy.maintenance.multiplier", 1.0D))
+                ),
+                Map.copyOf(sellPrices)
         );
     }
 

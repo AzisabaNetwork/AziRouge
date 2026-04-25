@@ -175,7 +175,8 @@ public final class GameSessionManager {
                     maxPlayers,
                     homeSpawn(world),
                     plugin.settings().home().area(),
-                    List.of()
+                    List.of(),
+                    plugin.settings().economy().initialBalance()
             );
             session.setSelectedDifficulty(plugin.settings().dungeon().defaultDifficulty());
             session.setSelectedPreset(plugin.settings().dungeon().difficulty(session.selectedDifficulty()).templatePreset());
@@ -315,6 +316,7 @@ public final class GameSessionManager {
             throw new IllegalStateException("No online members are available to start the round.");
         }
 
+        long maintenanceCost = plugin.economyService().chargeMaintenanceOrGameOver(session);
         restoreRoundInactivePlayersForNextRound(session);
 
         SessionState previousState = session.state();
@@ -372,12 +374,13 @@ public final class GameSessionManager {
             session.setCurrentDungeonOrigin(previousOrigin);
             session.setCurrentDungeonBounds(previousBounds);
             session.setPlacedPieces(previousPieces);
+            session.addSharedBalance(maintenanceCost);
             plugin.portalService().clearRoundPortals(session);
             throw ex;
         }
     }
 
-    public void endRound(Player player) {
+    public EconomyService.SellResult endRound(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
                 .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
         if (session.state() != SessionState.IN_ROUND) {
@@ -398,11 +401,13 @@ public final class GameSessionManager {
                 session.markDead(playerId);
             }
         }
+        EconomyService.SellResult sellResult = plugin.economyService().sellInventoryLoot(session);
         moveOnlineMembersHome(session);
         session.clearAlivePlayers();
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.BETWEEN_ROUNDS);
         plugin.portalService().clearRoundPortals(session);
+        return sellResult;
     }
 
     public void selectDungeon(GameSession session, String preset, String difficulty) {
