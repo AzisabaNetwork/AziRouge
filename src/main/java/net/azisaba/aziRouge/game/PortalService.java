@@ -2,20 +2,16 @@ package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.PortalSettings;
+import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,29 +35,36 @@ public final class PortalService implements Listener {
         }
 
         PortalSettings settings = plugin.settings().portals();
-        Material material = settings.dungeonToHome().material();
         Location dungeonDestination = dungeonDestination(session, settings);
         BlockBox homeArea = settings.homeToDungeon().area();
-        BlockBox dungeonPortalBlocks = portalFloor(dungeonDestination);
-        BlockBox dungeonPortalArea = portalTriggerArea(dungeonDestination);
-
-        List<BlockState> originalBlocks = new ArrayList<>();
-        placePortalBlocks(session.world(), homeArea, material, originalBlocks);
-        placePortalBlocks(session.world(), dungeonPortalBlocks, material, originalBlocks);
+        BlockBox dungeonPortalArea = dungeonToHomeArea(session, settings);
 
         roundPortalsBySessionId.put(
                 session.sessionId(),
-                new RoundPortals(homeArea, dungeonPortalArea, dungeonDestination, session.spawnLocation(), originalBlocks)
+                new RoundPortals(
+                        homeArea,
+                        dungeonPortalArea,
+                        dungeonDestination,
+                        session.returnSpawnLocation(),
+                        settings.homeToDungeon().destinationYawOffset(),
+                        settings.dungeonToHome().destinationYawOffset()
+                )
+        );
+        logPortalLocations(
+                session,
+                homeArea,
+                dungeonPortalArea,
+                dungeonDestination,
+                session.returnSpawnLocation(),
+                settings.homeToDungeon().destinationYawOffset(),
+                settings.dungeonToHome().destinationYawOffset()
         );
     }
 
     public void clearRoundPortals(GameSession session) {
-        RoundPortals roundPortals = roundPortalsBySessionId.remove(session.sessionId());
-        if (roundPortals == null) {
-            return;
-        }
-        for (int index = roundPortals.originalBlocks().size() - 1; index >= 0; index--) {
-            roundPortals.originalBlocks().get(index).update(true, false);
+        roundPortalsBySessionId.remove(session.sessionId());
+        for (UUID playerId : session.members()) {
+            cooldownUntilMillis.remove(playerId);
         }
     }
 
@@ -95,11 +98,11 @@ public final class PortalService implements Listener {
         }
 
         if (contains(roundPortals.homeToDungeonArea(), to)) {
-            teleportWithCooldown(player, roundPortals.dungeonDestination());
+            teleportWithCooldown(player, roundPortals.dungeonDestination(), roundPortals.dungeonYawOffset());
             return;
         }
         if (contains(roundPortals.dungeonToHomeArea(), to)) {
-            teleportWithCooldown(player, roundPortals.homeDestination());
+            teleportWithCooldown(player, roundPortals.homeDestination(), roundPortals.homeYawOffset());
         }
     }
 
@@ -111,7 +114,7 @@ public final class PortalService implements Listener {
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
-    private void teleportWithCooldown(Player player, Location destination) {
+    private void teleportWithCooldown(Player player, Location destination, float yawOffset) {
         long now = System.currentTimeMillis();
         long cooldownUntil = cooldownUntilMillis.getOrDefault(player.getUniqueId(), 0L);
         if (cooldownUntil > now) {
@@ -122,7 +125,10 @@ public final class PortalService implements Listener {
                 player.getUniqueId(),
                 now + plugin.settings().portals().cooldownSeconds() * 1000L
         );
-        player.teleport(destination.clone());
+        Location target = destination.clone();
+        target.setYaw(normalizeYaw(player.getLocation().getYaw() + yawOffset));
+        target.setPitch(player.getLocation().getPitch());
+        player.teleport(target);
     }
 
     private Location dungeonDestination(GameSession session, PortalSettings settings) {
@@ -131,35 +137,62 @@ public final class PortalService implements Listener {
         return new Location(session.world(), destination.x() + 0.5D, destination.y(), destination.z() + 0.5D);
     }
 
-    private BlockBox portalFloor(Location center) {
-        int x = center.getBlockX();
-        int y = center.getBlockY();
-        int z = center.getBlockZ();
-        return BlockBox.fromPoints(new IntVector3(x - 1, y, z - 1), new IntVector3(x + 1, y, z + 1));
+    private void logPortalLocations(
+            GameSession session,
+            BlockBox homeToDungeonArea,
+            BlockBox dungeonToHomeArea,
+            Location dungeonDestination,
+            Location homeDestination,
+            float dungeonYawOffset,
+            float homeYawOffset
+    ) {
+        plugin.getLogger().info("[portal-debug] session=" + session.sessionId()
+                + " world=" + session.world().getName()
+                + " homeToDungeonArea=" + format(homeToDungeonArea)
+                + " dungeonDestination=" + format(dungeonDestination)
+                + " dungeonYawOffset=" + dungeonYawOffset
+                + " dungeonToHomeArea=" + format(dungeonToHomeArea)
+                + " homeDestination=" + format(homeDestination)
+                + " homeYawOffset=" + homeYawOffset);
     }
 
-    private BlockBox portalTriggerArea(Location center) {
-        int x = center.getBlockX();
-        int y = center.getBlockY();
-        int z = center.getBlockZ();
-        return BlockBox.fromPoints(new IntVector3(x - 1, y, z - 1), new IntVector3(x + 1, y + 2, z + 1));
-    }
-
-    private void placePortalBlocks(World world, BlockBox area, Material material, List<BlockState> originalBlocks) {
-        for (int x = area.minX(); x <= area.maxX(); x++) {
-            for (int y = area.minY(); y <= area.maxY(); y++) {
-                for (int z = area.minZ(); z <= area.maxZ(); z++) {
-                    Block block = world.getBlockAt(x, y, z);
-                    originalBlocks.add(block.getState());
-                    block.setType(material, false);
-                }
-            }
+    private BlockBox dungeonToHomeArea(GameSession session, PortalSettings settings) {
+        PlacedPiece startPiece = session.placedPieces().stream()
+                .filter(piece -> piece.depth() == 0)
+                .findFirst()
+                .orElse(null);
+        if (startPiece == null) {
+            return BlockBox.fromPoints(session.currentDungeonOrigin(), session.currentDungeonOrigin());
         }
+        return settings.dungeonToHome().area()
+                .rotate(startPiece.rotation())
+                .offset(startPiece.origin());
     }
 
     private boolean contains(BlockBox area, Location location) {
         return location.getWorld() != null
                 && area.contains(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+    }
+
+    private String format(BlockBox area) {
+        return area.minX() + "," + area.minY() + "," + area.minZ()
+                + "->" + area.maxX() + "," + area.maxY() + "," + area.maxZ();
+    }
+
+    private String format(Location location) {
+        return location.getWorld().getName()
+                + ":" + location.getX() + "," + location.getY() + "," + location.getZ();
+    }
+
+    private float normalizeYaw(float yaw) {
+        float normalized = yaw % 360.0F;
+        if (normalized <= -180.0F) {
+            return normalized + 360.0F;
+        }
+        if (normalized > 180.0F) {
+            return normalized - 360.0F;
+        }
+        return normalized;
     }
 
     private boolean sameBlock(Location first, Location second) {
@@ -176,7 +209,8 @@ public final class PortalService implements Listener {
             BlockBox dungeonToHomeArea,
             Location dungeonDestination,
             Location homeDestination,
-            List<BlockState> originalBlocks
+            float dungeonYawOffset,
+            float homeYawOffset
     ) {
     }
 }

@@ -33,6 +33,10 @@ home:
     x: 0
     y: 64
     z: 0
+  return-spawn:
+    x: 0
+    y: 64
+    z: -4
   area:
     min:
       x: -16
@@ -60,9 +64,19 @@ portals:
     destination-offset:
       x: 0
       y: 64
-      z: 0
+      z: 3
+      yaw: 0.0
   dungeon-to-home:
-    material: LIGHT_WEIGHTED_PRESSURE_PLATE
+    area:
+      min:
+        x: -1
+        y: 64
+        z: -1
+      max:
+        x: 1
+        y: 66
+        z: 1
+    destination-yaw-offset: 0.0
   cooldown-seconds: 3
 economy:
   initial-balance: 100

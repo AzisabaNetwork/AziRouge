@@ -30,6 +30,7 @@ public final class GameSession {
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
     private List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
+    private final Location returnSpawnLocation;
     private final BlockBox homeArea;
     private final Instant createdAt;
     private SessionState state = SessionState.LOBBY;
@@ -49,6 +50,7 @@ public final class GameSession {
             World world,
             int maxPlayers,
             Location spawnLocation,
+            Location returnSpawnLocation,
             BlockBox homeArea,
             List<PlacedPiece> placedPieces,
             long sharedBalance
@@ -58,6 +60,7 @@ public final class GameSession {
         this.world = world;
         this.maxPlayers = maxPlayers;
         this.spawnLocation = spawnLocation.clone();
+        this.returnSpawnLocation = returnSpawnLocation.clone();
         this.homeArea = homeArea;
         this.placedPieces = List.copyOf(placedPieces);
         this.sharedBalance = Math.max(0L, sharedBalance);
@@ -205,6 +208,10 @@ public final class GameSession {
 
     public Location spawnLocation() {
         return spawnLocation.clone();
+    }
+
+    public Location returnSpawnLocation() {
+        return returnSpawnLocation.clone();
     }
 
     public BlockBox homeArea() {

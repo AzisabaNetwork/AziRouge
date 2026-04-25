@@ -221,9 +221,9 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 
 ## Home / Round
 
-- `home.spawn` が session 参加時・帰還時の teleport 先です。
+- `home.spawn` が session 参加時の initial spawn、`home.return-spawn` が dungeon から帰還した時の spawn です。
 - `home.area` は round end コマンドの実行可能範囲として使います。
-- `/azirouge round start [preset] [maxDepth]` で round を開始します。難易度は `maxDepth` の整数値として扱います。
+- `/azirouge round start [preset] [maxDepth]` で round を開始します。難易度は `maxDepth` の整数値として扱います。round 開始時に player は dungeon へ即時 teleport されず、家側 portal から入ります。
 - `/azirouge round end` で round を終了します。家エリア内の player なら誰でも実行できます。
 - DungeonGenerator は変更せず、session world 内の家から離れた未使用領域に dungeon を生成します。
 - 生成位置は `dungeon.base-distance-from-home` と `dungeon.round-spacing` を使って round ごとに割り当てます。
@@ -235,8 +235,9 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 - round 中のみ、家エリアと dungeon エリアを往復する portal が有効です。
 - dead、spectator、session 外 player は portal を使用できません。
 - `portals.home-to-dungeon.area` は家側 portal の範囲です。
-- `portals.home-to-dungeon.destination-offset` は dungeon origin からの teleport 先 offset です。
-- `portals.dungeon-to-home.material` は portal 設置 material です。
+- `portals.home-to-dungeon.destination-offset` は dungeon origin からの teleport 先 offset です。帰還 portal とのループを避けるため、portal 範囲から少しずらした座標にします。`yaw` は teleport 前の player yaw に加算する yaw offset です。
+- `portals.dungeon-to-home.area` は root piece 内のローカル座標で指定する帰還 portal 範囲です。
+- `portals.dungeon-to-home.destination-yaw-offset` は帰還時に teleport 前の player yaw へ加算する yaw offset です。
 - `portals.cooldown-seconds` で連続 teleport を抑制します。
 
 ## Economy
@@ -246,8 +247,8 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 - `/azirouge money` で自分の session の共有資金と次 round 維持費を確認できます。
 - `/azirouge money set <sessionId> <amount>` で共有資金を設定します。
 - `/azirouge money add <sessionId> <amount>` で共有資金を加算します。
-- round start 前に `ceil((economy.maintenance.base + economy.maintenance.per-round * nextRound) * economy.maintenance.multiplier)` を徴収します。
 - round end 時に online member の player inventory だけを換金します。
+- round end 時の換金後に `ceil((economy.maintenance.base + economy.maintenance.per-round * currentRound) * economy.maintenance.multiplier)` を徴収し、不足したら GAME_OVER にします。
 - 換金価格は `economy.sell-prices.<MATERIAL>` の Material name ベースです。
 
 ## Villager Shop GUI

@@ -1,8 +1,9 @@
 package net.azisaba.aziRouge.config;
 
-import org.bukkit.Material;
+import net.azisaba.aziRouge.math.BlockBox;
 
 public record PortalDungeonToHomeSettings(
-        Material material
+        BlockBox area,
+        float destinationYawOffset
 ) {
 }

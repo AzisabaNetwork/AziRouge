@@ -418,7 +418,7 @@ public final class AziRougeCommand implements TabExecutor {
                     + " session=" + session.sessionId()
                     + " preset=" + templateSelection.presetName()
                     + " maxDepth=" + maxDepth
-                    + " maintenance=" + plugin.economyService().maintenanceCostForRound(session.currentRound())
+                    + " maintenanceDueAtEnd=" + plugin.economyService().maintenanceCostForRound(session.currentRound())
                     + " balance=" + session.sharedBalance()
                     + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
                     + " origin=" + format(session.currentDungeonOrigin()));
@@ -442,6 +442,8 @@ public final class AziRougeCommand implements TabExecutor {
             success(sender, "Ended round" + (session == null ? "." : " " + session.currentRound()
                     + ". soldItems=" + sellResult.itemCount()
                     + " sold=" + sellResult.totalAmount()
+                    + " maintenance=" + sellResult.maintenanceCost()
+                    + " maintenancePaid=" + sellResult.maintenancePaid()
                     + " balance=" + session.sharedBalance() + "."));
         } catch (IllegalStateException ex) {
             error(sender, ex.getMessage());
@@ -464,10 +466,14 @@ public final class AziRougeCommand implements TabExecutor {
                 error(sender, "You are not in an active session.");
                 return true;
             }
-            long nextMaintenance = plugin.economyService().maintenanceCostForRound(session.currentRound() + 1);
+            int maintenanceRound = session.state() == net.azisaba.aziRouge.game.SessionState.IN_ROUND
+                    ? session.currentRound()
+                    : session.currentRound() + 1;
+            long nextMaintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
             info(sender, "Session " + session.sessionId()
                     + " money=" + session.sharedBalance()
-                    + " nextMaintenance=" + nextMaintenance + ".");
+                    + " maintenanceRound=" + maintenanceRound
+                    + " maintenance=" + nextMaintenance + ".");
             return true;
         }
 

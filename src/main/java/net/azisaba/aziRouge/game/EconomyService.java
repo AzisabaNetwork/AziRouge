@@ -25,19 +25,19 @@ public final class EconomyService {
         return (long) Math.ceil(rawCost);
     }
 
-    public long chargeMaintenanceOrGameOver(GameSession session) {
-        long cost = maintenanceCostForRound(session.currentRound() + 1);
+    public MaintenancePaymentResult chargeMaintenanceForRound(GameSession session, int roundNumber) {
+        long cost = maintenanceCostForRound(roundNumber);
         if (session.withdrawSharedBalance(cost)) {
-            return cost;
+            return new MaintenancePaymentResult(cost, true);
         }
-
         session.clearRoundPlayers();
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.GAME_OVER);
-        throw new IllegalStateException("Session " + session.sessionId()
-                + " cannot pay round " + (session.currentRound() + 1)
+        plugin.getLogger().info("Session " + session.sessionId()
+                + " cannot pay round " + roundNumber
                 + " maintenance cost " + cost
                 + " (balance=" + session.sharedBalance() + "). Game over.");
+        return new MaintenancePaymentResult(cost, false);
     }
 
     public SellResult sellInventoryLoot(GameSession session) {
@@ -66,5 +66,8 @@ public final class EconomyService {
     }
 
     public record SellResult(long totalAmount, int itemCount) {
+    }
+
+    public record MaintenancePaymentResult(long cost, boolean paid) {
     }
 }

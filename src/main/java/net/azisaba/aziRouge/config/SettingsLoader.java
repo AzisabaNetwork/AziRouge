@@ -61,7 +61,7 @@ public final class SettingsLoader {
                 loadSessionSettings(plugin, config),
                 loadHomeSettings(config),
                 loadDungeonSettings(config),
-                loadPortalSettings(plugin, config),
+                loadPortalSettings(config),
                 loadEconomySettings(plugin, config),
                 loadShopSettings(plugin, config),
                 new EnemySettings(
@@ -96,6 +96,11 @@ public final class SettingsLoader {
                 config.getInt("home.spawn.y", 64),
                 config.getInt("home.spawn.z", 0)
         );
+        IntVector3 returnSpawn = new IntVector3(
+                config.getInt("home.return-spawn.x", spawn.x()),
+                config.getInt("home.return-spawn.y", spawn.y()),
+                config.getInt("home.return-spawn.z", spawn.z())
+        );
         IntVector3 min = new IntVector3(
                 config.getInt("home.area.min.x", -16),
                 config.getInt("home.area.min.y", 0),
@@ -106,7 +111,7 @@ public final class SettingsLoader {
                 config.getInt("home.area.max.y", 255),
                 config.getInt("home.area.max.z", 16)
         );
-        return new HomeSettings(spawn, BlockBox.fromPoints(min, max));
+        return new HomeSettings(spawn, returnSpawn, BlockBox.fromPoints(min, max));
     }
 
     private static DungeonSettings loadDungeonSettings(FileConfiguration config) {
@@ -179,13 +184,7 @@ public final class SettingsLoader {
         );
     }
 
-    private static PortalSettings loadPortalSettings(JavaPlugin plugin, FileConfiguration config) {
-        Material portalMaterial = Material.matchMaterial(config.getString("portals.dungeon-to-home.material", "LIGHT_WEIGHTED_PRESSURE_PLATE"));
-        if (portalMaterial == null || !portalMaterial.isBlock()) {
-            plugin.getLogger().warning("Invalid portals.dungeon-to-home.material. Falling back to LIGHT_WEIGHTED_PRESSURE_PLATE");
-            portalMaterial = Material.LIGHT_WEIGHTED_PRESSURE_PLATE;
-        }
-
+    private static PortalSettings loadPortalSettings(FileConfiguration config) {
         BlockBox homeToDungeonArea = loadBlockBox(
                 config,
                 "portals.home-to-dungeon.area",
@@ -195,12 +194,20 @@ public final class SettingsLoader {
         IntVector3 destinationOffset = new IntVector3(
                 config.getInt("portals.home-to-dungeon.destination-offset.x", 0),
                 config.getInt("portals.home-to-dungeon.destination-offset.y", 64),
-                config.getInt("portals.home-to-dungeon.destination-offset.z", 0)
+                config.getInt("portals.home-to-dungeon.destination-offset.z", 3)
         );
+        float dungeonDestinationYawOffset = (float) config.getDouble("portals.home-to-dungeon.destination-offset.yaw", 0.0D);
+        BlockBox dungeonToHomeArea = loadBlockBox(
+                config,
+                "portals.dungeon-to-home.area",
+                new IntVector3(-1, 64, -1),
+                new IntVector3(1, 66, 1)
+        );
+        float homeDestinationYawOffset = (float) config.getDouble("portals.dungeon-to-home.destination-yaw-offset", 0.0D);
 
         return new PortalSettings(
-                new PortalHomeToDungeonSettings(homeToDungeonArea, destinationOffset),
-                new PortalDungeonToHomeSettings(portalMaterial),
+                new PortalHomeToDungeonSettings(homeToDungeonArea, destinationOffset, dungeonDestinationYawOffset),
+                new PortalDungeonToHomeSettings(dungeonToHomeArea, homeDestinationYawOffset),
                 Math.max(1, config.getInt("portals.cooldown-seconds", 3))
         );
     }

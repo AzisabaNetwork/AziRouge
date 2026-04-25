@@ -147,6 +147,7 @@ public final class GameSessionManager {
                     world,
                     maxPlayers,
                     homeSpawn(world),
+                    homeReturnSpawn(world),
                     plugin.settings().home().area(),
                     List.of(),
                     plugin.settings().economy().initialBalance()
@@ -288,7 +289,6 @@ public final class GameSessionManager {
             throw new IllegalStateException("No online members are available to start the round.");
         }
 
-        long maintenanceCost = plugin.economyService().chargeMaintenanceOrGameOver(session);
         restoreRoundInactivePlayersForNextRound(session);
 
         SessionState previousState = session.state();
@@ -333,9 +333,6 @@ public final class GameSessionManager {
                 }
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
-                if (!player.teleport(result.spawnLocation().clone())) {
-                    session.markDead(playerId);
-                }
             }
             updateRoundAfterAliveChange(session);
             return result;
@@ -346,13 +343,12 @@ public final class GameSessionManager {
             session.setCurrentDungeonOrigin(previousOrigin);
             session.setCurrentDungeonBounds(previousBounds);
             session.setPlacedPieces(previousPieces);
-            session.addSharedBalance(maintenanceCost);
             plugin.portalService().clearRoundPortals(session);
             throw ex;
         }
     }
 
-    public EconomyService.SellResult endRound(Player player) {
+    public RoundEndResult endRound(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
                 .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
         if (session.state() != SessionState.IN_ROUND) {
@@ -376,10 +372,35 @@ public final class GameSessionManager {
         EconomyService.SellResult sellResult = plugin.economyService().sellInventoryLoot(session);
         moveOnlineMembersHome(session);
         session.clearAlivePlayers();
-        session.setRoundState(RoundState.ENDED);
-        session.setState(SessionState.BETWEEN_ROUNDS);
+        EconomyService.MaintenancePaymentResult maintenanceResult =
+                plugin.economyService().chargeMaintenanceForRound(session, session.currentRound());
+        if (maintenanceResult.paid()) {
+            session.setRoundState(RoundState.ENDED);
+            session.setState(SessionState.BETWEEN_ROUNDS);
+        }
         plugin.portalService().clearRoundPortals(session);
-        return sellResult;
+        return new RoundEndResult(sellResult, maintenanceResult);
+    }
+
+    public record RoundEndResult(
+            EconomyService.SellResult sellResult,
+            EconomyService.MaintenancePaymentResult maintenanceResult
+    ) {
+        public long totalAmount() {
+            return sellResult.totalAmount();
+        }
+
+        public int itemCount() {
+            return sellResult.itemCount();
+        }
+
+        public long maintenanceCost() {
+            return maintenanceResult.cost();
+        }
+
+        public boolean maintenancePaid() {
+            return maintenanceResult.paid();
+        }
     }
 
     public void selectDungeon(GameSession session, String preset, int maxDepth) {
@@ -794,6 +815,11 @@ public final class GameSessionManager {
 
     private Location homeSpawn(World world) {
         IntVector3 spawn = plugin.settings().home().spawn();
+        return new Location(world, spawn.x() + 0.5D, spawn.y(), spawn.z() + 0.5D);
+    }
+
+    private Location homeReturnSpawn(World world) {
+        IntVector3 spawn = plugin.settings().home().returnSpawn();
         return new Location(world, spawn.x() + 0.5D, spawn.y(), spawn.z() + 0.5D);
     }
 
