@@ -73,41 +73,41 @@ public final class ShopService implements Listener {
         GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
         if (session == null || !canUseShop(player, session)) {
             player.closeInventory();
-            player.sendMessage(PREFIX + ChatColor.RED + "Shop is not available right now.");
+            player.sendMessage(PREFIX + ChatColor.RED + "現在ショップは利用できません。");
             return;
         }
 
         if (session.sharedBalance() < trade.price()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Not enough shared money. price=" + trade.price()
-                    + " balance=" + session.sharedBalance());
+            player.sendMessage(PREFIX + ChatColor.RED + "共有資金が不足しています。価格=" + trade.price()
+                    + " 残高=" + session.sharedBalance());
             return;
         }
 
         ItemStack purchased = new ItemStack(trade.material(), trade.amount());
         if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Your inventory is full.");
+            player.sendMessage(PREFIX + ChatColor.RED + "インベントリに空きがありません。");
             return;
         }
 
         if (!session.withdrawSharedBalance(trade.price())) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Not enough shared money.");
+            player.sendMessage(PREFIX + ChatColor.RED + "共有資金が不足しています。");
             return;
         }
         player.getInventory().addItem(purchased);
-        player.sendMessage(PREFIX + ChatColor.GREEN + "Bought " + trade.amount() + "x " + trade.material().name()
-                + " for " + trade.price() + ". balance=" + session.sharedBalance());
+        player.sendMessage(PREFIX + ChatColor.GREEN + trade.material().name() + " x" + trade.amount()
+                + " を購入しました。価格=" + trade.price() + " 残高=" + session.sharedBalance());
         refreshShop(inventory, holder, session);
     }
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Shop is only available during rounds and between rounds.");
+            player.sendMessage(PREFIX + ChatColor.RED + "ショップはラウンド中またはラウンド間のみ利用できます。");
             return;
         }
 
         List<ShopTradeSettings> trades = tradesFor(session);
         if (trades.isEmpty()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "No shop trades are configured for " + session.state() + ".");
+            player.sendMessage(PREFIX + ChatColor.RED + "現在の状態で利用できる取引が設定されていません: " + session.state());
             return;
         }
 
@@ -137,8 +137,8 @@ public final class ShopService implements Listener {
         if (meta != null) {
             meta.setDisplayName(ChatColor.GREEN + trade.material().name());
             meta.setLore(List.of(
-                    ChatColor.YELLOW + "Price: " + trade.price(),
-                    ChatColor.GRAY + "Shared money: " + session.sharedBalance()
+                    ChatColor.YELLOW + "価格: " + trade.price(),
+                    ChatColor.GRAY + "共有資金: " + session.sharedBalance()
             ));
             item.setItemMeta(meta);
         }

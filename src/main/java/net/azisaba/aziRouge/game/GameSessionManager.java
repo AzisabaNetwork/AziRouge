@@ -125,7 +125,7 @@ public final class GameSessionManager {
         }
 
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
-            throw new IllegalStateException("You are already associated with an active session. Leave it first.");
+            throw new IllegalStateException("すでに別のセッションに参加しています。先に退出してください。");
         }
 
         int maxPlayers = validateMaxPlayers(requestedMaxPlayers);
@@ -136,7 +136,7 @@ public final class GameSessionManager {
         World world = Bukkit.createWorld(new WorldCreator(worldName));
         if (world == null) {
             sessionWorldService.deleteWorldFolder(worldFolder, worldName);
-            throw new IllegalStateException("Failed to create session world " + worldName + ".");
+            throw new IllegalStateException("セッションワールドの作成に失敗しました: " + worldName);
         }
         world.setAutoSave(false);
 
@@ -161,10 +161,13 @@ public final class GameSessionManager {
                 unregisterSession(session);
                 restorePlayerAttributes(player);
                 restorePlayerVitals(player);
-                throw new IllegalStateException("Failed to teleport player into session world.");
+                throw new IllegalStateException("セッションワールドへのテレポートに失敗しました。");
             }
 
-            initializeSessionPlayerState(player);
+            preparePlayerForSessionEntry(player);
+            sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "セッション " + session.sessionId() + " を作成しました", 10, 50, 10);
+            sendMessage(player, ChatColor.GREEN + "セッション " + session.sessionId() + " を作成しました。/azirouge session join " + session.sessionId() + " で招待できます。");
+            sendMessage(player, ChatColor.YELLOW + "家で準備してから /azirouge round start でラウンドを開始してください。");
             BukkitTask mobSpawnTask = mobSpawnManager.start(session);
             session.setMobSpawnTask(mobSpawnTask);
             return session;
@@ -182,15 +185,15 @@ public final class GameSessionManager {
 
     public GameSession joinSession(Player player, String sessionId) {
         GameSession session = sessionById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+                .orElseThrow(() -> new IllegalArgumentException("セッションが見つかりません: " + sessionId));
         if (!canJoinSession(session)) {
-            throw new IllegalStateException("Cannot join session " + session.sessionId() + " while it is " + session.state() + ".");
+            throw new IllegalStateException("現在の状態ではセッション " + session.sessionId() + " に参加できません: " + session.state());
         }
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
-            throw new IllegalStateException("You are already associated with an active session. Leave it first.");
+            throw new IllegalStateException("すでに別のセッションに参加しています。先に退出してください。");
         }
         if (!session.hasRoomFor(player.getUniqueId())) {
-            throw new IllegalStateException("Session " + session.sessionId() + " is full.");
+            throw new IllegalStateException("セッション " + session.sessionId() + " は満員です。");
         }
 
         Location returnLocation = player.getLocation();
@@ -201,23 +204,31 @@ public final class GameSessionManager {
             restorePlayerAttributes(player);
             restorePlayerVitals(player);
             scheduleIdleTimeoutIfNeeded(session);
-            throw new IllegalStateException("Failed to teleport into session " + session.sessionId() + ".");
+            throw new IllegalStateException("セッション " + session.sessionId() + " へのテレポートに失敗しました。");
         }
-        initializeSessionPlayerState(player);
+        preparePlayerForSessionEntry(player);
         if (session.state() == SessionState.IN_ROUND) {
             session.markPendingNextRound(player.getUniqueId());
             makeRoundSpectatorAtHome(session, player);
         } else {
             restoreGameMode(player);
         }
+        sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "セッション " + session.sessionId() + " に参加しました", 10, 50, 10);
+        sendMessage(player, ChatColor.GREEN + "セッション " + session.sessionId() + " に参加しました。");
+        if (session.state() == SessionState.IN_ROUND) {
+            sendMessage(player, ChatColor.YELLOW + "ラウンド中のため、このラウンドでは観戦になります。次のラウンドから参加できます。");
+        } else {
+            broadcastSessionMessage(session, ChatColor.YELLOW + player.getName() + " がセッションに参加しました。人数: "
+                    + session.members().size() + "/" + session.maxPlayers());
+        }
         return session;
     }
 
     public GameSession leaveSession(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
-                .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
+                .orElseThrow(() -> new IllegalStateException("参加中のセッションがありません。"));
         if (session.state() == SessionState.CLOSING) {
-            throw new IllegalStateException("Cannot leave session " + session.sessionId() + " while it is " + session.state() + ".");
+            throw new IllegalStateException("現在の状態ではセッション " + session.sessionId() + " から退出できません: " + session.state());
         }
 
         boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
@@ -226,7 +237,7 @@ public final class GameSessionManager {
             Location returnLocation = resolveReturnLocation(session, player.getUniqueId());
             boolean teleported = returnLocation != null && player.teleport(returnLocation);
             if (!teleported) {
-                throw new IllegalStateException("Failed to teleport out of session " + session.sessionId() + ".");
+                throw new IllegalStateException("セッション " + session.sessionId() + " からの退出テレポートに失敗しました。");
             }
         }
 
@@ -241,6 +252,9 @@ public final class GameSessionManager {
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
+        sendMessage(player, ChatColor.YELLOW + "AziRouge セッション " + session.sessionId() + " から退出しました。");
+        broadcastSessionMessage(session, ChatColor.YELLOW + player.getName() + " がセッションから退出しました。人数: "
+                + session.members().size() + "/" + session.maxPlayers());
         return session;
     }
 
@@ -276,17 +290,17 @@ public final class GameSessionManager {
         }
 
         if (!sessionsById.containsKey(session.sessionId())) {
-            throw new IllegalStateException("Session is not active.");
+            throw new IllegalStateException("セッションは有効ではありません。");
         }
         if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            throw new IllegalStateException("Round can only be started from LOBBY or BETWEEN_ROUNDS.");
+            throw new IllegalStateException("ラウンドはロビーまたはラウンド間のみ開始できます。");
         }
 
         List<UUID> participants = session.onlineMembers().stream()
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            throw new IllegalStateException("No online members are available to start the round.");
+            throw new IllegalStateException("ラウンドを開始できるオンラインメンバーがいません。");
         }
 
         restoreRoundInactivePlayersForNextRound(session);
@@ -324,6 +338,7 @@ public final class GameSessionManager {
             session.setRoundState(RoundState.ACTIVE);
             session.setState(SessionState.IN_ROUND);
             plugin.portalService().installRoundPortals(session);
+            announceRoundStart(session);
 
             for (UUID playerId : participants) {
                 Player player = Bukkit.getPlayer(playerId);
@@ -350,12 +365,12 @@ public final class GameSessionManager {
 
     public RoundEndResult endRound(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
-                .orElseThrow(() -> new IllegalStateException("You are not in an active session."));
+                .orElseThrow(() -> new IllegalStateException("参加中のセッションがありません。"));
         if (session.state() != SessionState.IN_ROUND) {
-            throw new IllegalStateException("There is no active round in this session.");
+            throw new IllegalStateException("このセッションではラウンドが進行していません。");
         }
         if (!isInHomeArea(session, player.getLocation())) {
-            throw new IllegalStateException("Round end can only be run from the home area.");
+            throw new IllegalStateException("ラウンド終了は家エリア内でのみ実行できます。");
         }
 
         session.setRoundState(RoundState.ENDING);
@@ -379,7 +394,13 @@ public final class GameSessionManager {
             session.setState(SessionState.BETWEEN_ROUNDS);
         }
         plugin.portalService().clearRoundPortals(session);
-        return new RoundEndResult(sellResult, maintenanceResult);
+        RoundEndResult result = new RoundEndResult(sellResult, maintenanceResult);
+        announceRoundEnd(session, result);
+        if (!maintenanceResult.paid()) {
+            clearOnlineMemberInventories(session);
+            announceGameOver(session, "維持費を支払えませんでした。");
+        }
+        return result;
     }
 
     public record RoundEndResult(
@@ -405,7 +426,7 @@ public final class GameSessionManager {
 
     public void selectDungeon(GameSession session, String preset, int maxDepth) {
         if (session.state() == SessionState.CLOSING) {
-            throw new IllegalStateException("Cannot select dungeon for a closing session.");
+            throw new IllegalStateException("終了中のセッションではダンジョンを選択できません。");
         }
         session.setSelectedPreset(preset);
         session.setMaxDepth(maxDepth);
@@ -533,7 +554,7 @@ public final class GameSessionManager {
             if (fallback != null) {
                 player.teleport(fallback);
             } else {
-                player.kickPlayer(PREFIX + ChatColor.RED + "Session world is unavailable.");
+                player.kickPlayer(PREFIX + ChatColor.RED + "セッションワールドに入れません。");
             }
             return;
         }
@@ -563,6 +584,7 @@ public final class GameSessionManager {
         restorePlayerVitals(player);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
+            broadcastSessionMessage(session, ChatColor.RED + player.getName() + " がラウンド中に切断したため、このラウンドでは脱落扱いになります。");
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
@@ -575,12 +597,22 @@ public final class GameSessionManager {
         }
         session.markDead(player.getUniqueId());
         session.markPendingNextRound(player.getUniqueId());
+        sendTitle(player, ChatColor.RED + "死亡", ChatColor.GRAY + "次のラウンドまで観戦です", 10, 60, 20);
+        sendMessage(player, ChatColor.RED + "このラウンドでは脱落です。次のラウンド開始時に復帰します。");
+        broadcastSessionMessage(session, ChatColor.RED + player.getName() + " が死亡しました。生存者: " + session.alivePlayers().size());
         updateRoundAfterAliveChange(session);
     }
 
     public void handlePlayerRespawn(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
-        if (session == null || session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
+        if (session == null) {
+            return;
+        }
+        if (session.state() == SessionState.GAME_OVER) {
+            Bukkit.getScheduler().runTask(plugin, () -> restoreGameOverPlayerAtHome(session, player));
+            return;
+        }
+        if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return;
         }
         session.markPendingNextRound(player.getUniqueId());
@@ -589,7 +621,13 @@ public final class GameSessionManager {
 
     public Location respawnLocationFor(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
-        if (session == null || session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
+        if (session == null) {
+            return null;
+        }
+        if (session.state() == SessionState.GAME_OVER) {
+            return session.spawnLocation();
+        }
+        if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return null;
         }
         return session.spawnLocation();
@@ -662,7 +700,7 @@ public final class GameSessionManager {
     private int validateMaxPlayers(int requestedMaxPlayers) {
         int maxAllowed = plugin.settings().sessions().maxMaxPlayers();
         if (requestedMaxPlayers > maxAllowed) {
-            throw new IllegalArgumentException("maxPlayers must be " + maxAllowed + " or less.");
+            throw new IllegalArgumentException("maxPlayers は " + maxAllowed + " 以下にしてください。");
         }
         return Math.max(1, requestedMaxPlayers);
     }
@@ -712,6 +750,9 @@ public final class GameSessionManager {
                 continue;
             }
             setRoundSurvival(player);
+            if (player.isDead()) {
+                continue;
+            }
             initializeSessionPlayerState(player);
             player.teleport(session.spawnLocation());
         }
@@ -723,9 +764,11 @@ public final class GameSessionManager {
         }
 
         moveOnlineMembersHome(session);
+        clearOnlineMemberInventories(session);
         plugin.portalService().clearRoundPortals(session);
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.GAME_OVER);
+        announceGameOver(session, "全員が脱落しました。");
     }
 
     private void setSpectator(Player player) {
@@ -744,23 +787,41 @@ public final class GameSessionManager {
         initializeSessionPlayerState(player);
         setSpectator(player);
         player.teleport(session.spawnLocation());
+        sendMessage(player, ChatColor.YELLOW + "家で観戦中です。次のラウンドまでポータルは使用できません。");
+    }
+
+    private void restoreGameOverPlayerAtHome(GameSession session, Player player) {
+        if (!session.isMember(player.getUniqueId()) || session.state() != SessionState.GAME_OVER) {
+            return;
+        }
+        setRoundSurvival(player);
+        initializeSessionPlayerState(player);
+        player.teleport(session.spawnLocation());
+        sendMessage(player, ChatColor.YELLOW + "ゲームオーバーのため家に戻りました。次のセッションを作る前に、このセッションから退出してください。");
     }
 
     private void restoreRoundInactivePlayersForNextRound(GameSession session) {
+        java.util.Set<UUID> restoredPlayers = new java.util.HashSet<>();
         for (UUID playerId : session.deadPlayers()) {
+            restoredPlayers.add(playerId);
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
+                sendTitle(player, ChatColor.GREEN + "復帰", ChatColor.YELLOW + "このラウンドに参加できます", 10, 45, 10);
             }
         }
         for (UUID playerId : session.pendingPlayersNextRound()) {
+            if (!restoredPlayers.add(playerId)) {
+                continue;
+            }
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
+                sendTitle(player, ChatColor.GREEN + "復帰", ChatColor.YELLOW + "このラウンドに参加できます", 10, 45, 10);
             }
         }
     }
@@ -769,7 +830,11 @@ public final class GameSessionManager {
         applyPlayerAttributesAndParams(player);
         AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
         if (maxHealth != null) {
-            player.setHealth(maxHealth.getValue());
+            try {
+                player.setHealth(maxHealth.getValue());
+            } catch (IllegalArgumentException ignored) {
+                // Dead players reject health changes until respawn. Respawn handling restores this state.
+            }
         }
         player.setFoodLevel(20);
         player.setSaturation(20.0F);
@@ -779,6 +844,101 @@ public final class GameSessionManager {
     private void setRoundSurvival(Player player) {
         playerGameModeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> player.getGameMode());
         player.setGameMode(GameMode.SURVIVAL);
+    }
+
+    private void preparePlayerForSessionEntry(Player player) {
+        clearPlayerRuntimeSnapshots(player.getUniqueId());
+        player.getInventory().clear();
+        player.getEnderChest().clear();
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            player.setGameMode(GameMode.SURVIVAL);
+        }
+        initializeSessionPlayerState(player);
+    }
+
+    private void clearOnlineMemberInventories(GameSession session) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                player.getInventory().clear();
+                player.getEnderChest().clear();
+            }
+        }
+    }
+
+    private void clearPlayerRuntimeSnapshots(UUID playerId) {
+        playerAttributeSnapshots.remove(playerId);
+        playerGameModeSnapshots.remove(playerId);
+        playerVitalsSnapshots.remove(playerId);
+    }
+
+    private void announceRoundStart(GameSession session) {
+        long maintenance = plugin.economyService().maintenanceCostForRound(session.currentRound());
+        broadcastTitle(
+                session,
+                ChatColor.GOLD + "ラウンド " + session.currentRound(),
+                ChatColor.YELLOW + "ポータルが開きました",
+                10,
+                60,
+                15
+        );
+        broadcastSessionMessage(session, ChatColor.GREEN + "ラウンド " + session.currentRound()
+                + " が開始しました。家のポータルからダンジョンへ入ってください。");
+        broadcastSessionMessage(session, ChatColor.YELLOW + "このラウンド終了時の維持費: " + maintenance
+                + " / 現在の共有資金: " + session.sharedBalance());
+    }
+
+    private void announceRoundEnd(GameSession session, RoundEndResult result) {
+        String title = result.maintenancePaid()
+                ? ChatColor.GREEN + "ラウンド完了"
+                : ChatColor.RED + "ラウンド終了";
+        String subtitle = ChatColor.YELLOW + "売却 " + result.itemCount()
+                + "個 / +" + result.totalAmount()
+                + " / 維持費 " + result.maintenanceCost();
+        broadcastTitle(session, title, subtitle, 10, 70, 20);
+        broadcastSessionMessage(session, ChatColor.GREEN + "ラウンド " + session.currentRound()
+                + " が終了しました。売却数: " + result.itemCount() + " / 売却額: " + result.totalAmount());
+        if (result.maintenancePaid()) {
+            broadcastSessionMessage(session, ChatColor.YELLOW + "維持費 " + result.maintenanceCost()
+                    + " を支払いました。共有資金: " + session.sharedBalance());
+            broadcastSessionMessage(session, ChatColor.YELLOW + "家で準備して、整ったら次のラウンドを開始してください。");
+        } else {
+            broadcastSessionMessage(session, ChatColor.RED + "維持費 " + result.maintenanceCost()
+                    + " を支払えませんでした。共有資金: " + session.sharedBalance());
+        }
+    }
+
+    private void announceGameOver(GameSession session, String reason) {
+        broadcastTitle(session, ChatColor.DARK_RED + "ゲームオーバー", ChatColor.RED + reason, 10, 90, 30);
+        broadcastSessionMessage(session, ChatColor.RED + "ゲームオーバー: " + reason);
+        broadcastSessionMessage(session, ChatColor.YELLOW + "このセッションを抜ける: /azirouge session leave");
+        broadcastSessionMessage(session, ChatColor.YELLOW + "次のセッションを作る: 退出後に /azirouge session create、または開始メニューを右クリックしてください。");
+    }
+
+    private void broadcastTitle(GameSession session, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                sendTitle(player, title, subtitle, fadeIn, stay, fadeOut);
+            }
+        }
+    }
+
+    private void broadcastSessionMessage(GameSession session, String message) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                sendMessage(player, message);
+            }
+        }
+    }
+
+    private void sendTitle(Player player, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
+        player.sendTitle(title, subtitle, fadeIn, stay, fadeOut);
+    }
+
+    private void sendMessage(Player player, String message) {
+        player.sendMessage(PREFIX + message);
     }
 
     private void restorePlayerVitals(Player player) {
@@ -872,7 +1032,7 @@ public final class GameSessionManager {
             restoreGameMode(player);
             restorePlayerVitals(player);
             if (!teleported) {
-                player.kickPlayer(PREFIX + ChatColor.RED + "Session world is shutting down.");
+                player.kickPlayer(PREFIX + ChatColor.RED + "セッションワールドを終了しています。");
             }
         }
     }

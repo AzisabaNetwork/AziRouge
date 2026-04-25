@@ -64,6 +64,7 @@ public final class SettingsLoader {
                 loadPortalSettings(config),
                 loadEconomySettings(plugin, config),
                 loadShopSettings(plugin, config),
+                loadGuiSettings(config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -124,9 +125,30 @@ public final class SettingsLoader {
 
     private static ShopSettings loadShopSettings(JavaPlugin plugin, FileConfiguration config) {
         return new ShopSettings(
-                requireText(config.getString("shop.title"), "AziRouge Shop"),
+                requireText(config.getString("shop.title"), "AziRouge ショップ"),
                 loadShopTrades(plugin, config.getList("shop.trades.in-round"), "shop.trades.in-round"),
                 loadShopTrades(plugin, config.getList("shop.trades.between-round"), "shop.trades.between-round")
+        );
+    }
+
+    private static GuiSettings loadGuiSettings(FileConfiguration config) {
+        List<Integer> depthOptions = config.getIntegerList("gui.depth-options").stream()
+                .map(value -> Math.max(1, value))
+                .distinct()
+                .toList();
+        if (depthOptions.isEmpty()) {
+            depthOptions = List.of(4, 8, 12);
+        }
+        return new GuiSettings(
+                requireText(config.getString("gui.world"), config.getString("generation.world", "world")),
+                new IntVector3(
+                        config.getInt("gui.text-display.x", 0),
+                        config.getInt("gui.text-display.y", 65),
+                        config.getInt("gui.text-display.z", 0)
+                ),
+                (float) config.getDouble("gui.text-display.yaw", 0.0D),
+                requireText(config.getString("gui.text-display.text"), "AziRouge\n右クリックで開始"),
+                List.copyOf(depthOptions)
         );
     }
 

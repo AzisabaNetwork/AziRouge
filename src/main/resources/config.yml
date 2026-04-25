@@ -94,7 +94,7 @@ economy:
     AMETHYST_SHARD: 3
     LAPIS_LAZULI: 2
 shop:
-  title: AziRouge Shop
+  title: AziRouge ショップ
   trades:
     in-round:
       - id: bread
@@ -122,6 +122,20 @@ shop:
         material: COOKED_BEEF
         amount: 3
         price: 36
+gui:
+  world: world
+  text-display:
+    x: 0
+    y: 65
+    z: 0
+    yaw: 0.0
+    text: |-
+      AziRouge
+      右クリックで開始
+  depth-options:
+    - 4
+    - 8
+    - 12
 enemies:
   enabled: false
   mode: reserved

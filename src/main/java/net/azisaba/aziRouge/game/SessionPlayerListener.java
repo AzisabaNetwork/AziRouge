@@ -26,7 +26,7 @@ public final class SessionPlayerListener implements Listener {
         World sourceWorld = event.getFrom().getWorld();
         if (!sessionManager.isSessionWorldEntryAllowed(event.getPlayer(), destinationWorld)) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage("You are not a member of that AziRouge session.");
+            event.getPlayer().sendMessage("そのAziRougeセッションのメンバーではありません。");
             return;
         }
         if (sourceWorld != null && sourceWorld.getUID().equals(destinationWorld.getUID())) {

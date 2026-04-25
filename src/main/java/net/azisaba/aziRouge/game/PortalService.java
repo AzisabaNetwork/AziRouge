@@ -7,6 +7,7 @@ import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -18,6 +19,8 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class PortalService implements Listener {
+    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<String, RoundPortals> roundPortalsBySessionId = new HashMap<>();
@@ -98,11 +101,23 @@ public final class PortalService implements Listener {
         }
 
         if (contains(roundPortals.homeToDungeonArea(), to)) {
-            teleportWithCooldown(player, roundPortals.dungeonDestination(), roundPortals.dungeonYawOffset());
+            teleportWithCooldown(
+                    player,
+                    roundPortals.dungeonDestination(),
+                    roundPortals.dungeonYawOffset(),
+                    ChatColor.DARK_PURPLE + "ダンジョンへ移動",
+                    ChatColor.GRAY + "戦利品を集めたら、ダンジョン内の帰還ポータルから戻ってください。"
+            );
             return;
         }
         if (contains(roundPortals.dungeonToHomeArea(), to)) {
-            teleportWithCooldown(player, roundPortals.homeDestination(), roundPortals.homeYawOffset());
+            teleportWithCooldown(
+                    player,
+                    roundPortals.homeDestination(),
+                    roundPortals.homeYawOffset(),
+                    ChatColor.GREEN + "家へ帰還",
+                    ChatColor.YELLOW + "全員の準備ができたら、家エリアでラウンドを終了してください。"
+            );
         }
     }
 
@@ -114,7 +129,7 @@ public final class PortalService implements Listener {
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
-    private void teleportWithCooldown(Player player, Location destination, float yawOffset) {
+    private void teleportWithCooldown(Player player, Location destination, float yawOffset, String title, String message) {
         long now = System.currentTimeMillis();
         long cooldownUntil = cooldownUntilMillis.getOrDefault(player.getUniqueId(), 0L);
         if (cooldownUntil > now) {
@@ -128,7 +143,10 @@ public final class PortalService implements Listener {
         Location target = destination.clone();
         target.setYaw(normalizeYaw(player.getLocation().getYaw() + yawOffset));
         target.setPitch(player.getLocation().getPitch());
-        player.teleport(target);
+        if (player.teleport(target)) {
+            player.sendTitle(title, "", 5, 35, 10);
+            player.sendMessage(PREFIX + message);
+        }
     }
 
     private Location dungeonDestination(GameSession session, PortalSettings settings) {

@@ -23,6 +23,7 @@ import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
 import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.game.ShopService;
+import net.azisaba.aziRouge.game.GameMenuService;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -43,6 +44,7 @@ public final class AziRouge extends JavaPlugin {
     private PortalService portalService;
     private EconomyService economyService;
     private ShopService shopService;
+    private GameMenuService gameMenuService;
 
     @Override
     public void onEnable() {
@@ -65,6 +67,9 @@ public final class AziRouge extends JavaPlugin {
         }
         if (mobAiManager != null) {
             mobAiManager.shutdown();
+        }
+        if (gameMenuService != null) {
+            gameMenuService.shutdown();
         }
         if (schematicAdapter != null) {
             schematicAdapter.clearCache();
@@ -121,6 +126,10 @@ public final class AziRouge extends JavaPlugin {
         if (shopService == null) {
             this.shopService = new ShopService(this, gameSessionManager);
         }
+        if (gameMenuService == null) {
+            this.gameMenuService = new GameMenuService(this);
+        }
+        gameMenuService.refresh();
     }
 
     public PluginSettings settings() {
@@ -178,6 +187,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(portalService, this);
         getServer().getPluginManager().registerEvents(shopService, this);
+        getServer().getPluginManager().registerEvents(gameMenuService, this);
     }
 
     private SchematicAdapter createSchematicAdapter() {
