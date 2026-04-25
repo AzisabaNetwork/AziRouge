@@ -63,6 +63,7 @@ public final class SettingsLoader {
                 loadDungeonSettings(config),
                 loadPortalSettings(plugin, config),
                 loadEconomySettings(plugin, config),
+                loadShopSettings(plugin, config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -126,6 +127,42 @@ public final class SettingsLoader {
                 defaultDifficulty,
                 difficulties
         );
+    }
+
+    private static ShopSettings loadShopSettings(JavaPlugin plugin, FileConfiguration config) {
+        return new ShopSettings(
+                requireText(config.getString("shop.title"), "AziRouge Shop"),
+                loadShopTrades(plugin, config.getList("shop.trades.in-round"), "shop.trades.in-round"),
+                loadShopTrades(plugin, config.getList("shop.trades.between-round"), "shop.trades.between-round")
+        );
+    }
+
+    private static List<ShopTradeSettings> loadShopTrades(JavaPlugin plugin, List<?> rawTrades, String path) {
+        if (rawTrades == null || rawTrades.isEmpty()) {
+            return List.of();
+        }
+
+        List<ShopTradeSettings> trades = new ArrayList<>();
+        for (Object rawTrade : rawTrades) {
+            Map<?, ?> values = asMap(rawTrade);
+            if (values == null || values.isEmpty()) {
+                plugin.getLogger().warning("Ignoring malformed shop trade in " + path);
+                continue;
+            }
+
+            String id = normalizeOptionalText(stringValue(values.get("id")));
+            String materialName = normalizeRequiredText(stringValue(values.get("material")));
+            Material material = materialName == null ? null : Material.matchMaterial(materialName);
+            long price = longValue(values.get("price"), -1L);
+            if (id == null || material == null || !material.isItem() || material.isAir() || price < 0L) {
+                plugin.getLogger().warning("Ignoring invalid shop trade in " + path + ": " + values);
+                continue;
+            }
+
+            int amount = clampInt(intValue(values.get("amount"), 1), 1, material.getMaxStackSize());
+            trades.add(new ShopTradeSettings(id.toLowerCase(Locale.ROOT), material, amount, price));
+        }
+        return List.copyOf(trades);
     }
 
     private static EconomySettings loadEconomySettings(JavaPlugin plugin, FileConfiguration config) {
@@ -547,6 +584,21 @@ public final class SettingsLoader {
         }
         try {
             return Integer.parseInt(text.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static long longValue(Object value, long fallback) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(text.trim());
         } catch (NumberFormatException ignored) {
             return fallback;
         }

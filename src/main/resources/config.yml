@@ -83,6 +83,35 @@ economy:
     NETHERITE_SCRAP: 100
     AMETHYST_SHARD: 3
     LAPIS_LAZULI: 2
+shop:
+  title: AziRouge Shop
+  trades:
+    in-round:
+      - id: bread
+        material: BREAD
+        amount: 4
+        price: 12
+      - id: cooked_beef
+        material: COOKED_BEEF
+        amount: 3
+        price: 18
+      - id: arrows
+        material: ARROW
+        amount: 16
+        price: 20
+      - id: torch
+        material: TORCH
+        amount: 16
+        price: 10
+    between-round:
+      - id: bread
+        material: BREAD
+        amount: 4
+        price: 24
+      - id: cooked_beef
+        material: COOKED_BEEF
+        amount: 3
+        price: 36
 enemies:
   enabled: false
   mode: reserved

@@ -22,6 +22,7 @@ import net.azisaba.aziRouge.entity.MobSpawnManager;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
 import net.azisaba.aziRouge.game.PortalService;
+import net.azisaba.aziRouge.game.ShopService;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -41,6 +42,7 @@ public final class AziRouge extends JavaPlugin {
     private GameSessionManager gameSessionManager;
     private PortalService portalService;
     private EconomyService economyService;
+    private ShopService shopService;
 
     @Override
     public void onEnable() {
@@ -105,6 +107,9 @@ public final class AziRouge extends JavaPlugin {
         if (portalService == null) {
             this.portalService = new PortalService(this, gameSessionManager);
         }
+        if (shopService == null) {
+            this.shopService = new ShopService(this, gameSessionManager);
+        }
         getLogger().info("AziRouge reloaded. debug=" + debugLogger.isEnabled()
                 + " schematic=" + schematicAdapter.describeAvailability()
                 + " selection=" + selectionProvider.describeAvailability());
@@ -128,6 +133,10 @@ public final class AziRouge extends JavaPlugin {
 
     public EconomyService economyService() {
         return economyService;
+    }
+
+    public ShopService shopService() {
+        return shopService;
     }
 
     public TemplateAuthoringService templateAuthoringService() {
@@ -160,6 +169,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(portalService, this);
+        getServer().getPluginManager().registerEvents(shopService, this);
     }
 
     private SchematicAdapter createSchematicAdapter() {
