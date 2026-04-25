@@ -5,7 +5,6 @@ import net.azisaba.aziRouge.author.EntranceAuthoringResult;
 import net.azisaba.aziRouge.author.PieceAuthoringResult;
 import net.azisaba.aziRouge.author.SelectionLookupException;
 import net.azisaba.aziRouge.author.TemplateAuthoringException;
-import net.azisaba.aziRouge.config.DungeonDifficultySettings;
 import net.azisaba.aziRouge.game.GameSession;
 import net.azisaba.aziRouge.config.GenerationSettings;
 import net.azisaba.aziRouge.math.BlockBox;
@@ -110,11 +109,6 @@ public final class AziRougeCommand implements TabExecutor {
                     .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
                     .toList();
         }
-        if (args.length == 4 && "round".equalsIgnoreCase(args[0]) && "start".equalsIgnoreCase(args[1])) {
-            return difficultyNames().stream()
-                    .filter(option -> option.startsWith(args[3].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
         if (args.length == 2 && "dungeon".equalsIgnoreCase(args[0])) {
             return List.of("select").stream()
                     .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
@@ -135,11 +129,6 @@ public final class AziRougeCommand implements TabExecutor {
         if (args.length == 3 && "dungeon".equalsIgnoreCase(args[0]) && "select".equalsIgnoreCase(args[1])) {
             return templatePresetNames().stream()
                     .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
-        if (args.length == 4 && "dungeon".equalsIgnoreCase(args[0]) && "select".equalsIgnoreCase(args[1])) {
-            return difficultyNames().stream()
-                    .filter(option -> option.startsWith(args[3].toLowerCase(Locale.ROOT)))
                     .toList();
         }
         if (args.length == 3 && "session".equalsIgnoreCase(args[0])
@@ -337,7 +326,7 @@ public final class AziRougeCommand implements TabExecutor {
                     + " dead=" + session.deadPlayers().size()
                     + " pending=" + session.pendingPlayersNextRound().size()
                     + " preset=" + session.selectedPreset()
-                    + " difficulty=" + session.selectedDifficulty()
+                    + " maxDepth=" + session.getMaxDepth()
                     + " world=" + session.world().getName()
                     + " owner=" + session.owner());
         }
@@ -392,7 +381,7 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
         if (args.length > 2) {
-            info(sender, "Usage: /azirouge round start [preset] [difficulty]");
+            info(sender, "Usage: /azirouge round start [preset] [maxDepth]");
             return true;
         }
 
@@ -402,15 +391,14 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
 
-        String difficultyId = normalizeDifficulty(args.length >= 2 ? args[1] : session.selectedDifficulty());
-        DungeonDifficultySettings difficulty = plugin.settings().dungeon().difficulty(difficultyId);
-        if (difficulty == null) {
-            error(sender, "Unknown difficulty: " + difficultyId + ". Available: " + String.join(", ", difficultyNames()));
+        Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
+        if (maxDepth == null) {
+            error(sender, "maxDepth must be a positive integer.");
             return true;
         }
         String presetName = args.length >= 1 && !args[0].isBlank()
                 ? args[0].toLowerCase(Locale.ROOT)
-                : (session.selectedPreset() == null ? difficulty.templatePreset() : session.selectedPreset());
+                : session.selectedPreset();
 
         try {
             TemplateSelection templateSelection = resolveTemplateSelection(
@@ -424,13 +412,12 @@ public final class AziRougeCommand implements TabExecutor {
                     templateSelection.templatePatterns(),
                     templateSelection.startPieceId(),
                     templateSelection.presetName(),
-                    difficultyId,
-                    difficulty.maxDepth()
+                    maxDepth
             );
             success(sender, "Started round " + session.currentRound()
                     + " session=" + session.sessionId()
                     + " preset=" + templateSelection.presetName()
-                    + " difficulty=" + difficultyId
+                    + " maxDepth=" + maxDepth
                     + " maintenance=" + plugin.economyService().maintenanceCostForRound(session.currentRound())
                     + " balance=" + session.sharedBalance()
                     + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
@@ -513,7 +500,7 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleDungeon(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /azirouge dungeon select <preset> [difficulty]");
+            info(sender, "Usage: /azirouge dungeon select <preset> [maxDepth]");
             return true;
         }
         if (!"select".equalsIgnoreCase(args[0])) {
@@ -533,7 +520,7 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
         if (args.length < 1 || args.length > 2) {
-            info(sender, "Usage: /azirouge dungeon select <preset> [difficulty]");
+            info(sender, "Usage: /azirouge dungeon select <preset> [maxDepth]");
             return true;
         }
 
@@ -542,10 +529,9 @@ public final class AziRougeCommand implements TabExecutor {
             error(sender, "You are not in an active session.");
             return true;
         }
-
-        String difficultyId = normalizeDifficulty(args.length >= 2 ? args[1] : session.selectedDifficulty());
-        if (plugin.settings().dungeon().difficulty(difficultyId) == null) {
-            error(sender, "Unknown difficulty: " + difficultyId + ". Available: " + String.join(", ", difficultyNames()));
+        Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
+        if (maxDepth == null) {
+            error(sender, "maxDepth must be a positive integer.");
             return true;
         }
         try {
@@ -555,9 +541,9 @@ public final class AziRougeCommand implements TabExecutor {
                     null,
                     null
             );
-            plugin.gameSessionManager().selectDungeon(session, templateSelection.presetName(), difficultyId);
+            plugin.gameSessionManager().selectDungeon(session, templateSelection.presetName(), maxDepth);
             success(sender, "Selected dungeon preset=" + templateSelection.presetName()
-                    + " difficulty=" + difficultyId
+                    + " maxDepth=" + maxDepth
                     + " for session " + session.sessionId() + ".");
         } catch (IllegalArgumentException | IllegalStateException ex) {
             error(sender, ex.getMessage());
@@ -818,6 +804,18 @@ public final class AziRougeCommand implements TabExecutor {
         }
     }
 
+    private Integer parsePositiveInt(String value, int fallback) {
+        if (value == null || value.isBlank()) {
+            return Math.max(1, fallback);
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed <= 0 ? null : parsed;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private long parseLong(String value, long fallback) {
         if (value == null || value.isBlank()) {
             return fallback;
@@ -901,17 +899,6 @@ public final class AziRougeCommand implements TabExecutor {
         names.add("default");
         names.addAll(TEMPLATE_PRESETS.keySet().stream().sorted().toList());
         return names;
-    }
-
-    private List<String> difficultyNames() {
-        return plugin.settings().dungeon().difficulties().keySet().stream().sorted().toList();
-    }
-
-    private String normalizeDifficulty(String difficulty) {
-        if (difficulty == null || difficulty.isBlank()) {
-            return plugin.settings().dungeon().defaultDifficulty();
-        }
-        return difficulty.toLowerCase(Locale.ROOT);
     }
 
     private String format(IntVector3 vector) {

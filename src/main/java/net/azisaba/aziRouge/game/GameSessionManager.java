@@ -151,8 +151,8 @@ public final class GameSessionManager {
                     List.of(),
                     plugin.settings().economy().initialBalance()
             );
-            session.setSelectedDifficulty(plugin.settings().dungeon().defaultDifficulty());
-            session.setSelectedPreset(plugin.settings().dungeon().difficulty(session.selectedDifficulty()).templatePreset());
+            session.setMaxDepth(plugin.settings().dungeon().defaultMaxDepth());
+            session.setSelectedPreset("default");
             registerSession(session);
             addPlayerToSession(session, player, player.getLocation());
 
@@ -248,14 +248,13 @@ public final class GameSessionManager {
             List<String> templatePatterns,
             String startPieceId,
             String preset,
-            String difficulty,
             int maxDepth
     ) throws TemplateLoadException, SchematicPlacementException {
         if (!Bukkit.isPrimaryThread()) {
             try {
                 return Bukkit.getScheduler().callSyncMethod(
                         plugin,
-                        () -> startRound(session, templatePatterns, startPieceId, preset, difficulty, maxDepth)
+                        () -> startRound(session, templatePatterns, startPieceId, preset, maxDepth)
                 ).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
@@ -320,7 +319,7 @@ public final class GameSessionManager {
             session.setPlacedPieces(result.placedPieces());
             session.setCurrentDungeonBounds(resolveDungeonBounds(result.placedPieces(), origin));
             session.setSelectedPreset(preset);
-            session.setSelectedDifficulty(difficulty);
+            session.setMaxDepth(maxDepth);
             session.setActiveParticipants(new java.util.HashSet<>(participants));
             session.setRoundState(RoundState.ACTIVE);
             session.setState(SessionState.IN_ROUND);
@@ -383,12 +382,12 @@ public final class GameSessionManager {
         return sellResult;
     }
 
-    public void selectDungeon(GameSession session, String preset, String difficulty) {
+    public void selectDungeon(GameSession session, String preset, int maxDepth) {
         if (session.state() == SessionState.CLOSING) {
             throw new IllegalStateException("Cannot select dungeon for a closing session.");
         }
         session.setSelectedPreset(preset);
-        session.setSelectedDifficulty(difficulty);
+        session.setMaxDepth(maxDepth);
     }
 
     public boolean endSession(GameSession session) {
@@ -801,7 +800,7 @@ public final class GameSessionManager {
     private String allocateSessionId() {
         String worldNamePrefix = plugin.settings().sessions().worldNamePrefix();
         for (int attempts = 0; attempts < 16; attempts++) {
-            String id = UUID.randomUUID().toString().substring(0, 8).toLowerCase();
+            String id = UUID.randomUUID().toString().substring(0, 6).toLowerCase();
             if (!sessionsById.containsKey(id) && Bukkit.getWorld(worldNamePrefix + id) == null) {
                 return id;
             }

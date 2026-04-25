@@ -110,22 +110,10 @@ public final class SettingsLoader {
     }
 
     private static DungeonSettings loadDungeonSettings(FileConfiguration config) {
-        Map<String, DungeonDifficultySettings> difficulties = loadDungeonDifficulties(config.getConfigurationSection("dungeon.difficulties"));
-        String defaultDifficulty = requireText(config.getString("dungeon.default-difficulty"), "normal").toLowerCase(Locale.ROOT);
-        if (!difficulties.containsKey(defaultDifficulty)) {
-            difficulties = new LinkedHashMap<>(difficulties);
-            difficulties.put(defaultDifficulty, new DungeonDifficultySettings(
-                    Math.max(1, config.getInt("generation.algorithm.max-depth", 8)),
-                    "default"
-            ));
-            difficulties = Map.copyOf(difficulties);
-        }
-
         return new DungeonSettings(
                 Math.max(1, config.getInt("dungeon.base-distance-from-home", 512)),
                 Math.max(1, config.getInt("dungeon.round-spacing", 512)),
-                defaultDifficulty,
-                difficulties
+                Math.max(1, config.getInt("dungeon.default-max-depth", config.getInt("generation.algorithm.max-depth", 8)))
         );
     }
 
@@ -229,29 +217,6 @@ public final class SettingsLoader {
                 config.getInt(path + ".max.z", defaultMax.z())
         );
         return BlockBox.fromPoints(min, max);
-    }
-
-    private static Map<String, DungeonDifficultySettings> loadDungeonDifficulties(ConfigurationSection section) {
-        Map<String, DungeonDifficultySettings> difficulties = new LinkedHashMap<>();
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
-                ConfigurationSection difficulty = section.getConfigurationSection(key);
-                if (difficulty == null) {
-                    continue;
-                }
-                difficulties.put(
-                        key.toLowerCase(Locale.ROOT),
-                        new DungeonDifficultySettings(
-                                Math.max(1, difficulty.getInt("max-depth", 8)),
-                                requireText(difficulty.getString("template-preset"), "default").toLowerCase(Locale.ROOT)
-                        )
-                );
-            }
-        }
-        if (difficulties.isEmpty()) {
-            difficulties.put("normal", new DungeonDifficultySettings(8, "default"));
-        }
-        return Map.copyOf(difficulties);
     }
 
     private static Path resolvePath(JavaPlugin plugin, String value) {

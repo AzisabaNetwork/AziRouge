@@ -38,7 +38,7 @@ public final class GameSession {
     private IntVector3 currentDungeonOrigin;
     private BlockBox currentDungeonBounds;
     private String selectedPreset = "default";
-    private String selectedDifficulty;
+    private int maxDepth;
     private long sharedBalance;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
@@ -148,12 +148,12 @@ public final class GameSession {
         this.selectedPreset = selectedPreset;
     }
 
-    public String selectedDifficulty() {
-        return selectedDifficulty;
+    public int getMaxDepth() {
+        return maxDepth;
     }
 
-    public void setSelectedDifficulty(String selectedDifficulty) {
-        this.selectedDifficulty = selectedDifficulty;
+    public void setMaxDepth(int maxDepth) {
+        this.maxDepth = Math.max(1, maxDepth);
     }
 
     public long sharedBalance() {

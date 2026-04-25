@@ -45,11 +45,7 @@ home:
 dungeon:
   base-distance-from-home: 512
   round-spacing: 512
-  default-difficulty: normal
-  difficulties:
-    normal:
-      max-depth: 8
-      template-preset: default
+  default-max-depth: 8
 portals:
   home-to-dungeon:
     area:

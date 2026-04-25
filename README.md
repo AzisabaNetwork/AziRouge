@@ -223,10 +223,11 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 
 - `home.spawn` が session 参加時・帰還時の teleport 先です。
 - `home.area` は round end コマンドの実行可能範囲として使います。
-- `/azirouge round start [preset] [difficulty]` で round を開始します。
+- `/azirouge round start [preset] [maxDepth]` で round を開始します。難易度は `maxDepth` の整数値として扱います。
 - `/azirouge round end` で round を終了します。家エリア内の player なら誰でも実行できます。
 - DungeonGenerator は変更せず、session world 内の家から離れた未使用領域に dungeon を生成します。
 - 生成位置は `dungeon.base-distance-from-home` と `dungeon.round-spacing` を使って round ごとに割り当てます。
+- default の `maxDepth` は `dungeon.default-max-depth` で設定します。
 - round 中の途中参加・再接続は spectator/pending 扱いになり、次 round 開始時に SURVIVAL、health/food 初期化、home spawn teleport で復帰します。
 
 ## Portal
