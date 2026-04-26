@@ -94,7 +94,7 @@ economy:
     AMETHYST_SHARD: 3
     LAPIS_LAZULI: 2
 shop:
-  title: "AziRouge \u30B7\u30E7\u30C3\u30D7"
+  title: AziRouge Shop
   trades:
     in-round:
       - id: bread

@@ -125,7 +125,7 @@ public final class SettingsLoader {
 
     private static ShopSettings loadShopSettings(JavaPlugin plugin, FileConfiguration config) {
         return new ShopSettings(
-                requireText(config.getString("shop.title"), "AziRouge \u30B7\u30E7\u30C3\u30D7"),
+                requireText(config.getString("shop.title"), "AziRouge Shop"),
                 loadShopTrades(plugin, config.getList("shop.trades.in-round"), "shop.trades.in-round"),
                 loadShopTrades(plugin, config.getList("shop.trades.between-round"), "shop.trades.between-round")
         );

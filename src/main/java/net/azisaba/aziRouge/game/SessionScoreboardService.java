@@ -75,10 +75,9 @@ public final class SessionScoreboardService {
         Objective objective = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy", ChatColor.GOLD + "AziRouge");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        setLine(objective, ChatColor.YELLOW + "State: " + ChatColor.WHITE + session.state(), 6);
         setLine(objective, ChatColor.DARK_GRAY.toString(), 5);
-        setLine(objective, ChatColor.YELLOW + "Round: " + ChatColor.WHITE + session.currentRound(), 4);
-        setLine(objective, ChatColor.GRAY.toString(), 3);
+        setLine(objective, ChatColor.YELLOW + "State: " + ChatColor.WHITE + session.state().getDisplayName(), 4);
+        setLine(objective, ChatColor.YELLOW + "Round: " + ChatColor.WHITE + session.currentRound(), 3);
         setLine(objective, ChatColor.YELLOW + "Money: " + ChatColor.WHITE + session.sharedBalance(), 2);
         setLine(objective, ChatColor.BLACK.toString(), 1);
         setLine(objective, ChatColor.AQUA + SERVER_ADDRESS, 0);

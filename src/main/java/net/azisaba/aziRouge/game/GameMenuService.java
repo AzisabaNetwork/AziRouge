@@ -14,11 +14,15 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public final class GameMenuService implements Listener {
@@ -61,34 +65,51 @@ public final class GameMenuService implements Listener {
             return;
         }
 
-        Entity clicked = event.getRightClicked();
-        Set<String> tags = clicked.getScoreboardTags();
-        if (tags.contains(TAG_CREATE_SESSION)) {
+        Optional<String> trigger = resolveTrigger(event.getRightClicked());
+        if (trigger.isEmpty()) {
+            return;
+        }
+
+        if (TAG_CREATE_SESSION.equals(trigger.get())) {
             event.setCancelled(true);
             showCreateSessionDialog(event.getPlayer());
-        } else if (tags.contains(TAG_JOIN_SESSION)) {
+        } else if (TAG_JOIN_SESSION.equals(trigger.get())) {
             event.setCancelled(true);
             showJoinSessionDialog(event.getPlayer());
-        } else if (tags.contains(TAG_START_ROUND)) {
+        } else if (TAG_START_ROUND.equals(trigger.get())) {
             event.setCancelled(true);
             showStartRoundDialog(event.getPlayer());
-        } else if (tags.contains(TAG_END_ROUND)) {
+        } else if (TAG_END_ROUND.equals(trigger.get())) {
             event.setCancelled(true);
-            event.getPlayer().performCommand("azirouge round end");
-        } else if (tags.contains(TAG_MENU)) {
+            showEndRoundConfirmation(event.getPlayer());
+        } else if (TAG_MENU.equals(trigger.get())) {
+            event.setCancelled(true);
+            showMenuDialog(event.getPlayer());
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getHand() != EquipmentSlot.HAND || !isRightClick(event.getAction())) {
+            return;
+        }
+        ItemStack item = event.getItem();
+        if (GameOverItemSupport.isLeaveItem(plugin, item)) {
+            event.setCancelled(true);
+            event.getPlayer().performCommand("azirouge session leave");
+        } else if (GameOverItemSupport.isMenuItem(plugin, item)) {
             event.setCancelled(true);
             showMenuDialog(event.getPlayer());
         }
     }
 
     private void showCreateSessionDialog(Player player) {
-        showDialog(
+        showConfirmationDialog(
                 player,
                 text("Create Session"),
                 text("Create a new session."),
-                List.of(),
-                List.of(action("Create", "Create a session and move to the home world.", "/azirouge session create")),
-                1
+                action("Create", "Create a session and move to the home world.", "/azirouge session create"),
+                closeAction()
         );
     }
 
@@ -109,8 +130,18 @@ public final class GameMenuService implements Listener {
                 text("Start Round"),
                 text("Choose a depth and start the round."),
                 List.of(depthInput()),
-                List.of(action("Start", "Start the round with the selected depth.", "/azirouge round start default $(depth)")),
+                List.of(action("Start", "Start the round with the selected depth.", "/azirouge round start test $(depth)")),
                 1
+        );
+    }
+
+    private void showEndRoundConfirmation(Player player) {
+        showConfirmationDialog(
+                player,
+                text("End Round"),
+                text("End the current round? Loot will be sold and maintenance will be charged."),
+                action("End Round", "End the current round.", "/azirouge round end"),
+                closeAction()
         );
     }
 
@@ -121,7 +152,7 @@ public final class GameMenuService implements Listener {
         actions.add(action("Join Session", "Join the entered session ID.", "/azirouge session join $(sessionId)"));
         actions.add(action("List Sessions", "Show joinable sessions in chat.", "/azirouge session list"));
         actions.add(action("Leave Session", "Leave your current session.", "/azirouge session leave"));
-        actions.add(action("Start Round", "Start the round with the selected depth.", "/azirouge round start default $(depth)"));
+        actions.add(action("Start Round", "Start the round with the selected depth.", "/azirouge round start test $(depth)"));
         actions.add(action("End Round", "End the current round.", "/azirouge round end"));
 
         showDialog(
@@ -156,6 +187,23 @@ public final class GameMenuService implements Listener {
         player.showDialog(dialog);
     }
 
+    private void showConfirmationDialog(
+            Player player,
+            Component title,
+            Component description,
+            ActionButton yes,
+            ActionButton no
+    ) {
+        Dialog dialog = Dialog.create(builder -> builder.empty()
+                .base(DialogBase.builder(title)
+                        .body(List.of(DialogBody.plainMessage(description, 260)))
+                        .canCloseWithEscape(true)
+                        .pause(false)
+                        .build())
+                .type(DialogType.confirmation(yes, no)));
+        player.showDialog(dialog);
+    }
+
     private ActionButton action(String label, String tooltip, String commandTemplate) {
         return ActionButton.create(
                 text(label),
@@ -181,7 +229,7 @@ public final class GameMenuService implements Listener {
                 text(SESSION_ID),
                 true,
                 "",
-                32,
+                6,
                 null
         );
     }
@@ -196,7 +244,7 @@ public final class GameMenuService implements Listener {
                 1.0F,
                 settings.maxDepth(),
                 (float) settings.defaultDepth(),
-                null
+                1.0F
         );
     }
 
@@ -212,5 +260,30 @@ public final class GameMenuService implements Listener {
 
     private Component text(String value) {
         return Component.text(value);
+    }
+
+    private Optional<String> resolveTrigger(Entity clicked) {
+        Optional<String> direct = triggerFromTags(clicked.getScoreboardTags());
+        if (direct.isPresent()) {
+            return direct;
+        }
+        return clicked.getNearbyEntities(1.25D, 1.25D, 1.25D).stream()
+                .map(entity -> triggerFromTags(entity.getScoreboardTags()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .findFirst();
+    }
+
+    private Optional<String> triggerFromTags(Set<String> tags) {
+        for (String tag : List.of(TAG_CREATE_SESSION, TAG_JOIN_SESSION, TAG_START_ROUND, TAG_END_ROUND, TAG_MENU)) {
+            if (tags.contains(tag)) {
+                return Optional.of(tag);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private boolean isRightClick(Action action) {
+        return action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
     }
 }

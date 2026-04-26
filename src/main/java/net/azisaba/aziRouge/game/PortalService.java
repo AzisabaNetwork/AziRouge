@@ -105,8 +105,8 @@ public final class PortalService implements Listener {
                     player,
                     roundPortals.dungeonDestination(),
                     roundPortals.dungeonYawOffset(),
-                    ChatColor.DARK_PURPLE + "ダンジョンへ移動",
-                    ChatColor.GRAY + "戦利品を集めたら、ダンジョン内の帰還ポータルから戻ってください。"
+                    ChatColor.DARK_PURPLE + "Entering Dungeon",
+                    ChatColor.GRAY + "Collect loot, then return through the portal inside the dungeon."
             );
             return;
         }
@@ -115,8 +115,8 @@ public final class PortalService implements Listener {
                     player,
                     roundPortals.homeDestination(),
                     roundPortals.homeYawOffset(),
-                    ChatColor.GREEN + "家へ帰還",
-                    ChatColor.YELLOW + "全員の準備ができたら、家エリアでラウンドを終了してください。"
+                    ChatColor.GREEN + "Returned Home",
+                    ChatColor.YELLOW + "End the round in the home area when everyone is ready."
             );
         }
     }

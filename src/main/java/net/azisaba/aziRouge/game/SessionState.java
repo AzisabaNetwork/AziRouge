@@ -5,5 +5,15 @@ public enum SessionState {
     BETWEEN_ROUNDS,
     IN_ROUND,
     GAME_OVER,
-    CLOSING
+    CLOSING;
+
+    public String getDisplayName() {
+        return switch (this) {
+            case LOBBY -> "Lobby";
+            case BETWEEN_ROUNDS -> "Between Rounds";
+            case IN_ROUND -> "In Round";
+            case GAME_OVER -> "Game Over";
+            case CLOSING -> "Closing";
+        };
+    }
 }
