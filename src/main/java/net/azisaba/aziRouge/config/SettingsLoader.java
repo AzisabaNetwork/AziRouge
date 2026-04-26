@@ -65,6 +65,7 @@ public final class SettingsLoader {
                 loadEconomySettings(plugin, config),
                 loadShopSettings(plugin, config),
                 loadGuiSettings(config),
+                loadPlayerSettings(config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -137,6 +138,13 @@ public final class SettingsLoader {
         return new GuiSettings(
                 maxDepth,
                 defaultDepth
+        );
+    }
+
+    private static PlayerSettings loadPlayerSettings(FileConfiguration config) {
+        return new PlayerSettings(
+                Math.max(0.0D, config.getDouble("player.sprint-stamina.drain-per-second", 1.0D)),
+                Math.max(0.0D, config.getDouble("player.sprint-stamina.recovery-per-second", 1.5D))
         );
     }
 

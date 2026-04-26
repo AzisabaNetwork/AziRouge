@@ -84,6 +84,15 @@ public final class GameSessionManager {
         return List.copyOf(sessionsById.values());
     }
 
+    public boolean isActivePlaying(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        return session != null
+                && session.state() == SessionState.IN_ROUND
+                && session.alivePlayers().contains(player.getUniqueId())
+                && player.getWorld().getUID().equals(session.world().getUID())
+                && player.getGameMode() != GameMode.SPECTATOR;
+    }
+
     public void cleanupLeftoverWorldFoldersOnStartup() {
         sessionWorldService.cleanupLeftoverWorldFoldersOnStartup();
     }
@@ -1098,7 +1107,7 @@ public final class GameSessionManager {
             player.setHealth(maxHealth.getValue());
         }
 
-        player.setFoodLevel(0);
+        player.setFoodLevel(20);
     }
 
     private void restorePlayerAttributes(Player player) {

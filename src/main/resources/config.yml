@@ -126,6 +126,10 @@ gui:
   depth:
     max: 12
     default: 8
+player:
+  sprint-stamina:
+    drain-per-second: 1.0
+    recovery-per-second: 1.5
 enemies:
   enabled: false
   mode: reserved

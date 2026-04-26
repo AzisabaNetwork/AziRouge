@@ -11,6 +11,7 @@ public record PluginSettings(
         EconomySettings economy,
         ShopSettings shop,
         GuiSettings gui,
+        PlayerSettings player,
         EnemySettings enemies,
         AziRougeSettings azirouge
 ) {

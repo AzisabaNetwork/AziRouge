@@ -1,7 +1,9 @@
 package net.azisaba.aziRouge.dungeon;
 
 import net.azisaba.aziRouge.AziRouge;
+import net.azisaba.aziRouge.game.PlayerInventorySupport;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
@@ -14,7 +16,6 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.Map;
 import java.util.UUID;
 
 public final class TreasurePickupListener implements Listener {
@@ -66,10 +67,11 @@ public final class TreasurePickupListener implements Listener {
             return;
         }
 
-        Map<Integer, ItemStack> overflow = event.getPlayer().getInventory().addItem(reward.clone());
-        for (ItemStack itemStack : overflow.values()) {
-            event.getPlayer().getWorld().dropItemNaturally(event.getPlayer().getLocation(), itemStack);
+        if (!PlayerInventorySupport.canFitHotbar(event.getPlayer().getInventory(), reward)) {
+            event.getPlayer().sendMessage(ChatColor.RED + "Your hotbar is full. Clear a hotbar slot before picking up treasure.");
+            return;
         }
+        PlayerInventorySupport.addToHotbar(event.getPlayer().getInventory(), reward.clone());
 
         event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8F, 1.1F);
         display.remove();

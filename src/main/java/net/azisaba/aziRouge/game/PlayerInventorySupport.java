@@ -6,7 +6,7 @@ import org.bukkit.inventory.PlayerInventory;
 
 import java.util.Map;
 
-final class PlayerInventorySupport {
+public final class PlayerInventorySupport {
     private PlayerInventorySupport() {
     }
 
@@ -24,6 +24,47 @@ final class PlayerInventorySupport {
             }
         }
         return false;
+    }
+
+    public static boolean canFitHotbar(PlayerInventory inventory, ItemStack candidate) {
+        int remaining = candidate.getAmount();
+        for (int slot = 0; slot <= 8; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType().isAir()) {
+                return true;
+            }
+            if (item.isSimilar(candidate)) {
+                remaining -= Math.max(0, item.getMaxStackSize() - item.getAmount());
+                if (remaining <= 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static void addToHotbar(PlayerInventory inventory, ItemStack candidate) {
+        int remaining = candidate.getAmount();
+        for (int slot = 0; slot <= 8 && remaining > 0; slot++) {
+            ItemStack item = inventory.getItem(slot);
+            if (item == null || item.getType().isAir()) {
+                ItemStack placed = candidate.clone();
+                placed.setAmount(Math.min(remaining, candidate.getMaxStackSize()));
+                inventory.setItem(slot, placed);
+                remaining -= placed.getAmount();
+                continue;
+            }
+            if (item.isSimilar(candidate)) {
+                int addable = Math.min(remaining, item.getMaxStackSize() - item.getAmount());
+                if (addable > 0) {
+                    item.setAmount(item.getAmount() + addable);
+                    remaining -= addable;
+                }
+            }
+        }
+        if (remaining > 0) {
+            throw new IllegalStateException("item does not fit in hotbar");
+        }
     }
 
     static SaleResult sellPricedStorageContents(PlayerInventory inventory, Map<Material, Long> prices) {

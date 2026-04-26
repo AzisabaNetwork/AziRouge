@@ -19,6 +19,7 @@ import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.game.SessionGameplayService;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
 import net.azisaba.aziRouge.game.SessionScoreboardService;
@@ -47,6 +48,7 @@ public final class AziRouge extends JavaPlugin {
     private ShopService shopService;
     private GameMenuService gameMenuService;
     private SessionScoreboardService sessionScoreboardService;
+    private SessionGameplayService sessionGameplayService;
 
     @Override
     public void onEnable() {
@@ -66,6 +68,9 @@ public final class AziRouge extends JavaPlugin {
         }
         if (sessionScoreboardService != null) {
             sessionScoreboardService.shutdown();
+        }
+        if (sessionGameplayService != null) {
+            sessionGameplayService.shutdown();
         }
         if (portalService != null) {
             portalService.shutdown();
@@ -137,8 +142,12 @@ public final class AziRouge extends JavaPlugin {
         if (sessionScoreboardService == null) {
             this.sessionScoreboardService = new SessionScoreboardService(this, gameSessionManager);
         }
+        if (sessionGameplayService == null) {
+            this.sessionGameplayService = new SessionGameplayService(this, gameSessionManager);
+        }
         gameMenuService.refresh();
         sessionScoreboardService.start();
+        sessionGameplayService.start();
     }
 
     public PluginSettings settings() {
@@ -197,6 +206,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(portalService, this);
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
+        getServer().getPluginManager().registerEvents(sessionGameplayService, this);
     }
 
     private SchematicAdapter createSchematicAdapter() {

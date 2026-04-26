@@ -10,6 +10,7 @@ import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.GuiSettings;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -209,7 +210,9 @@ public final class GameMenuService implements Listener {
                 text(label),
                 text(tooltip),
                 160,
-                DialogAction.commandTemplate(commandTemplate)
+                commandTemplate.contains("$(")
+                        ? DialogAction.commandTemplate(commandTemplate)
+                        : DialogAction.staticAction(ClickEvent.runCommand(commandTemplate))
         );
     }
 
