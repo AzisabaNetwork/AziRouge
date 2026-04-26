@@ -21,6 +21,7 @@ import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
+import net.azisaba.aziRouge.game.SessionScoreboardService;
 import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.game.ShopService;
 import net.azisaba.aziRouge.game.GameMenuService;
@@ -45,6 +46,7 @@ public final class AziRouge extends JavaPlugin {
     private EconomyService economyService;
     private ShopService shopService;
     private GameMenuService gameMenuService;
+    private SessionScoreboardService sessionScoreboardService;
 
     @Override
     public void onEnable() {
@@ -61,6 +63,9 @@ public final class AziRouge extends JavaPlugin {
     public void onDisable() {
         if (gameSessionManager != null) {
             gameSessionManager.shutdown();
+        }
+        if (sessionScoreboardService != null) {
+            sessionScoreboardService.shutdown();
         }
         if (portalService != null) {
             portalService.shutdown();
@@ -129,7 +134,11 @@ public final class AziRouge extends JavaPlugin {
         if (gameMenuService == null) {
             this.gameMenuService = new GameMenuService(this);
         }
+        if (sessionScoreboardService == null) {
+            this.sessionScoreboardService = new SessionScoreboardService(this, gameSessionManager);
+        }
         gameMenuService.refresh();
+        sessionScoreboardService.start();
     }
 
     public PluginSettings settings() {
