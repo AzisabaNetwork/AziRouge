@@ -125,20 +125,15 @@ public final class SettingsLoader {
 
     private static ShopSettings loadShopSettings(JavaPlugin plugin, FileConfiguration config) {
         return new ShopSettings(
-                requireText(config.getString("shop.title"), "AziRouge ショップ"),
+                requireText(config.getString("shop.title"), "AziRouge \u30B7\u30E7\u30C3\u30D7"),
                 loadShopTrades(plugin, config.getList("shop.trades.in-round"), "shop.trades.in-round"),
                 loadShopTrades(plugin, config.getList("shop.trades.between-round"), "shop.trades.between-round")
         );
     }
 
     private static GuiSettings loadGuiSettings(FileConfiguration config) {
-        List<Integer> depthOptions = config.getIntegerList("gui.depth-options").stream()
-                .map(value -> Math.max(1, value))
-                .distinct()
-                .toList();
-        if (depthOptions.isEmpty()) {
-            depthOptions = List.of(4, 8, 12);
-        }
+        int maxDepth = Math.max(1, config.getInt("gui.depth.max", config.getInt("dungeon.default-max-depth", 8)));
+        int defaultDepth = clampInt(config.getInt("gui.depth.default", config.getInt("dungeon.default-max-depth", 8)), 1, maxDepth);
         return new GuiSettings(
                 requireText(config.getString("gui.world"), config.getString("generation.world", "world")),
                 new IntVector3(
@@ -147,8 +142,9 @@ public final class SettingsLoader {
                         config.getInt("gui.text-display.z", 0)
                 ),
                 (float) config.getDouble("gui.text-display.yaw", 0.0D),
-                requireText(config.getString("gui.text-display.text"), "AziRouge\n右クリックで開始"),
-                List.copyOf(depthOptions)
+                requireText(config.getString("gui.text-display.text"), "AziRouge\n\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u958B\u59CB"),
+                maxDepth,
+                defaultDepth
         );
     }
 

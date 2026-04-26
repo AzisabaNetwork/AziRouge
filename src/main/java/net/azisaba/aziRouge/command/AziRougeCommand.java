@@ -818,7 +818,12 @@ public final class AziRougeCommand implements TabExecutor {
             int parsed = Integer.parseInt(value);
             return parsed <= 0 ? null : parsed;
         } catch (NumberFormatException ex) {
-            return null;
+            try {
+                int parsed = Math.round(Float.parseFloat(value));
+                return parsed <= 0 ? null : parsed;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         }
     }
 

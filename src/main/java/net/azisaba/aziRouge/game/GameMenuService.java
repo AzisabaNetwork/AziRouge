@@ -5,6 +5,7 @@ import io.papermc.paper.registry.data.dialog.ActionButton;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.action.DialogAction;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.GuiSettings;
@@ -82,21 +83,20 @@ public final class GameMenuService implements Listener {
         List<ActionButton> actions = new ArrayList<>();
         actions.add(ActionButton.create(
                 Component.text("セッションを作成"),
-                Component.text("新しいAziRougeセッションを作成します。"),
+                Component.text("新しいセッションを作成します。"),
                 160,
                 DialogAction.commandTemplate("/azirouge session create")
         ));
 
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-        if (session != null && (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS)) {
-            for (int depth : plugin.settings().gui().depthOptions()) {
-                actions.add(ActionButton.create(
-                        Component.text("ラウンド開始 depth " + depth),
-                        Component.text("現在のセッションで depth " + depth + " のラウンドを開始します。"),
-                        160,
-                        DialogAction.commandTemplate("/azirouge round start default " + depth)
-                ));
-            }
+        boolean canStartRound = session != null && (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS);
+        if (canStartRound) {
+            actions.add(ActionButton.create(
+                    Component.text("ラウンド開始"),
+                    Component.text("現在のセッションでラウンドを開始します。"),
+                    160,
+                    DialogAction.commandTemplate("/azirouge round start default $(depth)")
+            ));
         } else if (session == null) {
             actions.add(ActionButton.create(
                     Component.text("セッション一覧"),
@@ -112,9 +112,11 @@ public final class GameMenuService implements Listener {
                 80,
                 null
         );
+        List<DialogInput> inputs = canStartRound ? List.of(depthInput()) : List.of();
         Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(Component.text("AziRouge メニュー"))
+                .base(DialogBase.builder(Component.text("\u30E1\u30CB\u30E5\u30FC"))
                         .body(List.of(DialogBody.plainMessage(Component.text(menuDescription(session)), 260)))
+                        .inputs(inputs)
                         .canCloseWithEscape(true)
                         .pause(false)
                         .build())
@@ -123,6 +125,20 @@ public final class GameMenuService implements Listener {
                         .exitAction(exit)
                         .build()));
         player.showDialog(dialog);
+    }
+
+    private DialogInput depthInput() {
+        GuiSettings settings = plugin.settings().gui();
+        return DialogInput.numberRange(
+                "depth",
+                200,
+                Component.text("depth"),
+                "%s: %s",
+                1.0F,
+                settings.maxDepth(),
+                (float) settings.defaultDepth(),
+                null
+        );
     }
 
     private String menuDescription(GameSession session) {
