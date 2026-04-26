@@ -123,13 +123,6 @@ shop:
         amount: 3
         price: 36
 gui:
-  world: world
-  text-display:
-    x: 0
-    y: 65
-    z: 0
-    yaw: 0.0
-    text: "AziRouge\n\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u958B\u59CB"
   depth:
     max: 12
     default: 8

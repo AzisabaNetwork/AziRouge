@@ -135,14 +135,6 @@ public final class SettingsLoader {
         int maxDepth = Math.max(1, config.getInt("gui.depth.max", config.getInt("dungeon.default-max-depth", 8)));
         int defaultDepth = clampInt(config.getInt("gui.depth.default", config.getInt("dungeon.default-max-depth", 8)), 1, maxDepth);
         return new GuiSettings(
-                requireText(config.getString("gui.world"), config.getString("generation.world", "world")),
-                new IntVector3(
-                        config.getInt("gui.text-display.x", 0),
-                        config.getInt("gui.text-display.y", 65),
-                        config.getInt("gui.text-display.z", 0)
-                ),
-                (float) config.getDouble("gui.text-display.yaw", 0.0D),
-                requireText(config.getString("gui.text-display.text"), "AziRouge\n\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u958B\u59CB"),
                 maxDepth,
                 defaultDepth
         );
