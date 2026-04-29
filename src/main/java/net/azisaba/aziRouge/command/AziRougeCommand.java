@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements TabExecutor {
@@ -175,31 +176,33 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
 
+        TemplateSelection templateSelection;
         try {
-            TemplateSelection templateSelection = resolveTemplateSelection(
+            templateSelection = resolveTemplateSelection(
                     plugin.settings().generation(),
                     args.length == 0 ? null : args[0],
                     null,
                     null
             );
-            GameSession session = plugin.gameSessionManager().startSession(
-                    player,
-                    templateSelection.templatePatterns(),
-                    templateSelection.startPieceId()
-            );
+        } catch (IllegalArgumentException ex) {
+            error(sender, ex.getMessage());
+            return true;
+        }
+        info(sender, "Creating session...");
+        plugin.gameSessionManager().startSessionAsync(
+                player,
+                templateSelection.templatePatterns(),
+                templateSelection.startPieceId()
+        ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
+            if (ex != null) {
+                reportSessionCreationFailure(sender, "Session start failed", ex);
+                return;
+            }
             success(sender, "Started a new session in world " + session.world().getName()
                     + " id=" + session.sessionId()
                     + " money=" + session.sharedBalance()
                     + " using template preset " + templateSelection.presetName() + ".");
-        } catch (TemplateLoadException | SchematicPlacementException ex) {
-            error(sender, "Session start failed: " + ex.getMessage());
-            plugin.getLogger().warning("Session start failed: " + ex.getMessage());
-        } catch (IllegalArgumentException ex) {
-            error(sender, ex.getMessage());
-        } catch (IllegalStateException ex) {
-            error(sender, ex.getMessage());
-            plugin.getLogger().warning("Session start failed: " + ex.getMessage());
-        }
+        }));
         return true;
     }
 
@@ -239,22 +242,21 @@ public final class AziRougeCommand implements TabExecutor {
         int maxPlayers = args.length == 0
                 ? plugin.settings().sessions().defaultMaxPlayers()
                 : parseInt(args[0], plugin.settings().sessions().defaultMaxPlayers());
-        try {
-            GameSession session = plugin.gameSessionManager().startSession(player,
-                    plugin.settings().generation().templatePatterns(),
-                    plugin.settings().generation().startPieceId(),
-                    maxPlayers);
+        info(sender, "Creating session...");
+        plugin.gameSessionManager().startSessionAsync(player,
+                plugin.settings().generation().templatePatterns(),
+                plugin.settings().generation().startPieceId(),
+                maxPlayers
+        ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
+            if (ex != null) {
+                reportSessionCreationFailure(sender, "Session creation failed", ex);
+                return;
+            }
             success(sender, "Created session " + session.sessionId()
                     + " players=1/" + session.maxPlayers()
                     + " money=" + session.sharedBalance()
                     + " world=" + session.world().getName() + ".");
-        } catch (TemplateLoadException | SchematicPlacementException ex) {
-            error(sender, "Session creation failed: " + ex.getMessage());
-            plugin.getLogger().warning("Session creation failed: " + ex.getMessage());
-        } catch (IllegalArgumentException | IllegalStateException ex) {
-            error(sender, ex.getMessage());
-            plugin.getLogger().warning("Session creation failed: " + ex.getMessage());
-        }
+        }));
         return true;
     }
 
@@ -302,7 +304,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleSessionList(CommandSender sender) {
-        if (!sender.hasPermission("azirouge.session")) {
+        if (!sender.hasPermission("azirouge.session.list")) {
             error(sender, "You do not have permission to manage AziRouge sessions.");
             return true;
         }
@@ -871,6 +873,21 @@ public final class AziRougeCommand implements TabExecutor {
 
     private void error(CommandSender sender, String message) {
         sender.sendMessage(PREFIX + ChatColor.RED + message);
+    }
+
+    private void reportSessionCreationFailure(CommandSender sender, String prefix, Throwable throwable) {
+        Throwable cause = unwrapCompletionException(throwable);
+        String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+        error(sender, prefix + ": " + message);
+        plugin.getLogger().warning(prefix + ": " + message);
+    }
+
+    private Throwable unwrapCompletionException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof CompletionException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private TemplateSelection resolveTemplateSelection(

@@ -26,6 +26,7 @@ import net.azisaba.aziRouge.game.SessionScoreboardService;
 import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.game.ShopService;
 import net.azisaba.aziRouge.game.GameMenuService;
+import net.azisaba.aziRouge.listener.GlobalJoinQuitListener;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -207,6 +208,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);
+        getServer().getPluginManager().registerEvents(new GlobalJoinQuitListener(this), this);
     }
 
     private SchematicAdapter createSchematicAdapter() {

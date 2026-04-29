@@ -6,11 +6,13 @@ import org.bukkit.World;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Comparator;
 import java.util.List;
@@ -56,12 +58,17 @@ final class SessionWorldService {
 
     void copyTemplateWorld(Path destination, String worldName) {
         Path source = plugin.settings().sessions().homeTemplateWorldPath().toAbsolutePath().normalize();
+        copyTemplateWorld(source, destination, worldName);
+    }
+
+    void copyTemplateWorld(Path source, Path destination, String worldName) {
+        Path sourceRoot = source.toAbsolutePath().normalize();
         Path target = destination.toAbsolutePath().normalize();
-        if (!Files.isDirectory(source)) {
-            throw new IllegalStateException("Home template world folder not found: " + source);
+        if (!Files.isDirectory(sourceRoot)) {
+            throw new IllegalStateException("Home template world folder not found: " + sourceRoot);
         }
-        if (source.equals(target) || target.startsWith(source)) {
-            throw new IllegalStateException("Home template world path must not point to a session world folder: " + source);
+        if (sourceRoot.equals(target) || target.startsWith(sourceRoot)) {
+            throw new IllegalStateException("Home template world path must not point to a session world folder: " + sourceRoot);
         }
         if (Files.exists(target)) {
             deleteWorldFolder(target, worldName);
@@ -69,10 +76,10 @@ final class SessionWorldService {
 
         try {
             Files.createDirectories(target);
-            Files.walkFileTree(source, new SimpleFileVisitor<>() {
+            Files.walkFileTree(sourceRoot, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    Path relative = source.relativize(dir);
+                    Path relative = sourceRoot.relativize(dir);
                     if (isExcludedTemplateDirectory(relative)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
@@ -82,9 +89,9 @@ final class SessionWorldService {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    Path relative = source.relativize(file);
+                    Path relative = sourceRoot.relativize(file);
                     if (!isExcludedTemplateFile(relative)) {
-                        Files.copy(file, target.resolve(relative), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                        copyFileByStream(file, target.resolve(relative), attrs);
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -93,6 +100,31 @@ final class SessionWorldService {
             deleteWorldFolder(target, worldName);
             throw new IllegalStateException("Failed to copy home template world for session " + worldName + ": " + ex.getMessage(), ex);
         }
+    }
+
+    private void copyFileByStream(Path source, Path destination, BasicFileAttributes attrs) throws IOException {
+        Path parent = destination.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+
+        try (
+                InputStream input = Files.newInputStream(source, StandardOpenOption.READ);
+                OutputStream output = Files.newOutputStream(
+                        destination,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.WRITE
+                )
+        ) {
+            byte[] buffer = new byte[1024 * 1024];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                output.write(buffer, 0, read);
+            }
+        }
+
+        Files.setLastModifiedTime(destination, attrs.lastModifiedTime());
     }
 
     void cleanupWorld(World world) {

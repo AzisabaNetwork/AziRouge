@@ -13,7 +13,7 @@ commands:
 permissions:
   azirouge.command:
     description: Allows using the AziRouge command.
-    default: op
+    default: true
   azirouge.start:
     description: Allows creating an AziRouge session with the legacy start command.
     default: op
@@ -21,10 +21,13 @@ permissions:
     description: Allows ending AziRouge sessions.
     default: op
   azirouge.session:
-    description: Allows creating, joining, leaving, and listing AziRouge sessions.
-    default: op
+    description: Allows creating, joining and leaving AziRouge sessions.
+    default: true
   azirouge.session.forceend:
     description: Allows force-ending any AziRouge session.
+    default: op
+  azirouge.session.list:
+    description: Allows listing all active AziRouge sessions.
     default: op
   azirouge.money:
     description: Allows viewing and editing AziRouge session money.
@@ -40,4 +43,7 @@ permissions:
     default: op
   azirouge.command.author:
     description: Allows editing templates in-game.
+    default: op
+  azirouge.beta.join:
+    description: Allows joining an AziRouge beta session.
     default: op

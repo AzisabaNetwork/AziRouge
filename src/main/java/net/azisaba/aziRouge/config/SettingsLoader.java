@@ -75,6 +75,9 @@ public final class SettingsLoader {
                         loadChestSettings(plugin, config),
                         loadTreasureSettings(plugin, config),
                         loadTrapSettings(config)
+                ),
+                new JoinSettings(
+                        config.getBoolean("join.isbeta", false)
                 )
         );
     }

@@ -84,6 +84,7 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.MAX_HEALTH, settings.maxHealth());
         applyAttribute(mob, Attribute.MOVEMENT_SPEED, settings.movementSpeed());
         applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
+        applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
         ((Mob) mob).getPathfinder().setCanOpenDoors(true);
     }

@@ -10,6 +10,7 @@ import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.GuiSettings;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -29,8 +30,10 @@ import java.util.Set;
 public final class GameMenuService implements Listener {
     private static final String TAG_CREATE_SESSION = "create_session";
     private static final String TAG_JOIN_SESSION = "join_session";
+    private static final String TAG_LEAVE_SESSION = "leave_session";
     private static final String TAG_START_ROUND = "start_round";
     private static final String TAG_END_ROUND = "end_round";
+    private static final String TAG_ROUND = "round";
     private static final String TAG_MENU = "menu";
 
     private static final String SESSION = "Session";
@@ -77,19 +80,25 @@ public final class GameMenuService implements Listener {
         } else if (TAG_JOIN_SESSION.equals(trigger.get())) {
             event.setCancelled(true);
             showJoinSessionDialog(event.getPlayer());
+        } else if (TAG_LEAVE_SESSION.equals(trigger.get())) {
+            event.setCancelled(true);
+            showLeaveSessionConfirmation(event.getPlayer());
         } else if (TAG_START_ROUND.equals(trigger.get())) {
             event.setCancelled(true);
             showStartRoundDialog(event.getPlayer());
         } else if (TAG_END_ROUND.equals(trigger.get())) {
             event.setCancelled(true);
             showEndRoundConfirmation(event.getPlayer());
+        } else if (TAG_ROUND.equals(trigger.get())) {
+            event.setCancelled(true);
+            showRoundDialog(event.getPlayer());
         } else if (TAG_MENU.equals(trigger.get())) {
             event.setCancelled(true);
             showMenuDialog(event.getPlayer());
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND || !isRightClick(event.getAction())) {
             return;
@@ -125,6 +134,20 @@ public final class GameMenuService implements Listener {
         );
     }
 
+    private void showLeaveSessionConfirmation(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        String description = session == null
+                ? "You are not currently in a session."
+                : "Leave session " + session.sessionId() + "? You can join another session after leaving.";
+        showConfirmationDialog(
+                player,
+                text("Leave Session"),
+                text(description),
+                action("Leave Session", "Leave your current session.", "/azirouge session leave"),
+                menuAction("Back", "Return to the session menu.", this::showSessionMenuDialog)
+        );
+    }
+
     private void showStartRoundDialog(Player player) {
         showDialog(
                 player,
@@ -148,19 +171,62 @@ public final class GameMenuService implements Listener {
 
     private void showMenuDialog(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-        List<ActionButton> actions = new ArrayList<>();
-        actions.add(action("Create Session", "Create a new session.", "/azirouge session create"));
-        actions.add(action("Join Session", "Join the entered session ID.", "/azirouge session join $(sessionId)"));
-        actions.add(action("List Sessions", "Show joinable sessions in chat.", "/azirouge session list"));
-        actions.add(action("Leave Session", "Leave your current session.", "/azirouge session leave"));
-        actions.add(action("Start Round", "Start the round with the selected depth.", "/azirouge round start test $(depth)"));
-        actions.add(action("End Round", "End the current round.", "/azirouge round end"));
-
         showDialog(
                 player,
                 text("AziRouge " + MENU),
                 text(menuDescription(session)),
-                List.of(sessionIdInput(), depthInput()),
+                List.of(),
+                List.of(
+                        menuAction("Session", "Open session actions.", this::showSessionMenuDialog),
+                        menuAction("Round", "Open round actions.", this::showRoundDialog),
+                        action("List Sessions", "Show active sessions in chat.", "/azirouge session list"),
+                        closeAction()
+                ),
+                2
+        );
+    }
+
+    private void showSessionMenuDialog(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        List<ActionButton> actions = new ArrayList<>();
+        actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
+        actions.add(menuAction("Join Session", "Enter a session ID and join.", this::showJoinSessionDialog));
+        actions.add(action("List Sessions", "Show joinable sessions in chat.", "/azirouge session list"));
+        actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
+        actions.add(menuAction("Back", "Return to the main menu.", this::showMenuDialog));
+
+        showDialog(
+                player,
+                text(SESSION + " " + MENU),
+                text(menuDescription(session)),
+                List.of(),
+                actions,
+                2
+        );
+    }
+
+    private void showRoundDialog(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        List<ActionButton> actions = new ArrayList<>();
+        if (session == null) {
+            actions.add(menuAction("Join Session", "Enter a session ID and join.", this::showJoinSessionDialog));
+            actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
+        } else if (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS) {
+            actions.add(menuAction("Start Round", "Choose a depth and start the round.", this::showStartRoundDialog));
+            actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
+        } else if (session.state() == SessionState.IN_ROUND) {
+            actions.add(menuAction("End Round", "Open the end round confirmation.", this::showEndRoundConfirmation));
+        } else if (session.state() == SessionState.GAME_OVER) {
+            actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
+            actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
+        }
+        actions.add(menuAction("Back", "Return to the main menu.", this::showMenuDialog));
+
+        showDialog(
+                player,
+                text(ROUND + " " + MENU),
+                text(roundDescription(session)),
+                List.of(),
                 actions,
                 2
         );
@@ -216,6 +282,25 @@ public final class GameMenuService implements Listener {
         );
     }
 
+    private ActionButton menuAction(String label, String tooltip, PlayerDialogCallback callback) {
+        return ActionButton.create(
+                text(label),
+                text(tooltip),
+                160,
+                DialogAction.customClick(
+                        (view, audience) -> {
+                            if (audience instanceof Player player) {
+                                callback.accept(player);
+                            }
+                        },
+                        ClickCallback.Options.builder()
+                                .uses(1)
+                                .lifetime(ClickCallback.DEFAULT_LIFETIME)
+                                .build()
+                )
+        );
+    }
+
     private ActionButton closeAction() {
         return ActionButton.create(
                 text(CLOSE),
@@ -253,12 +338,23 @@ public final class GameMenuService implements Listener {
 
     private String menuDescription(GameSession session) {
         if (session == null) {
-            return "Create a session, join a session, or list active sessions. Enter a session ID before joining.";
+            return "Create a session, join a session, or list active sessions.";
         }
         return "Current session: " + session.sessionId()
                 + "\nState: " + session.state()
                 + "\nShared balance: " + session.sharedBalance()
-                + "\nChoose a depth before starting a round.";
+                + "\nRound: " + session.currentRound();
+    }
+
+    private String roundDescription(GameSession session) {
+        if (session == null) {
+            return "You are not in a session. Join or create a session before starting a round.";
+        }
+        return "Session: " + session.sessionId()
+                + "\nState: " + session.state()
+                + "\nRound: " + session.currentRound()
+                + "\nDepth: " + session.getMaxDepth()
+                + "\nShared balance: " + session.sharedBalance();
     }
 
     private Component text(String value) {
@@ -278,7 +374,15 @@ public final class GameMenuService implements Listener {
     }
 
     private Optional<String> triggerFromTags(Set<String> tags) {
-        for (String tag : List.of(TAG_CREATE_SESSION, TAG_JOIN_SESSION, TAG_START_ROUND, TAG_END_ROUND, TAG_MENU)) {
+        for (String tag : List.of(
+                TAG_CREATE_SESSION,
+                TAG_JOIN_SESSION,
+                TAG_LEAVE_SESSION,
+                TAG_START_ROUND,
+                TAG_END_ROUND,
+                TAG_ROUND,
+                TAG_MENU
+        )) {
             if (tags.contains(tag)) {
                 return Optional.of(tag);
             }
@@ -288,5 +392,10 @@ public final class GameMenuService implements Listener {
 
     private boolean isRightClick(Action action) {
         return action == Action.RIGHT_CLICK_AIR || action == Action.RIGHT_CLICK_BLOCK;
+    }
+
+    @FunctionalInterface
+    private interface PlayerDialogCallback {
+        void accept(Player player);
     }
 }

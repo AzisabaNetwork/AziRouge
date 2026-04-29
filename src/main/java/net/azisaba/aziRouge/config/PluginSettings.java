@@ -13,6 +13,7 @@ public record PluginSettings(
         GuiSettings gui,
         PlayerSettings player,
         EnemySettings enemies,
-        AziRougeSettings azirouge
+        AziRougeSettings azirouge,
+        JoinSettings joinSettings
 ) {
 }

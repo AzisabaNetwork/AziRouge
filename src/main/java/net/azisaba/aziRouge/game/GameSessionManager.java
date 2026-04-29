@@ -25,12 +25,15 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -39,8 +42,8 @@ public final class GameSessionManager {
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
-            Attribute.ATTACK_SPEED, 5.0D,
-            Attribute.ENTITY_INTERACTION_RANGE, 2D
+            Attribute.ATTACK_SPEED, 2.0D,
+            Attribute.ENTITY_INTERACTION_RANGE, 2.3D
     );
 
     private final AziRouge plugin;
@@ -52,6 +55,7 @@ public final class GameSessionManager {
     private final Map<UUID, PlayerAttributeSnapshot> playerAttributeSnapshots = new HashMap<>();
     private final Map<UUID, GameMode> playerGameModeSnapshots = new HashMap<>();
     private final Map<UUID, PlayerVitalsSnapshot> playerVitalsSnapshots = new HashMap<>();
+    private final Set<UUID> pendingSessionCreations = new HashSet<>();
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
         this.plugin = plugin;
@@ -102,9 +106,68 @@ public final class GameSessionManager {
         return startSession(player, generation.templatePatterns(), generation.startPieceId());
     }
 
+    public CompletableFuture<GameSession> startSessionAsync(Player player) {
+        GenerationSettings generation = plugin.settings().generation();
+        return startSessionAsync(player, generation.templatePatterns(), generation.startPieceId());
+    }
+
     public GameSession startSession(Player player, List<String> templatePatterns, String startPieceId)
             throws TemplateLoadException, SchematicPlacementException {
         return startSession(player, templatePatterns, startPieceId, plugin.settings().sessions().defaultMaxPlayers());
+    }
+
+    public CompletableFuture<GameSession> startSessionAsync(Player player, List<String> templatePatterns, String startPieceId) {
+        return startSessionAsync(player, templatePatterns, startPieceId, plugin.settings().sessions().defaultMaxPlayers());
+    }
+
+    public CompletableFuture<GameSession> startSessionAsync(
+            Player player,
+            List<String> templatePatterns,
+            String startPieceId,
+            int requestedMaxPlayers
+    ) {
+        CompletableFuture<GameSession> future = new CompletableFuture<>();
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> startSessionAsync(player, templatePatterns, startPieceId, requestedMaxPlayers)
+                    .whenComplete((session, ex) -> {
+                        if (ex != null) {
+                            future.completeExceptionally(ex);
+                        } else {
+                            future.complete(session);
+                        }
+                    }));
+            return future;
+        }
+
+        SessionCreationPlan plan;
+        try {
+            plan = prepareSessionCreation(player, requestedMaxPlayers);
+        } catch (RuntimeException ex) {
+            future.completeExceptionally(ex);
+            return future;
+        }
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                sessionWorldService.copyTemplateWorld(plan.templateWorldFolder(), plan.worldFolder(), plan.worldName());
+            } catch (RuntimeException ex) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    pendingSessionCreations.remove(plan.playerId());
+                    future.completeExceptionally(ex);
+                });
+                return;
+            }
+
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                try {
+                    future.complete(createSessionAfterTemplateCopy(player, plan));
+                } catch (RuntimeException ex) {
+                    future.completeExceptionally(ex);
+                }
+            });
+        });
+
+        return future;
     }
 
     public GameSession startSession(Player player, List<String> templatePatterns, String startPieceId, int requestedMaxPlayers)
@@ -133,62 +196,93 @@ public final class GameSessionManager {
             }
         }
 
+        SessionCreationPlan plan = prepareSessionCreation(player, requestedMaxPlayers);
+        try {
+            sessionWorldService.copyTemplateWorld(plan.templateWorldFolder(), plan.worldFolder(), plan.worldName());
+            return createSessionAfterTemplateCopy(player, plan);
+        } catch (RuntimeException ex) {
+            pendingSessionCreations.remove(plan.playerId());
+            throw ex;
+        }
+    }
+
+    private SessionCreationPlan prepareSessionCreation(Player player, int requestedMaxPlayers) {
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
             throw new IllegalStateException("You are already in another session. Leave it first.");
         }
-
         int maxPlayers = validateMaxPlayers(requestedMaxPlayers);
+        if (!pendingSessionCreations.add(player.getUniqueId())) {
+            throw new IllegalStateException("A session is already being created for you.");
+        }
+
         String sessionId = allocateSessionId();
         String worldName = plugin.settings().sessions().worldNamePrefix() + sessionId;
         Path worldFolder = sessionWorldService.sessionWorldFolder(worldName);
-        sessionWorldService.copyTemplateWorld(worldFolder, worldName);
-        World world = Bukkit.createWorld(new WorldCreator(worldName));
-        if (world == null) {
-            sessionWorldService.deleteWorldFolder(worldFolder, worldName);
-            throw new IllegalStateException("Failed to create session world: " + worldName);
-        }
-        world.setAutoSave(false);
+        Path templateWorldFolder = plugin.settings().sessions().homeTemplateWorldPath().toAbsolutePath().normalize();
+        return new SessionCreationPlan(player.getUniqueId(), sessionId, worldName, worldFolder, templateWorldFolder, maxPlayers);
+    }
 
+    private GameSession createSessionAfterTemplateCopy(Player player, SessionCreationPlan plan) {
         try {
-            GameSession session = new GameSession(
-                    sessionId,
-                    player.getUniqueId(),
-                    world,
-                    maxPlayers,
-                    homeSpawn(world),
-                    homeReturnSpawn(world),
-                    plugin.settings().home().area(),
-                    List.of(),
-                    plugin.settings().economy().initialBalance()
-            );
-            session.setMaxDepth(plugin.settings().dungeon().defaultMaxDepth());
-            session.setSelectedPreset("default");
-            registerSession(session);
-            addPlayerToSession(session, player, player.getLocation());
+            if (!player.isOnline()) {
+                sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
+                throw new IllegalStateException("Player went offline while creating the session.");
+            }
+            if (sessionForPlayer(player.getUniqueId()).isPresent()) {
+                sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
+                throw new IllegalStateException("You are already in another session. Leave it first.");
+            }
 
-            if (!player.teleport(session.spawnLocation())) {
-                unregisterSession(session);
+            World world = Bukkit.createWorld(new WorldCreator(plan.worldName()));
+            if (world == null) {
+                sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
+                throw new IllegalStateException("Failed to create session world: " + plan.worldName());
+            }
+            world.setAutoSave(false);
+
+            try {
+                GameSession session = new GameSession(
+                        plan.sessionId(),
+                        player.getUniqueId(),
+                        world,
+                        plan.maxPlayers(),
+                        homeSpawn(world),
+                        homeReturnSpawn(world),
+                        plugin.settings().home().area(),
+                        List.of(),
+                        plugin.settings().economy().initialBalance()
+                );
+                session.setMaxDepth(plugin.settings().dungeon().defaultMaxDepth());
+                session.setSelectedPreset("default");
+                registerSession(session);
+                addPlayerToSession(session, player, player.getLocation());
+
+                if (!player.teleport(session.spawnLocation())) {
+                    unregisterSession(session);
+                    restorePlayerAttributes(player);
+                    restorePlayerVitals(player);
+                    throw new IllegalStateException("Failed to teleport to the session world.");
+                }
+
+                preparePlayerForSessionEntry(player);
+                sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "Session " + session.sessionId() + " created", 10, 50, 10);
+                sendMessage(player, ChatColor.GREEN + "Created session " + session.sessionId() + ". Invite players with /azirouge session join " + session.sessionId() + ".");
+                sendMessage(player, ChatColor.YELLOW + "Prepare at home, then start a round with /azirouge round start.");
+                BukkitTask mobSpawnTask = mobSpawnManager.start(session);
+                session.setMobSpawnTask(mobSpawnTask);
+                return session;
+            } catch (RuntimeException ex) {
+                GameSession registered = sessionsByWorld.get(world.getUID());
+                if (registered != null) {
+                    unregisterSession(registered);
+                }
                 restorePlayerAttributes(player);
                 restorePlayerVitals(player);
-                throw new IllegalStateException("Failed to teleport to the session world.");
+                sessionWorldService.cleanupWorld(world);
+                throw ex;
             }
-
-            preparePlayerForSessionEntry(player);
-            sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "Session " + session.sessionId() + " created", 10, 50, 10);
-            sendMessage(player, ChatColor.GREEN + "Created session " + session.sessionId() + ". Invite players with /azirouge session join " + session.sessionId() + ".");
-            sendMessage(player, ChatColor.YELLOW + "Prepare at home, then start a round with /azirouge round start.");
-            BukkitTask mobSpawnTask = mobSpawnManager.start(session);
-            session.setMobSpawnTask(mobSpawnTask);
-            return session;
-        } catch (RuntimeException ex) {
-            GameSession registered = sessionsByWorld.get(world.getUID());
-            if (registered != null) {
-                unregisterSession(registered);
-            }
-            restorePlayerAttributes(player);
-            restorePlayerVitals(player);
-            sessionWorldService.cleanupWorld(world);
-            throw ex;
+        } finally {
+            pendingSessionCreations.remove(plan.playerId());
         }
     }
 
@@ -1134,6 +1228,16 @@ public final class GameSessionManager {
                     player.getExhaustion()
             );
         }
+    }
+
+    private record SessionCreationPlan(
+            UUID playerId,
+            String sessionId,
+            String worldName,
+            Path worldFolder,
+            Path templateWorldFolder,
+            int maxPlayers
+    ) {
     }
 
     private record PlayerAttributeSnapshot(Map<Attribute, Double> baseValues) {

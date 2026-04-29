@@ -80,7 +80,7 @@ public final class SessionGameplayService implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onFoodLevelChange(FoodLevelChangeEvent event) {
-        if (event.getEntity() instanceof Player player && isSessionPlayer(player)) {
+        if (event.getEntity() instanceof Player) {
             event.setCancelled(true);
         }
     }
