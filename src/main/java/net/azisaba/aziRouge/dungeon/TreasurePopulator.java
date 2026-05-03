@@ -2,6 +2,7 @@ package net.azisaba.aziRouge.dungeon;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.TreasureSettings;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -10,8 +11,10 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Interaction;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -43,8 +46,22 @@ public final class TreasurePopulator {
             if (placementBlock == null) {
                 break;
             }
-            spawnTreasureDisplay(placementBlock, reward);
+            spawnTreasureDisplay(placementBlock, withSellPriceLore(reward));
         }
+    }
+
+    private ItemStack withSellPriceLore(ItemStack reward) {
+        ItemStack item = reward.clone();
+        Long price = plugin.settings().economy().sellPrices().get(item.getType());
+        if (price == null) {
+            return item;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.lore(List.of(Component.text("Sell price: " + price)));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private void spawnTreasureDisplay(Block placementBlock, ItemStack reward) {

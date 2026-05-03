@@ -1,8 +1,11 @@
 package net.azisaba.aziRouge.entity;
 
+import com.destroystokyo.paper.entity.ai.VanillaGoal;
+import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.MobAiSettings;
 import net.azisaba.aziRouge.config.MobDropEntrySettings;
 import net.azisaba.aziRouge.config.MobProfileSettings;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -86,7 +89,12 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
         applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
-        ((Mob) mob).getPathfinder().setCanOpenDoors(true);
+        if (mob instanceof Mob m) {
+            m.getPathfinder().setCanOpenDoors(true);
+            Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
+            Bukkit.getMobGoals().removeGoal(m, VanillaGoal.LOOK_AT_PLAYER);
+            Bukkit.getMobGoals().addGoal(m, 6, new DoorOpenGoal(m));
+        }
     }
 
     public List<ItemStack> createDrops(Random random, int depth) {

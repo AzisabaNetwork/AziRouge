@@ -12,14 +12,20 @@ import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.scheduler.BukkitTask;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.event.ClickEvent;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -55,6 +61,7 @@ public final class GameSessionManager {
     private final Map<UUID, PlayerAttributeSnapshot> playerAttributeSnapshots = new HashMap<>();
     private final Map<UUID, GameMode> playerGameModeSnapshots = new HashMap<>();
     private final Map<UUID, PlayerVitalsSnapshot> playerVitalsSnapshots = new HashMap<>();
+    private final Map<UUID, Integer> spectatorTargetIndexes = new HashMap<>();
     private final Set<UUID> pendingSessionCreations = new HashSet<>();
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
@@ -267,6 +274,7 @@ public final class GameSessionManager {
                 preparePlayerForSessionEntry(player);
                 sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "Session " + session.sessionId() + " created", 10, 50, 10);
                 sendMessage(player, ChatColor.GREEN + "Created session " + session.sessionId() + ". Invite players with /azirouge session join " + session.sessionId() + ".");
+                sendCopyableSessionId(player, session);
                 sendMessage(player, ChatColor.YELLOW + "Prepare at home, then start a round with /azirouge round start.");
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
@@ -707,6 +715,38 @@ public final class GameSessionManager {
         updateRoundAfterAliveChange(session);
     }
 
+    public void handleSpectatorCompass(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND || !session.isRoundInactivePlayer(player.getUniqueId())) {
+            return;
+        }
+        Player target = selectSpectatorTarget(session, player, true);
+        if (target == null) {
+            sendMessage(player, ChatColor.YELLOW + "No alive players are available to spectate.");
+            return;
+        }
+        player.setSpectatorTarget(target);
+        sendMessage(player, ChatColor.YELLOW + "Now spectating " + target.getName() + ".");
+    }
+
+    public void ensureSpectatorTarget(Player player) {
+        GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND || !session.isRoundInactivePlayer(player.getUniqueId())) {
+            return;
+        }
+        if (player.getGameMode() != GameMode.SPECTATOR) {
+            return;
+        }
+        Player current = player.getSpectatorTarget() instanceof Player target ? target : null;
+        if (current != null && session.alivePlayers().contains(current.getUniqueId()) && current.isOnline()) {
+            return;
+        }
+        Player target = selectSpectatorTarget(session, player, false);
+        if (target != null) {
+            player.setSpectatorTarget(target);
+        }
+    }
+
     public void handlePlayerRespawn(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session == null) {
@@ -759,6 +799,9 @@ public final class GameSessionManager {
     }
 
     private void unregisterSession(GameSession session) {
+        for (UUID playerId : session.members()) {
+            spectatorTargetIndexes.remove(playerId);
+        }
         sessionsById.remove(session.sessionId());
         sessionsByWorld.remove(session.world().getUID());
         clearPlayerMappings(session.sessionId());
@@ -882,6 +925,9 @@ public final class GameSessionManager {
 
     private void restoreGameMode(Player player) {
         GameMode gameMode = playerGameModeSnapshots.remove(player.getUniqueId());
+        SpectatorItemSupport.remove(plugin, player);
+        spectatorTargetIndexes.remove(player.getUniqueId());
+        player.setSpectatorTarget(null);
         if (gameMode != null) {
             player.setGameMode(gameMode);
         }
@@ -890,8 +936,15 @@ public final class GameSessionManager {
     private void makeRoundSpectatorAtHome(GameSession session, Player player) {
         initializeSessionPlayerState(player);
         setSpectator(player);
-        player.teleport(session.spawnLocation());
-        sendMessage(player, ChatColor.YELLOW + "You are spectating at home. Portals are disabled for you until the next round.");
+        SpectatorItemSupport.give(plugin, player);
+        Player target = selectSpectatorTarget(session, player, false);
+        if (target == null) {
+            player.teleport(session.spawnLocation());
+            sendMessage(player, ChatColor.YELLOW + "You are spectating at home. No alive players are available.");
+        } else {
+            player.setSpectatorTarget(target);
+            sendMessage(player, ChatColor.YELLOW + "You are spectating " + target.getName() + ". Use the compass to switch targets.");
+        }
     }
 
     private void restoreGameOverPlayerAtHome(GameSession session, Player player) {
@@ -948,6 +1001,9 @@ public final class GameSessionManager {
 
     private void setRoundSurvival(Player player) {
         playerGameModeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> player.getGameMode());
+        SpectatorItemSupport.remove(plugin, player);
+        spectatorTargetIndexes.remove(player.getUniqueId());
+        player.setSpectatorTarget(null);
         player.setGameMode(GameMode.SURVIVAL);
     }
 
@@ -1015,10 +1071,56 @@ public final class GameSessionManager {
 
     private void announceGameOver(GameSession session, String reason) {
         giveGameOverItems(session);
-        broadcastTitle(session, ChatColor.DARK_RED + "Game Over", ChatColor.RED + reason, 10, 90, 30);
+        launchGameOverFireworks(session);
+        broadcastTitle(
+                session,
+                ChatColor.DARK_RED + "Game Over",
+                ChatColor.RED + reason + ChatColor.GRAY + " / Reached round " + session.currentRound(),
+                10,
+                100,
+                30
+        );
         broadcastSessionMessage(session, ChatColor.RED + "Game over: " + reason);
+        broadcastSessionMessage(session, ChatColor.GOLD + "Reached round: " + session.currentRound());
         broadcastSessionMessage(session, ChatColor.YELLOW + "Leave this session: /azirouge session leave");
         broadcastSessionMessage(session, ChatColor.YELLOW + "Create the next session after leaving with /azirouge session create, or right-click the start menu.");
+        broadcastSessionMessage(session, ChatColor.GRAY + "This session will be closed automatically soon.");
+        scheduleGameOverShutdown(session);
+    }
+
+    private void scheduleGameOverShutdown(GameSession session) {
+        if (session.idleTimeoutTask() != null) {
+            return;
+        }
+        long delayTicks = Math.max(20L, plugin.settings().sessions().idleTimeoutSeconds() * 20L);
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            session.setIdleTimeoutTask(null);
+            if (sessionsById.containsKey(session.sessionId()) && session.state() == SessionState.GAME_OVER) {
+                endSession(session);
+            }
+        }, delayTicks);
+        session.setIdleTimeoutTask(task);
+    }
+
+    private void launchGameOverFireworks(GameSession session) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || !player.getWorld().getUID().equals(session.world().getUID())) {
+                continue;
+            }
+            Firework firework = player.getWorld().spawn(player.getLocation(), Firework.class);
+            FireworkMeta meta = firework.getFireworkMeta();
+            meta.addEffect(org.bukkit.FireworkEffect.builder()
+                    .with(org.bukkit.FireworkEffect.Type.BALL_LARGE)
+                    .withColor(Color.RED, Color.ORANGE)
+                    .withFade(Color.YELLOW)
+                    .trail(true)
+                    .flicker(true)
+                    .build());
+            meta.setPower(1);
+            firework.setFireworkMeta(meta);
+            Bukkit.getScheduler().runTaskLater(plugin, firework::detonate, 2L);
+        }
     }
 
     private void giveGameOverItems(GameSession session) {
@@ -1054,6 +1156,39 @@ public final class GameSessionManager {
 
     private void sendMessage(Player player, String message) {
         player.sendMessage(PREFIX + message);
+    }
+
+    private void sendMessage(Player player, Component message) {
+        player.sendMessage(Component.text("[Azirouge] ", NamedTextColor.GOLD).append(message));
+    }
+
+    private void sendCopyableSessionId(Player player, GameSession session) {
+        sendMessage(player, Component.text("Session ID: ", NamedTextColor.YELLOW)
+                .append(Component.text(session.sessionId(), NamedTextColor.AQUA)
+                        .clickEvent(ClickEvent.copyToClipboard(session.sessionId())))
+                .append(Component.text(" (click to copy)", NamedTextColor.GRAY)));
+    }
+
+    private Player selectSpectatorTarget(GameSession session, Player spectator, boolean advance) {
+        List<Player> candidates = session.alivePlayers().stream()
+                .map(Bukkit::getPlayer)
+                .filter(player -> player != null
+                        && player.isOnline()
+                        && !player.getUniqueId().equals(spectator.getUniqueId())
+                        && player.getWorld().getUID().equals(session.world().getUID()))
+                .sorted((left, right) -> left.getName().compareToIgnoreCase(right.getName()))
+                .toList();
+        if (candidates.isEmpty()) {
+            spectatorTargetIndexes.remove(spectator.getUniqueId());
+            return null;
+        }
+        int index = spectatorTargetIndexes.getOrDefault(spectator.getUniqueId(), 0);
+        if (advance) {
+            index++;
+        }
+        index = Math.floorMod(index, candidates.size());
+        spectatorTargetIndexes.put(spectator.getUniqueId(), index);
+        return candidates.get(index);
     }
 
     private void restorePlayerVitals(Player player) {

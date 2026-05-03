@@ -155,6 +155,7 @@ public final class SessionGameplayService implements Listener {
                 applyBlockers(player);
                 updateSprintFood(player);
             } else {
+                sessionManager.ensureSpectatorTarget(player);
                 foodLevels.put(player.getUniqueId(), (double) FOOD_MAX);
                 removeBlockers(player.getInventory());
                 fixVitals(player);
@@ -164,7 +165,7 @@ public final class SessionGameplayService implements Listener {
 
     private void updateSprintFood(Player player) {
         double food = foodLevels.getOrDefault(player.getUniqueId(), (double) Math.max(0, player.getFoodLevel()));
-        if (player.getCurrentInput().isSprint()) {
+        if (player.getCurrentInput().isSprint() || player.isSprinting()) {
             food -= plugin.settings().player().sprintDrainPerSecond() / 4;
         } else {
             food += plugin.settings().player().sprintRecoveryPerSecond() / 4;

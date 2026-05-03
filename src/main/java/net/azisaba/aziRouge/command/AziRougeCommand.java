@@ -21,6 +21,9 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -202,6 +205,7 @@ public final class AziRougeCommand implements TabExecutor {
                     + " id=" + session.sessionId()
                     + " money=" + session.sharedBalance()
                     + " using template preset " + templateSelection.presetName() + ".");
+            sendCopyableSessionId(sender, session);
         }));
         return true;
     }
@@ -256,6 +260,7 @@ public final class AziRougeCommand implements TabExecutor {
                     + " players=1/" + session.maxPlayers()
                     + " money=" + session.sharedBalance()
                     + " world=" + session.world().getName() + ".");
+            sendCopyableSessionId(sender, session);
         }));
         return true;
     }
@@ -873,6 +878,14 @@ public final class AziRougeCommand implements TabExecutor {
 
     private void error(CommandSender sender, String message) {
         sender.sendMessage(PREFIX + ChatColor.RED + message);
+    }
+
+    private void sendCopyableSessionId(CommandSender sender, GameSession session) {
+        sender.sendMessage(Component.text("[Azirouge] ", NamedTextColor.GOLD)
+                .append(Component.text("Session ID: ", NamedTextColor.YELLOW))
+                .append(Component.text(session.sessionId(), NamedTextColor.AQUA)
+                        .clickEvent(ClickEvent.copyToClipboard(session.sessionId())))
+                .append(Component.text(" (click to copy)", NamedTextColor.GRAY)));
     }
 
     private void reportSessionCreationFailure(CommandSender sender, String prefix, Throwable throwable) {

@@ -9,6 +9,7 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -75,15 +76,33 @@ public final class SessionScoreboardService {
         Objective objective = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy", ChatColor.GOLD + "AziRouge");
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
-        setLine(objective, ChatColor.DARK_GRAY.toString(), 5);
-        setLine(objective, ChatColor.YELLOW + "State: " + ChatColor.WHITE + session.state().getDisplayName(), 4);
-        setLine(objective, ChatColor.YELLOW + "Round: " + ChatColor.WHITE + session.currentRound(), 3);
-        setLine(objective, ChatColor.YELLOW + "Money: " + ChatColor.WHITE + session.sharedBalance(), 2);
+        registerHiddenNameTagTeam(scoreboard, session);
+
+        int maintenanceRound = session.state() == SessionState.IN_ROUND
+                ? session.currentRound()
+                : session.currentRound() + 1;
+        long maintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
+        setLine(objective, ChatColor.DARK_GRAY.toString(), 6);
+        setLine(objective, ChatColor.YELLOW + "State: " + ChatColor.WHITE + session.state().getDisplayName(), 5);
+        setLine(objective, ChatColor.YELLOW + "Round: " + ChatColor.WHITE + session.currentRound(), 4);
+        setLine(objective, ChatColor.YELLOW + "Money: " + ChatColor.WHITE + session.sharedBalance(), 3);
+        setLine(objective, ChatColor.YELLOW + "Maintenance: " + ChatColor.WHITE + maintenance, 2);
         setLine(objective, ChatColor.BLACK.toString(), 1);
         setLine(objective, ChatColor.AQUA + SERVER_ADDRESS, 0);
 
         player.setScoreboard(scoreboard);
         displayedPlayers.add(player.getUniqueId());
+    }
+
+    private void registerHiddenNameTagTeam(Scoreboard scoreboard, GameSession session) {
+        Team team = scoreboard.registerNewTeam("azirouge_hidden");
+        team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+        for (UUID playerId : session.onlineMembers()) {
+            Player member = Bukkit.getPlayer(playerId);
+            if (member != null) {
+                team.addEntry(member.getName());
+            }
+        }
     }
 
     private void clear(Player player) {
