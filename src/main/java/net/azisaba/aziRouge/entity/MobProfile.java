@@ -93,7 +93,7 @@ public enum MobProfile {
             m.getPathfinder().setCanOpenDoors(true);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.LOOK_AT_PLAYER);
-            Bukkit.getMobGoals().addGoal(m, 6, new DoorOpenGoal(m));
+            Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m));
         }
     }
 
