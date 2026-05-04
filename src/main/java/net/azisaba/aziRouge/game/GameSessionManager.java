@@ -927,7 +927,9 @@ public final class GameSessionManager {
         GameMode gameMode = playerGameModeSnapshots.remove(player.getUniqueId());
         SpectatorItemSupport.remove(plugin, player);
         spectatorTargetIndexes.remove(player.getUniqueId());
-        player.setSpectatorTarget(null);
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            player.setSpectatorTarget(null);
+        }
         if (gameMode != null) {
             player.setGameMode(gameMode);
         }
