@@ -263,7 +263,8 @@ public final class DungeonGenerator {
     private PlacedPiece createPlacedPiece(PieceTemplate template, Rotation rotation, IntVector3 origin, int depth, int index) {
         TransformedPieceGeometry geometry = transformGeometry(template, rotation);
         BlockBox worldBounds = geometry.relativeBounds().offset(origin);
-        PlacedPiece base = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.of());
+        List<IntVector3> strollPoints = createStrollPoints(worldBounds);
+        PlacedPiece base = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, strollPoints, List.of());
         List<PlacedEntrance> entrances = new ArrayList<>(geometry.entrances().size());
         for (TransformedEntranceGeometry transformedEntrance : geometry.entrances()) {
             BlockBox plane = transformedEntrance.relativePlane().offset(origin);
@@ -271,12 +272,39 @@ public final class DungeonGenerator {
             entrances.add(new PlacedEntrance(base, transformedEntrance.template(), transformedEntrance.worldFacing(), plane, opening));
         }
 
-        PlacedPiece full = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.of());
+        PlacedPiece full = new PlacedPiece(index, template, rotation, origin, depth, worldBounds, strollPoints, List.of());
         List<PlacedEntrance> rebound = new ArrayList<>(entrances.size());
         for (PlacedEntrance entrance : entrances) {
             rebound.add(new PlacedEntrance(full, entrance.template(), entrance.worldFacing(), entrance.planeBox(), entrance.openingBox()));
         }
-        return new PlacedPiece(index, template, rotation, origin, depth, worldBounds, List.copyOf(rebound));
+        return new PlacedPiece(index, template, rotation, origin, depth, worldBounds, strollPoints, List.copyOf(rebound));
+    }
+
+    private List<IntVector3> createStrollPoints(BlockBox bounds) {
+        int minX = interiorMin(bounds.minX(), bounds.maxX());
+        int maxX = interiorMax(bounds.minX(), bounds.maxX());
+        int minZ = interiorMin(bounds.minZ(), bounds.maxZ());
+        int maxZ = interiorMax(bounds.minZ(), bounds.maxZ());
+        int y = bounds.minY() + 1;
+
+        List<IntVector3> points = new ArrayList<>();
+        addDistinctPoint(points, midpoint(minX, maxX), y, midpoint(minZ, maxZ));
+        addDistinctPoint(points, minX, y, minZ);
+        addDistinctPoint(points, minX, y, maxZ);
+        addDistinctPoint(points, maxX, y, minZ);
+        addDistinctPoint(points, maxX, y, maxZ);
+        return List.copyOf(points);
+    }
+
+    private void addDistinctPoint(List<IntVector3> points, int x, int y, int z) {
+        IntVector3 point = new IntVector3(x, y, z);
+        if (!points.contains(point)) {
+            points.add(point);
+        }
+    }
+
+    private int midpoint(int min, int max) {
+        return min + ((max - min) / 2);
     }
 
     private List<IntVector3> computeChildOrigins(

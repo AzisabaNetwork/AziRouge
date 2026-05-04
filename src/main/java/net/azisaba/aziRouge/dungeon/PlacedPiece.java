@@ -14,6 +14,7 @@ public record PlacedPiece(
         IntVector3 origin,
         int depth,
         BlockBox worldBounds,
+        List<IntVector3> strollPoints,
         List<PlacedEntrance> entrances
 ) {
 }

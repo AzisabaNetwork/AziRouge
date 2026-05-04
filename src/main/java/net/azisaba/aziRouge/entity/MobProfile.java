@@ -12,6 +12,7 @@ import org.bukkit.Registry;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Creature;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
@@ -93,6 +94,10 @@ public enum MobProfile {
             m.getPathfinder().setCanOpenDoors(true);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.LOOK_AT_PLAYER);
+            if (m instanceof Creature creature) {
+                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RANDOM_STROLL);
+                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.WATER_AVOIDING_RANDOM_STROLL);
+            }
             Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m));
         }
     }

@@ -6,15 +6,20 @@ import net.azisaba.aziRouge.config.MobSpawnSettings;
 import net.azisaba.aziRouge.game.GameSession;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
+import net.azisaba.aziRouge.math.IntVector3;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Mob;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -69,6 +74,9 @@ public final class MobSpawnManager {
             Entity entity = session.world().spawnEntity(spawnLocation, profile.entityType());
             if (entity instanceof LivingEntity livingEntity) {
                 profile.apply(livingEntity, profileSettings);
+                if (livingEntity instanceof Mob mob) {
+                    Bukkit.getMobGoals().addGoal(mob, 6, new RandomStrollGoal(mob, strollTargets(session), 1.0D));
+                }
                 mobAiManager.track(livingEntity, profile);
                 alivePower += profileSettings.power();
             } else {
@@ -105,6 +113,14 @@ public final class MobSpawnManager {
             }
         }
         return null;
+    }
+
+    private List<Location> strollTargets(GameSession session) {
+        List<Location> targets = new ArrayList<>();
+        for (IntVector3 point : session.dungeonStrollPoints()) {
+            targets.add(new Location(session.world(), point.x() + 0.5D, point.y(), point.z() + 0.5D));
+        }
+        return targets;
     }
 
     private Location findSpawnLocation(World world, BlockBox bounds, Random random) {

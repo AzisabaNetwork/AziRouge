@@ -222,6 +222,12 @@ public final class GameSession {
         return placedPieces;
     }
 
+    public List<IntVector3> dungeonStrollPoints() {
+        return placedPieces.stream()
+                .flatMap(piece -> piece.strollPoints().stream())
+                .toList();
+    }
+
     public void setPlacedPieces(List<PlacedPiece> placedPieces) {
         this.placedPieces = List.copyOf(placedPieces);
     }
