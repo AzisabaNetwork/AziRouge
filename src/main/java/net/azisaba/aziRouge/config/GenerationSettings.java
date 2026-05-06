@@ -14,8 +14,9 @@ public record GenerationSettings(
         double branchChance,
         double entranceBranchBonus,
         double depthPredictionMultiplier,
-        int minPieceCount,
-        int maxPieceCount
+        int minPiecesPerDepth,
+        int maxPiecesPerDepth,
+        double adjacentPiecePenalty
 ) {
     public double scaledBranchChance(int availableEntranceCount) {
         if (availableEntranceCount <= 1) {
@@ -34,6 +35,14 @@ public record GenerationSettings(
         }
         double expected = 1.0D + (availableEntranceCount - 1) * scaledBranchChance(availableEntranceCount);
         return Math.min(availableEntranceCount, expected);
+    }
+
+    public int minPieceCountForDepth(int maxDepth) {
+        return 1 + Math.max(1, maxDepth) * minPiecesPerDepth;
+    }
+
+    public int maxPieceCountForDepth(int maxDepth) {
+        return 1 + Math.max(1, maxDepth) * maxPiecesPerDepth;
     }
 
     private double clamp(double value, double min, double max) {

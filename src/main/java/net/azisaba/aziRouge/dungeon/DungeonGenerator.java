@@ -27,6 +27,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -78,24 +79,27 @@ public final class DungeonGenerator {
 
         GenerationSettings generation = settings.generation();
         int maxDepth = request.maxDepthOverride() == null ? generation.maxDepth() : Math.max(1, request.maxDepthOverride());
-        GenerationPlan plan = buildGenerationPlan(generation, startTemplate, templates, maxDepth);
         Random random = new Random(request.seed());
+        GenerationPlan plan = buildGenerationPlan(generation, templates, maxDepth, random);
         int targetPieceCount = plan.targetPieceCount();
         List<PlacedPiece> pieces = new ArrayList<>();
         List<PieceConnection> connections = new ArrayList<>();
         List<Frontier> frontiers = new ArrayList<>();
         Set<String> usedEntrances = new HashSet<>();
+        Set<String> blockedEntrances = new HashSet<>();
+        Map<String, Integer> placedByPieceId = new HashMap<>();
         int[] placedPerDepth = new int[maxDepth + 1];
 
         PlacedPiece startPiece = createPlacedPiece(startTemplate, Rotation.NONE, request.origin(), 0, 0);
         pieces.add(startPiece);
+        incrementPieceCount(placedByPieceId, startPiece.template().id());
         placedPerDepth[0] = 1;
         debugLogger.log("generation", "plan", Map.of(
                 "depthTargets", format(plan.targetPiecesPerDepth()),
                 "maxDepth", maxDepth,
                 "target", targetPieceCount
         ));
-        activateEntrances(startPiece, usedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
+        activateEntrances(startPiece, usedEntrances, blockedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
 
         while (pieces.size() < targetPieceCount && !frontiers.isEmpty()) {
             Frontier frontier = selectFrontier(frontiers, random, plan, placedPerDepth);
@@ -104,22 +108,25 @@ public final class DungeonGenerator {
                 continue;
             }
 
-            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, maxDepth);
+            PlacementAttempt attempt = tryPlace(frontier, pieces, templates, random, maxDepth, generation, placedByPieceId);
             if (attempt == null) {
+                blockedEntrances.add(frontier.entrance.key());
                 debugLogger.log("generation", "frontier_exhausted", Map.of(
                         "depth", frontier.entrance.piece().depth(),
                         "entrance", frontier.entrance.template().id(),
                         "piece", frontier.entrance.piece().template().id()
                 ));
+                activateEntrances(frontier.entrance.piece(), usedEntrances, blockedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
                 continue;
             }
 
             usedEntrances.add(frontier.entrance.key());
             usedEntrances.add(attempt.childEntrance.key());
             pieces.add(attempt.piece);
+            incrementPieceCount(placedByPieceId, attempt.piece.template().id());
             placedPerDepth[attempt.piece.depth()]++;
             connections.add(new PieceConnection(frontier.entrance, attempt.childEntrance));
-            activateEntrances(attempt.piece, usedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
+            activateEntrances(attempt.piece, usedEntrances, blockedEntrances, frontiers, random, maxDepth, generation, plan, placedPerDepth);
         }
 
         for (PlacedPiece piece : pieces) {
@@ -164,10 +171,17 @@ public final class DungeonGenerator {
             List<PlacedPiece> pieces,
             LoadedTemplates templates,
             Random random,
-            int maxDepth
+            int maxDepth,
+            GenerationSettings settings,
+            Map<String, Integer> placedByPieceId
     ) {
-        List<PieceTemplate> weightedPieces = weightedShuffle(new ArrayList<>(templates.pieces().values()), random);
-        for (PieceTemplate candidateTemplate : weightedPieces) {
+        List<PlacementCandidate> candidates = new ArrayList<>();
+        boolean hasUnmetMinimumCandidate = false;
+        for (PieceTemplate candidateTemplate : templates.pieces().values()) {
+            int placedCount = placedByPieceId.getOrDefault(candidateTemplate.id(), 0);
+            if (placedCount >= candidateTemplate.maxGenerations()) {
+                continue;
+            }
             List<EntranceTemplate> candidateEntrances = new ArrayList<>(candidateTemplate.entrances());
             Collections.shuffle(candidateEntrances, random);
             for (EntranceTemplate candidateEntrance : candidateEntrances) {
@@ -209,23 +223,34 @@ public final class DungeonGenerator {
                         ));
                         continue;
                     }
-                    debugLogger.log("generation", "candidate_accepted", Map.of(
-                            "candidate", candidateTemplate.id(),
-                            "childEntrance", candidateEntrance.id(),
-                            "depth", placedPiece.depth(),
-                            "origin", format(origin),
-                            "rotation", rotation.degrees()
-                    ));
-                    return new PlacementAttempt(placedPiece, placedEntrance);
+                    int adjacentCount = adjacentPieceCount(placedPiece, pieces);
+                    double weight = candidateWeight(candidateTemplate, placedCount, adjacentCount, settings);
+                    boolean unmetMinimum = placedCount < candidateTemplate.minGenerations();
+                    hasUnmetMinimumCandidate = hasUnmetMinimumCandidate || unmetMinimum;
+                    candidates.add(new PlacementCandidate(placedPiece, placedEntrance, weight, adjacentCount, unmetMinimum));
                 }
             }
         }
-        return null;
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        PlacementCandidate selected = selectPlacementCandidate(candidates, hasUnmetMinimumCandidate, random);
+        debugLogger.log("generation", "candidate_accepted", Map.of(
+                "adjacentCount", selected.adjacentCount(),
+                "candidate", selected.piece().template().id(),
+                "childEntrance", selected.childEntrance().template().id(),
+                "depth", selected.piece().depth(),
+                "origin", format(selected.piece().origin()),
+                "rotation", selected.piece().rotation().degrees(),
+                "weight", selected.weight()
+        ));
+        return new PlacementAttempt(selected.piece(), selected.childEntrance());
     }
 
     private void activateEntrances(
             PlacedPiece piece,
             Set<String> usedEntrances,
+            Set<String> blockedEntrances,
             List<Frontier> frontiers,
             Random random,
             int maxDepth,
@@ -239,7 +264,9 @@ public final class DungeonGenerator {
 
         List<PlacedEntrance> available = new ArrayList<>();
         for (PlacedEntrance entrance : piece.entrances()) {
-            if (!usedEntrances.contains(entrance.key())) {
+            if (!usedEntrances.contains(entrance.key())
+                    && !blockedEntrances.contains(entrance.key())
+                    && !hasQueuedFrontier(entrance, frontiers)) {
                 available.add(entrance);
             }
         }
@@ -255,9 +282,44 @@ public final class DungeonGenerator {
 
         Collections.shuffle(available, random);
         int desiredCount = resolveDesiredFrontierCount(available.size(), remainingBudget, settings, random);
+        int requiredConnections = Math.max(0, piece.template().minEntranceConnections()
+                - connectedEntranceCount(piece, usedEntrances)
+                - queuedEntranceCount(piece, frontiers));
+        desiredCount = Math.max(desiredCount, requiredConnections);
+        desiredCount = Math.min(desiredCount, available.size());
+        desiredCount = Math.min(desiredCount, remainingBudget);
         for (int index = 0; index < desiredCount; index++) {
             frontiers.add(new Frontier(available.get(index)));
         }
+    }
+
+    private int connectedEntranceCount(PlacedPiece piece, Set<String> usedEntrances) {
+        int count = 0;
+        for (PlacedEntrance entrance : piece.entrances()) {
+            if (usedEntrances.contains(entrance.key())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int queuedEntranceCount(PlacedPiece piece, List<Frontier> frontiers) {
+        int count = 0;
+        for (Frontier frontier : frontiers) {
+            if (frontier.entrance.piece().index() == piece.index()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean hasQueuedFrontier(PlacedEntrance entrance, List<Frontier> frontiers) {
+        for (Frontier frontier : frontiers) {
+            if (frontier.entrance.key().equals(entrance.key())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private PlacedPiece createPlacedPiece(PieceTemplate template, Rotation rotation, IntVector3 origin, int depth, int index) {
@@ -301,6 +363,10 @@ public final class DungeonGenerator {
         if (!points.contains(point)) {
             points.add(point);
         }
+    }
+
+    private void incrementPieceCount(Map<String, Integer> placedByPieceId, String pieceId) {
+        placedByPieceId.merge(pieceId, 1, Integer::sum);
     }
 
     private int midpoint(int min, int max) {
@@ -382,6 +448,47 @@ public final class DungeonGenerator {
         return false;
     }
 
+    private PlacementCandidate selectPlacementCandidate(List<PlacementCandidate> candidates, boolean requireUnmetMinimum, Random random) {
+        List<PlacementCandidate> pool = requireUnmetMinimum
+                ? candidates.stream().filter(PlacementCandidate::unmetMinimum).toList()
+                : candidates;
+        if (pool.isEmpty()) {
+            pool = candidates;
+        }
+
+        double totalWeight = 0.0D;
+        for (PlacementCandidate candidate : pool) {
+            totalWeight += candidate.weight();
+        }
+        double cursor = random.nextDouble() * totalWeight;
+        PlacementCandidate selected = pool.get(0);
+        for (PlacementCandidate candidate : pool) {
+            cursor -= candidate.weight();
+            if (cursor <= 0.0D) {
+                selected = candidate;
+                break;
+            }
+        }
+        return selected;
+    }
+
+    private double candidateWeight(PieceTemplate template, int placedCount, int adjacentCount, GenerationSettings settings) {
+        int extraAdjacentCount = Math.max(0, adjacentCount - 1);
+        double adjacentPenalty = 1.0D + extraAdjacentCount * settings.adjacentPiecePenalty();
+        double minimumBoost = placedCount < template.minGenerations() ? 8.0D : 1.0D;
+        return Math.max(0.0001D, template.weight() * minimumBoost / adjacentPenalty);
+    }
+
+    private int adjacentPieceCount(PlacedPiece candidate, List<PlacedPiece> pieces) {
+        int count = 0;
+        for (PlacedPiece piece : pieces) {
+            if (areAdjacent(candidate.worldBounds(), piece.worldBounds())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private PlacedPiece findDeniedAdjacentPiece(PlacedPiece candidate, List<PlacedPiece> pieces) {
         for (PlacedPiece piece : pieces) {
             if (!areAdjacent(candidate.worldBounds(), piece.worldBounds())) {
@@ -409,17 +516,17 @@ public final class DungeonGenerator {
 
     private Frontier selectFrontier(List<Frontier> frontiers, Random random, GenerationPlan plan, int[] placedPerDepth) {
         List<Frontier> prioritized = new ArrayList<>();
-        int shallowestNeededDepth = Integer.MAX_VALUE;
+        int deepestNeededDepth = Integer.MIN_VALUE;
         for (Frontier frontier : frontiers) {
             int childDepth = frontier.entrance.piece().depth() + 1;
             if (childDepth > plan.maxDepth() || plan.remainingForDepth(childDepth, placedPerDepth) <= 0) {
                 continue;
             }
-            if (childDepth < shallowestNeededDepth) {
-                shallowestNeededDepth = childDepth;
+            if (childDepth > deepestNeededDepth) {
+                deepestNeededDepth = childDepth;
                 prioritized.clear();
             }
-            if (childDepth == shallowestNeededDepth) {
+            if (childDepth == deepestNeededDepth) {
                 prioritized.add(frontier);
             }
         }
@@ -450,58 +557,52 @@ public final class DungeonGenerator {
 
     private GenerationPlan buildGenerationPlan(
             GenerationSettings settings,
-            PieceTemplate startTemplate,
             LoadedTemplates templates,
-            int maxDepth
+            int maxDepth,
+            Random random
     ) {
         int[] targetPerDepth = new int[maxDepth + 1];
         targetPerDepth[0] = 1;
-        int total = 1;
-        double averageChildBranches = averageChildBranches(settings, templates);
-        double expectedLayerPieces = settings.expectedActivatedEntranceCount(startTemplate.entrances().size());
+        int minimumFromPieces = totalMinimumGenerations(templates);
+        int minTarget = Math.max(settings.minPieceCountForDepth(maxDepth), minimumFromPieces);
+        int maxTarget = Math.max(minTarget, settings.maxPieceCountForDepth(maxDepth));
+        int rawTarget = randomBetween(minTarget, maxTarget, random);
+        int target = Math.max(minTarget, Math.min(maxTarget, (int) Math.round(rawTarget * settings.depthPredictionMultiplier())));
+        int remaining = Math.max(0, target - 1);
 
-        for (int depth = 1; depth <= maxDepth && total < settings.maxPieceCount(); depth++) {
-            int planned = resolvePlannedLayerCount(expectedLayerPieces, settings);
-            planned = Math.min(planned, settings.maxPieceCount() - total);
-            targetPerDepth[depth] = planned;
-            total += planned;
-            expectedLayerPieces = planned * averageChildBranches;
+        for (int depth = 1; depth <= maxDepth && remaining > 0; depth++) {
+            targetPerDepth[depth] = 1;
+            remaining--;
         }
 
-        int clampedTarget = Math.max(1, Math.min(settings.maxPieceCount(), Math.max(total, settings.minPieceCount())));
-        if (clampedTarget > total && maxDepth > 0) {
-            int depth = 1;
-            while (total < clampedTarget) {
-                if (depth > maxDepth) {
-                    depth = 1;
-                }
-                if (depth == 1 || targetPerDepth[depth - 1] > 0) {
-                    targetPerDepth[depth]++;
-                    total++;
-                }
-                depth++;
-            }
+        for (int depth = maxDepth; depth >= 1 && remaining > 0; depth--) {
+            int depthBudget = Math.max(0, settings.maxPiecesPerDepth() - targetPerDepth[depth]);
+            int add = Math.min(depthBudget, remaining);
+            targetPerDepth[depth] += add;
+            remaining -= add;
         }
-        return new GenerationPlan(maxDepth, total, targetPerDepth);
+
+        for (int depth = 1; depth <= maxDepth && remaining > 0; depth++) {
+            targetPerDepth[depth]++;
+            remaining--;
+        }
+
+        return new GenerationPlan(maxDepth, target, targetPerDepth);
     }
 
-    private double averageChildBranches(GenerationSettings settings, LoadedTemplates templates) {
-        double totalWeight = 0.0D;
-        double weightedExpectedBranches = 0.0D;
+    private int totalMinimumGenerations(LoadedTemplates templates) {
+        int total = 0;
         for (PieceTemplate template : templates.pieces().values()) {
-            double weight = Math.max(0.0001D, template.weight());
-            int availableAfterConnection = Math.max(0, template.entrances().size() - 1);
-            weightedExpectedBranches += settings.expectedActivatedEntranceCount(availableAfterConnection) * weight;
-            totalWeight += weight;
+            total += template.minGenerations();
         }
-        return totalWeight <= 0.0D ? 0.0D : weightedExpectedBranches / totalWeight;
+        return Math.max(1, total);
     }
 
-    private int resolvePlannedLayerCount(double expectedLayerPieces, GenerationSettings settings) {
-        if (expectedLayerPieces <= 0.0D) {
-            return 0;
+    private int randomBetween(int min, int max, Random random) {
+        if (max <= min) {
+            return min;
         }
-        return Math.max(1, (int) Math.round(expectedLayerPieces * settings.depthPredictionMultiplier()));
+        return min + random.nextInt(max - min + 1);
     }
 
     private List<PieceConnection> collectConnections(List<PlacedPiece> pieces, List<PieceConnection> explicitConnections) {
@@ -561,29 +662,6 @@ public final class DungeonGenerator {
         String left = first.key();
         String right = second.key();
         return left.compareTo(right) <= 0 ? left + "|" + right : right + "|" + left;
-    }
-
-    private List<PieceTemplate> weightedShuffle(List<PieceTemplate> templates, Random random) {
-        List<PieceTemplate> remaining = new ArrayList<>(templates);
-        List<PieceTemplate> ordered = new ArrayList<>(templates.size());
-        while (!remaining.isEmpty()) {
-            double totalWeight = 0.0D;
-            for (PieceTemplate template : remaining) {
-                totalWeight += template.weight();
-            }
-            double cursor = random.nextDouble() * totalWeight;
-            PieceTemplate selected = remaining.get(0);
-            for (PieceTemplate template : remaining) {
-                cursor -= template.weight();
-                if (cursor <= 0.0D) {
-                    selected = template;
-                    break;
-                }
-            }
-            ordered.add(selected);
-            remaining.remove(selected);
-        }
-        return ordered;
     }
 
     private void carveConnection(World world, PieceConnection connection) {
@@ -726,6 +804,15 @@ public final class DungeonGenerator {
     }
 
     private record PlacementAttempt(PlacedPiece piece, PlacedEntrance childEntrance) {
+    }
+
+    private record PlacementCandidate(
+            PlacedPiece piece,
+            PlacedEntrance childEntrance,
+            double weight,
+            int adjacentCount,
+            boolean unmetMinimum
+    ) {
     }
 
     private record GenerationPlan(int maxDepth, int targetPieceCount, int[] targetPiecesPerDepth) {

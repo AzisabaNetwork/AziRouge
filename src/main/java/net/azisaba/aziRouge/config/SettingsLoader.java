@@ -25,8 +25,17 @@ public final class SettingsLoader {
         if (patterns.isEmpty()) {
             patterns.add("templates/*.yml");
         }
-        int minPieceCount = Math.max(1, config.getInt("generation.algorithm.min-piece-count", 12));
-        int maxPieceCount = Math.max(minPieceCount, config.getInt("generation.algorithm.max-piece-count", 24));
+        int legacyMinPieceCount = Math.max(1, config.getInt("generation.algorithm.min-piece-count", 12));
+        int legacyMaxPieceCount = Math.max(legacyMinPieceCount, config.getInt("generation.algorithm.max-piece-count", 24));
+        int configuredMaxDepth = Math.max(1, config.getInt("generation.algorithm.max-depth", 8));
+        int minPiecesPerDepth = Math.max(1, config.getInt(
+                "generation.algorithm.min-pieces-per-depth",
+                Math.max(1, legacyMinPieceCount / configuredMaxDepth)
+        ));
+        int maxPiecesPerDepth = Math.max(minPiecesPerDepth, config.getInt(
+                "generation.algorithm.max-pieces-per-depth",
+                Math.max(minPiecesPerDepth, legacyMaxPieceCount / configuredMaxDepth)
+        ));
 
         Material doorMaterial = Material.matchMaterial(config.getString("door.material", "SPRUCE_DOOR"));
         if (doorMaterial == null || !doorMaterial.name().endsWith("_DOOR")) {
@@ -45,12 +54,13 @@ public final class SettingsLoader {
                                 config.getInt("generation.origin.z", 0)
                         ),
                         config.getLong("generation.seed", 123456789L),
-                        Math.max(1, config.getInt("generation.algorithm.max-depth", 8)),
+                        configuredMaxDepth,
                         clamp(config.getDouble("generation.algorithm.branch-chance", 0.45D), 0.0D, 1.0D),
                         clamp(config.getDouble("generation.algorithm.entrance-branch-bonus", 0.15D), 0.0D, 1.0D),
                         Math.max(0.1D, config.getDouble("generation.algorithm.depth-prediction-multiplier", 1.0D)),
-                        minPieceCount,
-                        maxPieceCount
+                        minPiecesPerDepth,
+                        maxPiecesPerDepth,
+                        Math.max(0.0D, config.getDouble("generation.algorithm.adjacent-piece-penalty", 2.0D))
                 ),
                 new DoorSettings(
                         config.getBoolean("door.enabled", true),

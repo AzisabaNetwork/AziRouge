@@ -128,11 +128,20 @@ public final class TemplateManager {
         validateEntrancesWithinBounds(pieceId, bounds, entrances);
         List<EnemySocketTemplate> enemySockets = parseEnemySockets(section);
         List<String> deniedAdjacentPieces = parseDeniedAdjacentPieces(pieceId, section);
+        int minGenerations = Math.max(0, section.getInt("min-generations", 0));
+        int maxGenerations = section.contains("max-generations")
+                ? Math.max(minGenerations, section.getInt("max-generations", Integer.MAX_VALUE))
+                : Integer.MAX_VALUE;
+        int minEntranceConnections = Math.max(0, section.getInt("min-entrance-connections", 0));
+        minEntranceConnections = Math.min(minEntranceConnections, entrances.size());
         return new PieceTemplate(
                 pieceId,
                 templateFile,
                 schematicPath,
                 Math.max(0.0001D, section.getDouble("weight", 1.0D)),
+                minGenerations,
+                maxGenerations,
+                minEntranceConnections,
                 bounds,
                 List.copyOf(entrances),
                 List.copyOf(enemySockets),
