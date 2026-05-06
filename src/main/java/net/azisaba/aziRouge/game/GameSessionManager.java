@@ -48,7 +48,7 @@ public final class GameSessionManager {
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
-            Attribute.ATTACK_SPEED, 2.0D,
+            Attribute.ATTACK_SPEED, 4.0D,
             Attribute.ENTITY_INTERACTION_RANGE, 2.3D
     );
 
@@ -1005,7 +1005,9 @@ public final class GameSessionManager {
         playerGameModeSnapshots.computeIfAbsent(player.getUniqueId(), ignored -> player.getGameMode());
         SpectatorItemSupport.remove(plugin, player);
         spectatorTargetIndexes.remove(player.getUniqueId());
-        player.setSpectatorTarget(null);
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            player.setSpectatorTarget(null);
+        }
         player.setGameMode(GameMode.SURVIVAL);
     }
 
