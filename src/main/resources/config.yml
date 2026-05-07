@@ -10,11 +10,12 @@ generation:
   seed: 123456789
   algorithm:
     max-depth: 8
-    branch-chance: 0.45
-    entrance-branch-bonus: 0.15
+    branch-chance: 0.25
+    entrance-branch-bonus: 0.05
     depth-prediction-multiplier: 1.0
-    min-piece-count: 12
-    max-piece-count: 24
+    min-pieces-per-depth: 2
+    max-pieces-per-depth: 4
+    adjacent-piece-penalty: 2.0
 door:
   enabled: true
   chance: 0.35

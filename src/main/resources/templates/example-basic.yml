@@ -2,6 +2,9 @@ pieces:
   start_room:
     schematic: schematics/example/start_room.schem
     weight: 1.0
+    min-generations: 1
+    max-generations: 1
+    min-entrance-connections: 2
     denied-adjacent-pieces:
       - dead_end_*
     bounds:
@@ -27,6 +30,7 @@ pieces:
   corridor_ns:
     schematic: schematics/example/corridor_ns.schem
     weight: 3.0
+    min-generations: 2
     denied-adjacent-pieces:
       - corner_room
     bounds:
@@ -44,6 +48,7 @@ pieces:
   corner_room:
     schematic: schematics/example/corner_room.schem
     weight: 2.0
+    max-generations: 4
     bounds:
       min: [0, 0, 0]
       max: [8, 5, 8]
