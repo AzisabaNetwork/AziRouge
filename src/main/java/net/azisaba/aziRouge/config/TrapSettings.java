@@ -7,6 +7,7 @@ public record TrapSettings(
         double baseSpawnChance,
         double depthMultiplier,
         double maxSpawnChance,
+        int minPerDungeon,
         List<TrapDefinitionSettings> definitions
 ) {
     public double spawnChance(int depth) {

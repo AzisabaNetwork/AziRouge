@@ -132,11 +132,15 @@ public final class DungeonGenerator {
             maybePlaceDoor(request.world(), connection, random, settings.door());
         }
 
+        int treasureCount = 0;
+        int trapCount = 0;
         for (PlacedPiece piece : pieces) {
             chestPopulator.populateRoom(request.world(), piece);
-            treasurePopulator.populateRoom(request.world(), piece);
-            trapPopulator.populateRoom(request.world(), piece);
+            treasureCount += treasurePopulator.populateRoom(request.world(), piece);
+            trapCount += trapPopulator.populateRoom(request.world(), piece);
         }
+        treasureCount += populateMissingTreasures(request.world(), pieces, settings.azirouge().treasure().minPerDungeon(), treasureCount, random);
+        trapCount += populateMissingTraps(request.world(), pieces, settings.azirouge().traps().minPerDungeon(), trapCount, random);
 
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
         Location spawnLocation = resolveSpawnLocation(request.world(), startPiece);
@@ -146,6 +150,8 @@ public final class DungeonGenerator {
                 "pieces", pieces.size(),
                 "seed", request.seed(),
                 "target", targetPieceCount,
+                "traps", trapCount,
+                "treasures", treasureCount,
                 "world", request.world().getName()
         ));
         return new DungeonGenerationResult(
@@ -157,6 +163,56 @@ public final class DungeonGenerator {
                 List.copyOf(pieces),
                 spawnLocation
         );
+    }
+
+    private int populateMissingTreasures(World world, List<PlacedPiece> pieces, int minimum, int current, Random random) {
+        int missing = Math.max(0, minimum - current);
+        if (missing <= 0 || pieces.isEmpty()) {
+            return 0;
+        }
+
+        int spawned = 0;
+        for (PlacedPiece piece : preferredGimmickPieces(pieces)) {
+            if (spawned >= missing) {
+                break;
+            }
+            int count = treasurePopulator.populateGuaranteedRoom(world, piece, random);
+            spawned += count;
+            debugLogger.log("treasure", "minimum_attempt", Map.of(
+                    "piece", piece.template().id(),
+                    "spawned", count,
+                    "targetMissing", missing
+            ));
+        }
+        return spawned;
+    }
+
+    private int populateMissingTraps(World world, List<PlacedPiece> pieces, int minimum, int current, Random random) {
+        int missing = Math.max(0, minimum - current);
+        if (missing <= 0 || pieces.isEmpty()) {
+            return 0;
+        }
+
+        int spawned = 0;
+        for (PlacedPiece piece : preferredGimmickPieces(pieces)) {
+            if (spawned >= missing) {
+                break;
+            }
+            int count = trapPopulator.populateGuaranteedRoom(world, piece, random);
+            spawned += count;
+            debugLogger.log("trap", "minimum_attempt", Map.of(
+                    "piece", piece.template().id(),
+                    "spawned", count,
+                    "targetMissing", missing
+            ));
+        }
+        return spawned;
+    }
+
+    private List<PlacedPiece> preferredGimmickPieces(List<PlacedPiece> pieces) {
+        List<PlacedPiece> ordered = new ArrayList<>(pieces);
+        ordered.sort((left, right) -> Integer.compare(right.depth(), left.depth()));
+        return ordered;
     }
 
     private PlacementAttempt tryPlace(

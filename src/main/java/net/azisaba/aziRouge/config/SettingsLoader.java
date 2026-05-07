@@ -381,6 +381,7 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 1.0D
         );
+        int minPerDungeon = Math.max(0, config.getInt("azirouge.treasure.min-per-dungeon", 1));
 
         ConfigurationSection tiers = config.getConfigurationSection("azirouge.treasure.tiers");
         ChestLootTierSettings defaultTier1 = defaultTreasureTier1();
@@ -390,6 +391,7 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 depthMultiplier,
                 maxSpawnChance,
+                minPerDungeon,
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-1"), defaultTier1, "treasure.tier-1"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-2"), defaultTier2, "treasure.tier-2"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-3"), defaultTier3, "treasure.tier-3")
@@ -404,10 +406,12 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 1.0D
         );
+        int minPerDungeon = Math.max(0, config.getInt("azirouge.traps.min-per-dungeon", 1));
         return new TrapSettings(
                 baseSpawnChance,
                 depthMultiplier,
                 maxSpawnChance,
+                minPerDungeon,
                 loadTrapDefinitions(config.getList("azirouge.traps.definitions"))
         );
     }

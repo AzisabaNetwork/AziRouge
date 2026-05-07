@@ -53,8 +53,49 @@ public final class RoomPlacementHelper {
         return floor.getType().isSolid()
                 && block.isPassable()
                 && head.isPassable()
-                && block.getLightFromSky() == 0
                 && !hasDisplayEntityNearby(block);
+    }
+
+    public static String diagnosePlacementFailure(World world, BlockBox bounds) {
+        int minX = interiorMin(bounds.minX(), bounds.maxX());
+        int maxX = interiorMax(bounds.minX(), bounds.maxX());
+        int minZ = interiorMin(bounds.minZ(), bounds.maxZ());
+        int maxZ = interiorMax(bounds.minZ(), bounds.maxZ());
+        int minY = Math.max(bounds.minY() + 1, world.getMinHeight() + 1);
+        int maxY = Math.min(bounds.maxY() - 1, world.getMaxHeight() - 2);
+
+        int checked = 0;
+        int noSolidFloor = 0;
+        int blockedBody = 0;
+        int blockedHead = 0;
+        int displayNearby = 0;
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    checked++;
+                    Block block = world.getBlockAt(x, y, z);
+                    Block floor = block.getRelative(BlockFace.DOWN);
+                    Block head = block.getRelative(BlockFace.UP);
+                    if (!floor.getType().isSolid()) {
+                        noSolidFloor++;
+                    } else if (!block.isPassable()) {
+                        blockedBody++;
+                    } else if (!head.isPassable()) {
+                        blockedHead++;
+                    } else if (hasDisplayEntityNearby(block)) {
+                        displayNearby++;
+                    }
+                }
+            }
+        }
+
+        return "checked=" + checked
+                + ",noSolidFloor=" + noSolidFloor
+                + ",blockedBody=" + blockedBody
+                + ",blockedHead=" + blockedHead
+                + ",displayNearby=" + displayNearby
+                + ",searchY=" + minY + ".." + maxY;
     }
 
     private static boolean hasDisplayEntityNearby(Block block) {

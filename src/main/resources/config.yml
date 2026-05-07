@@ -141,6 +141,7 @@ azirouge:
     base-spawn-chance: 0.08
     depth-multiplier: 0.04
     max-spawn-chance: 0.65
+    min-per-dungeon: 1
     tiers:
       tier-1:
         min-rolls: 1
@@ -199,6 +200,7 @@ azirouge:
     base-spawn-chance: 0.06
     depth-multiplier: 0.03
     max-spawn-chance: 0.35
+    min-per-dungeon: 1
     definitions:
       - key: landmine
         weight: 10
