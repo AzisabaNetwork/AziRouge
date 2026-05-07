@@ -49,7 +49,7 @@ public final class GameSessionManager {
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
             Attribute.ATTACK_SPEED, 4.0D,
-            Attribute.ENTITY_INTERACTION_RANGE, 2.3D
+            Attribute.ENTITY_INTERACTION_RANGE, 2.7D
     );
 
     private final AziRouge plugin;

@@ -62,7 +62,7 @@ public final class TrapTriggerListener implements Listener {
                     definition.explosionPower(),
                     definition.setFire(),
                     definition.breakBlocks(),
-                    event.getPlayer()
+                    null
             );
             break;
         }
