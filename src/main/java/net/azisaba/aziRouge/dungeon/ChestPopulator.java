@@ -27,10 +27,13 @@ public final class ChestPopulator {
         if (random.nextDouble() > plugin.settings().azirouge().chest().spawnChance(piece.depth())) {
             return;
         }
+        populateGuaranteedRoom(world, piece, random);
+    }
 
+    public boolean populateGuaranteedRoom(World world, PlacedPiece piece, Random random) {
         Block chestBlock = RoomPlacementHelper.findPlacementBlock(world, piece.worldBounds(), random);
         if (chestBlock == null) {
-            return;
+            return false;
         }
 
         chestBlock.setType(Material.CHEST, false);
@@ -38,7 +41,7 @@ public final class ChestPopulator {
             plugin.getLogger().warning("Failed to create chest state at "
                     + chestBlock.getX() + "," + chestBlock.getY() + "," + chestBlock.getZ()
                     + " in world " + world.getName());
-            return;
+            return false;
         }
 
         Inventory inventory = chest.getBlockInventory();
@@ -49,6 +52,7 @@ public final class ChestPopulator {
         for (int index = 0; index < loot.size() && index < slots.size(); index++) {
             inventory.setItem(slots.get(index), loot.get(index));
         }
+        return true;
     }
 
     private List<Integer> availableSlots(int inventorySize) {

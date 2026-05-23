@@ -12,14 +12,12 @@ import org.bukkit.Registry;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Creature;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Mob;
+import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 
 import java.util.ArrayList;
@@ -31,7 +29,7 @@ import java.util.Random;
 public enum MobProfile {
     ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 12, 20.0D, 0.40D, 5.0D),
     SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D),
-    SPIDER_STALKER("spider_stalker", EntityType.SPIDER, 9, 8, 28.0D, 0.38D, 4.5D);
+    POWERED_CREEPER("powered_creeper", EntityType.CREEPER, 9, 8, 20.0D, 0.38D, 4.5D);
 
     public static final String MOB_TAG = "azirouge_mob";
     private static final String PROFILE_TAG_PREFIX = "azirouge_profile:";
@@ -90,6 +88,12 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
         applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
+
+        if (mob instanceof Creeper creeper) {
+            creeper.setPowered(true);
+            creeper.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false, true));
+        }
+
         if (mob instanceof Mob m) {
             m.getPathfinder().setCanOpenDoors(true);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);

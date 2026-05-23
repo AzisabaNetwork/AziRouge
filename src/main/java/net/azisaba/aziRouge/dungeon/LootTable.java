@@ -4,12 +4,15 @@ import net.azisaba.aziRouge.config.ChestLootEntrySettings;
 import net.azisaba.aziRouge.config.ChestLootTierSettings;
 import net.azisaba.aziRouge.config.ChestSettings;
 import net.azisaba.aziRouge.config.TreasureSettings;
+import net.azisaba.aziRouge.game.ItemAdventurePredicateSupport;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
 
@@ -117,6 +120,14 @@ public final class LootTable {
                 }
             }
             itemStack.setItemMeta(storageMeta);
+        }
+
+        ItemAdventurePredicateSupport.setCanBreak(itemStack, entry.canDestroy());
+        if (itemStack.getItemMeta() instanceof Damageable damageable && entry.durability() != null) {
+            int maxDamage = itemStack.getType().getMaxDurability();
+            int damage = Math.max(0, maxDamage - entry.durability());
+            damageable.setDamage(damage);
+            itemStack.setItemMeta(damageable);
         }
     }
 }

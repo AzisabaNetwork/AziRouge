@@ -2,6 +2,9 @@ package net.azisaba.aziRouge.dungeon;
 
 import net.azisaba.aziRouge.config.DoorSettings;
 import net.azisaba.aziRouge.config.GenerationSettings;
+import net.azisaba.aziRouge.config.MiningGimmickSettings;
+import net.azisaba.aziRouge.config.MiningGimmickType;
+import net.azisaba.aziRouge.config.MiningSettings;
 import net.azisaba.aziRouge.config.PluginSettings;
 import net.azisaba.aziRouge.debug.DebugLogger;
 import net.azisaba.aziRouge.math.BlockBox;
@@ -36,6 +39,15 @@ import java.util.Random;
 import java.util.Set;
 
 public final class DungeonGenerator {
+    private static final List<BlockFace> TUNNEL_TRIGGER_FACES = List.of(
+            BlockFace.NORTH,
+            BlockFace.SOUTH,
+            BlockFace.EAST,
+            BlockFace.WEST,
+            BlockFace.UP,
+            BlockFace.DOWN
+    );
+
     private final JavaPlugin plugin;
     private final DebugLogger debugLogger;
     private final TemplateManager templateManager;
@@ -44,6 +56,7 @@ public final class DungeonGenerator {
     private final ChestPopulator chestPopulator;
     private final TreasurePopulator treasurePopulator;
     private final TrapPopulator trapPopulator;
+    private final MiningService miningService;
 
     public DungeonGenerator(
             JavaPlugin plugin,
@@ -53,7 +66,8 @@ public final class DungeonGenerator {
             EnemyPlacementService enemyPlacementService,
             ChestPopulator chestPopulator,
             TreasurePopulator treasurePopulator,
-            TrapPopulator trapPopulator
+            TrapPopulator trapPopulator,
+            MiningService miningService
     ) {
         this.plugin = plugin;
         this.debugLogger = debugLogger;
@@ -63,6 +77,7 @@ public final class DungeonGenerator {
         this.chestPopulator = chestPopulator;
         this.treasurePopulator = treasurePopulator;
         this.trapPopulator = trapPopulator;
+        this.miningService = miningService;
     }
 
     public DungeonGenerationResult generate(GenerationExecutionRequest request, PluginSettings settings)
@@ -134,9 +149,24 @@ public final class DungeonGenerator {
         }
 
         List<PieceConnection> allConnections = collectConnections(pieces, connections);
+        PreparedConnectionGimmicks preparedConnectionGimmicks = miningService == null
+                ? new PreparedConnectionGimmicks(Set.of(), Set.of(), Set.of(), List.of())
+                : prepareConnectionGimmicks(request.world(), allConnections, random, settings.azirouge().mining());
         for (PieceConnection connection : allConnections) {
+            if (preparedConnectionGimmicks.tunnelConnections().contains(connection)) {
+                debugLogger.log("mining", "tunnel_reserved", Map.of(
+                        "child", connection.childEntrance().key(),
+                        "parent", connection.parentEntrance().key()
+                ));
+                continue;
+            }
             carveConnection(request.world(), connection);
-            maybePlaceDoor(request.world(), connection, random, settings.door());
+            if (preparedConnectionGimmicks.ironDoorConnections().contains(connection)
+                    || preparedConnectionGimmicks.redstoneDoorConnections().contains(connection)) {
+                placeConnectionDoor(request.world(), connection, Material.IRON_DOOR, random);
+            } else {
+                maybePlaceDoor(request.world(), connection, random, settings.door());
+            }
         }
 
         int treasureCount = 0;
@@ -148,6 +178,9 @@ public final class DungeonGenerator {
         }
         treasureCount += populateMissingTreasures(request.world(), pieces, settings.azirouge().treasure().minPerDungeon(), treasureCount, random);
         trapCount += populateMissingTraps(request.world(), pieces, settings.azirouge().traps().minPerDungeon(), trapCount, random);
+        if (miningService != null) {
+            miningService.populate(request.world(), pieces, random, chestPopulator, preparedConnectionGimmicks.targets());
+        }
 
         List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
         Location spawnLocation = resolveSpawnLocation(request.world(), startPiece);
@@ -214,6 +247,245 @@ public final class DungeonGenerator {
             ));
         }
         return spawned;
+    }
+
+    private PreparedConnectionGimmicks prepareConnectionGimmicks(World world, List<PieceConnection> connections, Random random, MiningSettings settings) {
+        if (!settings.enabled() || settings.triggersPerDungeon() <= 0) {
+            return new PreparedConnectionGimmicks(Set.of(), Set.of(), Set.of(), List.of());
+        }
+
+        List<ConnectionGimmickCandidate> candidates = connectionGimmickCandidates(connections, settings);
+        Set<PieceConnection> tunnelConnections = new LinkedHashSet<>();
+        Set<PieceConnection> ironDoorConnections = new LinkedHashSet<>();
+        Set<PieceConnection> redstoneDoorConnections = new LinkedHashSet<>();
+        List<MiningPreparedGimmick> targets = new ArrayList<>();
+        int maxTargets = settings.triggersPerDungeon();
+
+        while (targets.size() < maxTargets && !candidates.isEmpty()) {
+            ConnectionGimmickCandidate candidate = selectConnectionGimmick(candidates, random);
+            PieceConnection connection = candidate.connection();
+            MiningGimmickType type = candidate.type();
+            candidates.removeIf(next -> next.connection().equals(connection));
+            if (type == MiningGimmickType.OPEN_DOOR) {
+                PlacedEntrance doorEntrance = doorTarget(connection);
+                ironDoorConnections.add(connection);
+                targets.add(new MiningPreparedGimmick(
+                        MiningGimmickType.OPEN_DOOR,
+                        lowerDoorLocation(doorEntrance.planeBox(), world),
+                        doorEntrance.piece(),
+                        List.of(),
+                        List.of(),
+                        doorSideSources(world, doorEntrance)
+                ));
+            } else if (type == MiningGimmickType.REDSTONE_DOOR) {
+                PlacedEntrance doorEntrance = doorTarget(connection);
+                redstoneDoorConnections.add(connection);
+                targets.add(new MiningPreparedGimmick(
+                        MiningGimmickType.REDSTONE_DOOR,
+                        lowerDoorLocation(doorEntrance.planeBox(), world),
+                        doorEntrance.piece(),
+                        List.of(),
+                        List.of(),
+                        List.of()
+                ));
+            } else if (type == MiningGimmickType.TUNNEL_BREAKTHROUGH) {
+                PlacedPiece targetPiece = deeperPiece(connection);
+                List<Location> sideSources = sealTunnelConnection(
+                        world,
+                        connection
+                );
+                tunnelConnections.add(connection);
+                targets.add(new MiningPreparedGimmick(
+                        MiningGimmickType.TUNNEL_BREAKTHROUGH,
+                        centerOf(connection.parentEntrance().planeBox(), world),
+                        targetPiece,
+                        List.of(connection.parentEntrance().openingBox(), connection.childEntrance().openingBox()),
+                        List.of(),
+                        sideSources
+                ));
+            }
+        }
+
+        debugLogger.log("mining", "prepared_connection_gimmicks", Map.of(
+                "ironDoors", ironDoorConnections.size(),
+                "redstoneDoors", redstoneDoorConnections.size(),
+                "targets", targets.size(),
+                "tunnels", tunnelConnections.size()
+        ));
+        return new PreparedConnectionGimmicks(Set.copyOf(tunnelConnections), Set.copyOf(ironDoorConnections), Set.copyOf(redstoneDoorConnections), List.copyOf(targets));
+    }
+
+    private List<ConnectionGimmickCandidate> connectionGimmickCandidates(List<PieceConnection> connections, MiningSettings settings) {
+        List<MiningGimmickSettings> weightedGimmicks = settings.gimmicks().stream()
+                .filter(gimmick -> gimmick.type() == MiningGimmickType.OPEN_DOOR
+                        || gimmick.type() == MiningGimmickType.REDSTONE_DOOR
+                        || gimmick.type() == MiningGimmickType.TUNNEL_BREAKTHROUGH)
+                .filter(gimmick -> gimmick.weight() > 0)
+                .toList();
+        List<ConnectionGimmickCandidate> candidates = new ArrayList<>();
+        for (PieceConnection connection : connections) {
+            for (MiningGimmickSettings gimmick : weightedGimmicks) {
+                if (isConnectionGimmickEligible(gimmick.type(), connection)) {
+                    candidates.add(new ConnectionGimmickCandidate(connection, gimmick.type(), gimmick.weight()));
+                }
+            }
+        }
+        return candidates;
+    }
+
+    private ConnectionGimmickCandidate selectConnectionGimmick(List<ConnectionGimmickCandidate> candidates, Random random) {
+        int total = candidates.stream().mapToInt(ConnectionGimmickCandidate::weight).sum();
+        int cursor = random.nextInt(Math.max(1, total));
+        for (ConnectionGimmickCandidate candidate : candidates) {
+            cursor -= candidate.weight();
+            if (cursor < 0) {
+                return candidate;
+            }
+        }
+        return candidates.getFirst();
+    }
+
+    private boolean isConnectionGimmickEligible(MiningGimmickType type, PieceConnection connection) {
+        return switch (type) {
+            case OPEN_DOOR -> doorTarget(connection) != null;
+            case REDSTONE_DOOR -> doorTarget(connection) != null;
+            case TUNNEL_BREAKTHROUGH -> isThreeByThreeConnection(connection);
+            case SUMMON_CHEST -> false;
+        };
+    }
+
+    private boolean isThreeByThreeConnection(PieceConnection connection) {
+        return isThreeByThreeOpening(connection.parentEntrance().planeBox())
+                && isThreeByThreeOpening(connection.childEntrance().planeBox());
+    }
+
+    private boolean isThreeByThreeOpening(BlockBox box) {
+        int oneBlockAxes = 0;
+        int threeBlockAxes = 0;
+        for (int size : List.of(box.sizeX(), box.sizeY(), box.sizeZ())) {
+            if (size == 1) {
+                oneBlockAxes++;
+            } else if (size == 3) {
+                threeBlockAxes++;
+            }
+        }
+        return oneBlockAxes == 1 && threeBlockAxes == 2;
+    }
+
+    private List<Location> sealTunnelConnection(World world, PieceConnection connection) {
+        int parentBlocks = fillBox(world, connection.parentEntrance().openingBox(), Material.COBBLESTONE);
+        int childBlocks = fillBox(world, connection.childEntrance().openingBox(), Material.COBBLESTONE);
+
+        Location parentSource = airTouchingCarveBlock(world, connection.parentEntrance().openingBox(), false);
+        Location childSource = airTouchingCarveBlock(world, connection.childEntrance().openingBox(), true);
+
+        debugLogger.log("mining", "tunnel_sealed", Map.of(
+                "childBlocks", childBlocks,
+                "childBox", format(connection.childEntrance().openingBox()),
+                "childSource", format(childSource),
+                "parentBlocks", parentBlocks,
+                "parentBox", format(connection.parentEntrance().openingBox()),
+                "parentSource", format(parentSource)
+        ));
+        return List.of(parentSource, childSource);
+    }
+
+    private int fillBox(World world, BlockBox box, Material material) {
+        int blocks = 0;
+        for (int x = box.minX(); x <= box.maxX(); x++) {
+            for (int y = box.minY(); y <= box.maxY(); y++) {
+                for (int z = box.minZ(); z <= box.maxZ(); z++) {
+                    world.getBlockAt(x, y, z).setType(material, false);
+                    blocks++;
+                }
+            }
+        }
+        return blocks;
+    }
+
+    private Location airTouchingCarveBlock(World world, BlockBox box, boolean reverse) {
+        List<Block> candidates = new ArrayList<>();
+        for (int x = box.minX(); x <= box.maxX(); x++) {
+            for (int y = box.minY(); y <= box.maxY(); y++) {
+                for (int z = box.minZ(); z <= box.maxZ(); z++) {
+                    candidates.add(world.getBlockAt(x, y, z));
+                }
+            }
+        }
+        if (reverse) {
+            Collections.reverse(candidates);
+        }
+
+        for (Block candidate : candidates) {
+            if (hasOutsideAirNeighbor(candidate, box)) {
+                return candidate.getLocation();
+            }
+        }
+
+        Block fallback = candidates.get(candidates.size() / 2);
+        for (BlockFace face : TUNNEL_TRIGGER_FACES) {
+            Block neighbor = fallback.getRelative(face);
+            if (!box.contains(neighbor.getX(), neighbor.getY(), neighbor.getZ())) {
+                neighbor.setType(Material.AIR, false);
+                debugLogger.log("mining", "tunnel_source_air_created", Map.of(
+                        "air", neighbor.getX() + "," + neighbor.getY() + "," + neighbor.getZ(),
+                        "source", fallback.getX() + "," + fallback.getY() + "," + fallback.getZ()
+                ));
+                break;
+            }
+        }
+        return fallback.getLocation();
+    }
+
+    private boolean hasOutsideAirNeighbor(Block block, BlockBox box) {
+        for (BlockFace face : TUNNEL_TRIGGER_FACES) {
+            Block neighbor = block.getRelative(face);
+            if (!box.contains(neighbor.getX(), neighbor.getY(), neighbor.getZ()) && neighbor.isPassable()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private PlacedEntrance doorTarget(PieceConnection connection) {
+        if (connection.childEntrance().isDoorCompatible()) {
+            return connection.childEntrance();
+        }
+        if (connection.parentEntrance().isDoorCompatible()) {
+            return connection.parentEntrance();
+        }
+        return null;
+    }
+
+    private PlacedPiece deeperPiece(PieceConnection connection) {
+        return connection.childEntrance().piece().depth() >= connection.parentEntrance().piece().depth()
+                ? connection.childEntrance().piece()
+                : connection.parentEntrance().piece();
+    }
+
+    private Location centerOf(BlockBox box, World world) {
+        return new Location(
+                world,
+                box.minX() + (box.sizeX() / 2.0D),
+                box.minY() + (box.sizeY() / 2.0D),
+                box.minZ() + (box.sizeZ() / 2.0D)
+        );
+    }
+
+    private Location lowerDoorLocation(BlockBox plane, World world) {
+        return new Location(world, plane.minX(), plane.minY(), plane.minZ());
+    }
+
+    private List<Location> doorSideSources(World world, PlacedEntrance doorEntrance) {
+        Location lowerDoor = lowerDoorLocation(doorEntrance.planeBox(), world);
+        Block firstSide = lowerDoor.getBlock().getRelative(BlockFace.valueOf(doorEntrance.worldFacing().name()));
+        Block secondSide = lowerDoor.getBlock().getRelative(BlockFace.valueOf(doorEntrance.worldFacing().opposite().name()));
+        debugLogger.log("mining", "open_door_trigger_sides_prepared", Map.of(
+                "door", format(lowerDoor),
+                "first", firstSide.getX() + "," + firstSide.getY() + "," + firstSide.getZ(),
+                "second", secondSide.getX() + "," + secondSide.getY() + "," + secondSide.getZ()
+        ));
+        return List.of(firstSide.getLocation(), secondSide.getLocation());
     }
 
     private List<PlacedPiece> preferredGimmickPieces(List<PlacedPiece> pieces) {
@@ -751,7 +1023,10 @@ public final class DungeonGenerator {
         if (!settings.enabled() || random.nextDouble() > settings.chance()) {
             return;
         }
+        placeConnectionDoor(world, connection, settings.material(), random);
+    }
 
+    private void placeConnectionDoor(World world, PieceConnection connection, Material material, Random random) {
         PlacedEntrance target = null;
         if (connection.childEntrance().isDoorCompatible()) {
             target = connection.childEntrance();
@@ -767,12 +1042,12 @@ public final class DungeonGenerator {
         int y = plane.minY();
         int z = plane.minZ();
 
-        BlockData lowerData = settings.material().createBlockData();
+        BlockData lowerData = material.createBlockData();
         if (!(lowerData instanceof Door lowerDoor)) {
-            plugin.getLogger().warning("Configured door material is not a valid door block: " + settings.material());
+            plugin.getLogger().warning("Configured door material is not a valid door block: " + material);
             return;
         }
-        Door upperDoor = (Door) settings.material().createBlockData();
+        Door upperDoor = (Door) material.createBlockData();
         BlockFace facing = BlockFace.valueOf(target.worldFacing().name());
         lowerDoor.setFacing(facing);
         lowerDoor.setHalf(Bisected.Half.BOTTOM);
@@ -784,7 +1059,7 @@ public final class DungeonGenerator {
         world.getBlockAt(x, y, z).setBlockData(lowerDoor, false);
         world.getBlockAt(x, y + 1, z).setBlockData(upperDoor, false);
         debugLogger.log("door", "placed", Map.of(
-                "material", settings.material(),
+                "material", material,
                 "piece", target.piece().template().id(),
                 "position", x + "," + y + "," + z
         ));
@@ -796,6 +1071,10 @@ public final class DungeonGenerator {
 
     private String format(BlockBox box) {
         return format(box.min()) + "->" + format(box.max());
+    }
+
+    private String format(Location location) {
+        return location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
     }
 
     private Location resolveSpawnLocation(World world, PlacedPiece piece) {
@@ -860,6 +1139,17 @@ public final class DungeonGenerator {
     }
 
     private record PlacementAttempt(PlacedPiece piece, PlacedEntrance childEntrance) {
+    }
+
+    private record PreparedConnectionGimmicks(
+            Set<PieceConnection> tunnelConnections,
+            Set<PieceConnection> ironDoorConnections,
+            Set<PieceConnection> redstoneDoorConnections,
+            List<MiningPreparedGimmick> targets
+    ) {
+    }
+
+    private record ConnectionGimmickCandidate(PieceConnection connection, MiningGimmickType type, int weight) {
     }
 
     private record PlacementCandidate(

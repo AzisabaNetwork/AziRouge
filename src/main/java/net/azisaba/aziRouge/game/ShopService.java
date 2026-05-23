@@ -15,6 +15,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ public final class ShopService implements Listener {
             return;
         }
 
-        ItemStack purchased = new ItemStack(trade.material(), trade.amount());
+        ItemStack purchased = tradeItem(trade);
         if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
             player.sendMessage(PREFIX + ChatColor.RED + "Your inventory has no free space.");
             return;
@@ -132,15 +133,32 @@ public final class ShopService implements Listener {
     }
 
     private ItemStack displayItem(ShopTradeSettings trade, GameSession session) {
-        ItemStack item = new ItemStack(trade.material(), trade.amount());
+        ItemStack item = tradeItem(trade);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.GREEN + trade.material().name());
-            meta.setLore(List.of(
-                    ChatColor.YELLOW + "Price: " + trade.price(),
-                    ChatColor.GRAY + "Shared money: " + session.sharedBalance()
-            ));
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.YELLOW + "Price: " + trade.price());
+            lore.add(ChatColor.GRAY + "Shared money: " + session.sharedBalance());
+            if (!trade.canDestroy().isEmpty()) {
+                lore.add(ChatColor.GRAY + "Can mine: " + trade.canDestroy().size() + " block types");
+            }
+            if (trade.durability() != null) {
+                lore.add(ChatColor.GRAY + "Durability: " + trade.durability());
+            }
+            meta.setLore(lore);
             item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack tradeItem(ShopTradeSettings trade) {
+        ItemStack item = new ItemStack(trade.material(), trade.amount());
+        ItemAdventurePredicateSupport.setCanBreak(item, trade.canDestroy());
+        if (item.getItemMeta() instanceof Damageable damageable && trade.durability() != null) {
+            int damage = Math.max(0, item.getType().getMaxDurability() - trade.durability());
+            damageable.setDamage(damage);
+            item.setItemMeta(damageable);
         }
         return item;
     }

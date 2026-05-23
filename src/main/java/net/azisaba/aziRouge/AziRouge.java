@@ -10,6 +10,7 @@ import net.azisaba.aziRouge.debug.DebugLogger;
 import net.azisaba.aziRouge.dungeon.ChestPopulator;
 import net.azisaba.aziRouge.dungeon.DungeonGenerator;
 import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
+import net.azisaba.aziRouge.dungeon.MiningService;
 import net.azisaba.aziRouge.dungeon.TreasurePickupListener;
 import net.azisaba.aziRouge.dungeon.TreasurePopulator;
 import net.azisaba.aziRouge.dungeon.TrapPopulator;
@@ -50,6 +51,7 @@ public final class AziRouge extends JavaPlugin {
     private GameMenuService gameMenuService;
     private SessionScoreboardService sessionScoreboardService;
     private SessionGameplayService sessionGameplayService;
+    private MiningService miningService;
 
     @Override
     public void onEnable() {
@@ -72,6 +74,9 @@ public final class AziRouge extends JavaPlugin {
         }
         if (sessionGameplayService != null) {
             sessionGameplayService.shutdown();
+        }
+        if (miningService != null) {
+            miningService.clearAll();
         }
         if (portalService != null) {
             portalService.shutdown();
@@ -114,7 +119,8 @@ public final class AziRouge extends JavaPlugin {
                 new EnemyPlacementService(debugLogger),
                 chestPopulator,
                 treasurePopulator,
-                trapPopulator
+                trapPopulator,
+                miningService
         );
     }
 
@@ -146,6 +152,10 @@ public final class AziRouge extends JavaPlugin {
         if (sessionGameplayService == null) {
             this.sessionGameplayService = new SessionGameplayService(this, gameSessionManager);
         }
+        if (miningService == null) {
+            this.miningService = new MiningService(this);
+            this.dungeonGenerator = createDungeonGenerator();
+        }
         gameMenuService.refresh();
         sessionScoreboardService.start();
         sessionGameplayService.start();
@@ -173,6 +183,10 @@ public final class AziRouge extends JavaPlugin {
 
     public ShopService shopService() {
         return shopService;
+    }
+
+    public MiningService miningService() {
+        return miningService;
     }
 
     public TemplateAuthoringService templateAuthoringService() {
@@ -208,6 +222,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);
+        getServer().getPluginManager().registerEvents(miningService, this);
         getServer().getPluginManager().registerEvents(new GlobalJoinQuitListener(this), this);
     }
 

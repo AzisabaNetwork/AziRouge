@@ -84,7 +84,8 @@ public final class SettingsLoader {
                         loadMobSpawnSettings(config),
                         loadChestSettings(plugin, config),
                         loadTreasureSettings(plugin, config),
-                        loadTrapSettings(config)
+                        loadTrapSettings(config),
+                        loadMiningSettings(plugin, config)
                 ),
                 new JoinSettings(
                         config.getBoolean("join.isbeta", false)
@@ -184,9 +185,91 @@ public final class SettingsLoader {
             }
 
             int amount = clampInt(intValue(values.get("amount"), 1), 1, material.getMaxStackSize());
-            trades.add(new ShopTradeSettings(id.toLowerCase(Locale.ROOT), material, amount, price));
+            trades.add(new ShopTradeSettings(
+                    id.toLowerCase(Locale.ROOT),
+                    material,
+                    amount,
+                    price,
+                    loadMaterialSet(values.get("can-destroy")),
+                    optionalPositiveInt(values.get("durability"))
+            ));
         }
         return List.copyOf(trades);
+    }
+
+    private static MiningSettings loadMiningSettings(JavaPlugin plugin, FileConfiguration config) {
+        Material backing = materialOr(config.getString("azirouge.mining.backing-material"), Material.STONE);
+        Material trigger = materialOr(config.getString("azirouge.mining.trigger-material"), Material.CHISELED_DEEPSLATE);
+        return new MiningSettings(
+                config.getBoolean("azirouge.mining.enabled", true),
+                Math.max(0, config.getInt("azirouge.mining.ores-per-piece", 2)),
+                Math.max(0, config.getInt("azirouge.mining.triggers-per-dungeon", 2)),
+                backing.isBlock() ? backing : Material.STONE,
+                trigger.isBlock() ? trigger : Material.CHISELED_DEEPSLATE,
+                Math.max(1, config.getInt("azirouge.mining.min-trigger-gimmick-distance", 16)),
+                Math.max(1, config.getInt("azirouge.mining.chain-step-ticks", 2)),
+                loadMiningOres(plugin, config.getList("azirouge.mining.ores")),
+                loadMiningGimmicks(config.getList("azirouge.mining.gimmicks"))
+        );
+    }
+
+    private static List<MiningOreSettings> loadMiningOres(JavaPlugin plugin, List<?> rawOres) {
+        if (rawOres == null || rawOres.isEmpty()) {
+            return List.of(
+                    new MiningOreSettings(Material.COAL_ORE, 12, 0, Integer.MAX_VALUE),
+                    new MiningOreSettings(Material.IRON_ORE, 8, 1, Integer.MAX_VALUE),
+                    new MiningOreSettings(Material.GOLD_ORE, 4, 3, Integer.MAX_VALUE)
+            );
+        }
+
+        List<MiningOreSettings> ores = new ArrayList<>();
+        for (Object rawOre : rawOres) {
+            Map<?, ?> values = asMap(rawOre);
+            if (values == null) {
+                continue;
+            }
+            Material material = materialOr(stringValue(values.get("material")), null);
+            if (material == null || !material.isBlock()) {
+                plugin.getLogger().warning("Ignoring invalid mining ore: " + values);
+                continue;
+            }
+            int minDepth = Math.max(0, intValue(values.get("min-depth"), 0));
+            int maxDepth = Math.max(minDepth, intValue(values.get("max-depth"), Integer.MAX_VALUE));
+            ores.add(new MiningOreSettings(material, Math.max(1, intValue(values.get("weight"), 1)), minDepth, maxDepth));
+        }
+        return ores.isEmpty() ? List.of(new MiningOreSettings(Material.COAL_ORE, 1, 0, Integer.MAX_VALUE)) : List.copyOf(ores);
+    }
+
+    private static List<MiningGimmickSettings> loadMiningGimmicks(List<?> rawGimmicks) {
+        if (rawGimmicks == null || rawGimmicks.isEmpty()) {
+            return List.of(
+                    new MiningGimmickSettings(MiningGimmickType.TUNNEL_BREAKTHROUGH, 3),
+                    new MiningGimmickSettings(MiningGimmickType.OPEN_DOOR, 2),
+                    new MiningGimmickSettings(MiningGimmickType.REDSTONE_DOOR, 2),
+                    new MiningGimmickSettings(MiningGimmickType.SUMMON_CHEST, 3)
+            );
+        }
+
+        List<MiningGimmickSettings> gimmicks = new ArrayList<>();
+        for (Object rawGimmick : rawGimmicks) {
+            Map<?, ?> values = asMap(rawGimmick);
+            if (values == null) {
+                continue;
+            }
+            String typeName = normalizeOptionalText(stringValue(values.get("type")));
+            if (typeName == null) {
+                continue;
+            }
+            try {
+                gimmicks.add(new MiningGimmickSettings(
+                        MiningGimmickType.valueOf(typeName.replace('-', '_')),
+                        Math.max(0, intValue(values.get("weight"), 1))
+                ));
+            } catch (IllegalArgumentException ignored) {
+                // Ignore malformed gimmick type.
+            }
+        }
+        return gimmicks.isEmpty() ? List.of(new MiningGimmickSettings(MiningGimmickType.SUMMON_CHEST, 1)) : List.copyOf(gimmicks);
     }
 
     private static EconomySettings loadEconomySettings(JavaPlugin plugin, FileConfiguration config) {
@@ -532,8 +615,46 @@ public final class SettingsLoader {
                 minAmount,
                 maxAmount,
                 normalizeOptionalText(stringValue(values.get("potion-type"))),
-                loadStoredEnchantments(values.get("stored-enchantments"))
+                loadStoredEnchantments(values.get("stored-enchantments")),
+                loadMaterialSet(values.get("can-destroy")),
+                optionalPositiveInt(values.get("durability"))
         );
+    }
+
+    private static java.util.Set<Material> loadMaterialSet(Object rawValue) {
+        List<?> rawList;
+        if (rawValue instanceof List<?> list) {
+            rawList = list;
+        } else {
+            String single = stringValue(rawValue);
+            rawList = single == null || single.isBlank() ? List.of() : List.of(single);
+        }
+
+        java.util.Set<Material> materials = new java.util.LinkedHashSet<>();
+        for (Object raw : rawList) {
+            Material material = Material.matchMaterial(String.valueOf(raw).trim());
+            if (material != null && material.isBlock()) {
+                materials.add(material);
+            }
+        }
+        return materials.isEmpty() ? java.util.Set.of() : java.util.Set.copyOf(materials);
+    }
+
+    private static Integer optionalPositiveInt(Object value) {
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        int parsed = intValue(value, -1);
+        return parsed > 0 ? parsed : null;
+    }
+
+    private static Material materialOr(String value, Material fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        Material material = Material.matchMaterial(value.trim());
+        return material == null ? fallback : material;
     }
 
     private static Map<String, Integer> loadStoredEnchantments(Object rawValue) {

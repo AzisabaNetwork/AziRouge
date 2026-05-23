@@ -114,6 +114,18 @@ shop:
         material: TORCH
         amount: 16
         price: 10
+      - id: mining_pickaxe
+        material: IRON_PICKAXE
+        amount: 1
+        price: 35
+        durability: 64
+        can-destroy:
+          - COAL_ORE
+          - IRON_ORE
+          - GOLD_ORE
+          - DIAMOND_ORE
+          - EMERALD_ORE
+          - CHISELED_DEEPSLATE
     between-round:
       - id: bread
         material: BREAD
@@ -123,6 +135,18 @@ shop:
         material: COOKED_BEEF
         amount: 3
         price: 36
+      - id: mining_pickaxe
+        material: IRON_PICKAXE
+        amount: 1
+        price: 80
+        durability: 64
+        can-destroy:
+          - COAL_ORE
+          - IRON_ORE
+          - GOLD_ORE
+          - DIAMOND_ORE
+          - EMERALD_ORE
+          - CHISELED_DEEPSLATE
 gui:
   depth:
     max: 12
@@ -218,6 +242,36 @@ azirouge:
         set-fire: true
         break-blocks: false
         min-depth: 4
+  mining:
+    enabled: true
+    ores-per-piece: 2
+    triggers-per-dungeon: 4
+    backing-material: STONE
+    trigger-material: CHISELED_DEEPSLATE
+    min-trigger-gimmick-distance: 16
+    chain-step-ticks: 4
+    ores:
+      - material: COAL_ORE
+        weight: 12
+        min-depth: 0
+      - material: IRON_ORE
+        weight: 8
+        min-depth: 1
+      - material: GOLD_ORE
+        weight: 4
+        min-depth: 3
+      - material: DIAMOND_ORE
+        weight: 2
+        min-depth: 5
+    gimmicks:
+      - type: TUNNEL_BREAKTHROUGH
+        weight: 3
+      - type: OPEN_DOOR
+        weight: 3
+      - type: REDSTONE_DOOR
+        weight: 2
+      - type: SUMMON_CHEST
+        weight: 0
   mobs:
     zombie_brute:
       weight: 12
