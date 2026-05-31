@@ -186,7 +186,7 @@ public final class ShopService implements Listener {
     }
 
     private int inventorySizeFor(int tradeCount) {
-        return Math.min(54, Math.max(9, ((tradeCount + 8) / 9) * 9));
+        return Math.clamp(((tradeCount + 8) / 9) * 9, 9, 54);
     }
 
     private String shopTitle(GameSession session) {
