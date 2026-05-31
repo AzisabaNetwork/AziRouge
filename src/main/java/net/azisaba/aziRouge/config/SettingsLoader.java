@@ -76,6 +76,7 @@ public final class SettingsLoader {
                 loadShopSettings(plugin, config),
                 loadGuiSettings(config),
                 loadPlayerSettings(config),
+                loadBossSettings(plugin, config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -159,6 +160,53 @@ public final class SettingsLoader {
         return new PlayerSettings(
                 Math.max(0.0D, config.getDouble("player.sprint-stamina.drain-per-second", 1.0D)),
                 Math.max(0.0D, config.getDouble("player.sprint-stamina.recovery-per-second", 1.5D))
+        );
+    }
+
+    private static BossSettings loadBossSettings(JavaPlugin plugin, FileConfiguration config) {
+        List<BossBattleSettings> battles = new ArrayList<>();
+        List<?> rawBattles = config.getList("boss.battles");
+        if (rawBattles != null) {
+            for (Object rawBattle : rawBattles) {
+                Map<?, ?> values = asMap(rawBattle);
+                if (values == null || values.isEmpty()) {
+                    plugin.getLogger().warning("Ignoring malformed boss battle: " + rawBattle);
+                    continue;
+                }
+                String id = normalizeOptionalText(stringValue(values.get("id")));
+                if (id == null) {
+                    plugin.getLogger().warning("Ignoring boss battle without id: " + values);
+                    continue;
+                }
+                Material portalMaterial = materialOr(
+                        stringValue(values.get("return-portal-material")),
+                        Material.END_PORTAL
+                );
+                if (portalMaterial == null || !portalMaterial.isBlock()) {
+                    plugin.getLogger().warning("Ignoring boss battle with invalid portal material: " + values);
+                    continue;
+                }
+                battles.add(new BossBattleSettings(
+                        id.toLowerCase(Locale.ROOT),
+                        requireText(stringValue(values.get("villager-tag")), "boss_" + id.toLowerCase(Locale.ROOT)),
+                        Math.max(0, intValue(values.get("min-round"), 5)),
+                        loadVector(values.get("destination"), new IntVector3(0, 64, 768)),
+                        (float) doubleValue(values.get("yaw"), 0.0D),
+                        loadRelativeBlockBox(
+                                values.get("return-portal-area"),
+                                new IntVector3(-1, 0, -1),
+                                new IntVector3(1, 2, 1)
+                        ),
+                        portalMaterial
+                ));
+            }
+        }
+
+        return new BossSettings(
+                List.copyOf(battles),
+                Math.max(0.5D, config.getDouble("boss.revive.radius", 2.0D)),
+                Math.max(1, config.getInt("boss.revive.hold-ticks", 60)),
+                Math.max(1, config.getInt("boss.portal-cooldown-seconds", 3))
         );
     }
 
@@ -338,6 +386,29 @@ public final class SettingsLoader {
                 config.getInt(path + ".max.z", defaultMax.z())
         );
         return BlockBox.fromPoints(min, max);
+    }
+
+    private static BlockBox loadRelativeBlockBox(Object rawValue, IntVector3 defaultMin, IntVector3 defaultMax) {
+        Map<?, ?> values = asMap(rawValue);
+        if (values == null) {
+            return BlockBox.fromPoints(defaultMin, defaultMax);
+        }
+        return BlockBox.fromPoints(
+                loadVector(values.get("min"), defaultMin),
+                loadVector(values.get("max"), defaultMax)
+        );
+    }
+
+    private static IntVector3 loadVector(Object rawValue, IntVector3 defaultValue) {
+        Map<?, ?> values = asMap(rawValue);
+        if (values == null) {
+            return defaultValue;
+        }
+        return new IntVector3(
+                intValue(values.get("x"), defaultValue.x()),
+                intValue(values.get("y"), defaultValue.y()),
+                intValue(values.get("z"), defaultValue.z())
+        );
     }
 
     private static Path resolvePath(JavaPlugin plugin, String value) {

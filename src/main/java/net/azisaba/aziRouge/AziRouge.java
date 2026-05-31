@@ -20,6 +20,7 @@ import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.game.BossBattleService;
 import net.azisaba.aziRouge.game.SessionGameplayService;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
@@ -46,6 +47,7 @@ public final class AziRouge extends JavaPlugin {
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
     private PortalService portalService;
+    private BossBattleService bossBattleService;
     private EconomyService economyService;
     private ShopService shopService;
     private GameMenuService gameMenuService;
@@ -74,6 +76,9 @@ public final class AziRouge extends JavaPlugin {
         }
         if (sessionGameplayService != null) {
             sessionGameplayService.shutdown();
+        }
+        if (bossBattleService != null) {
+            bossBattleService.shutdown();
         }
         if (miningService != null) {
             miningService.clearAll();
@@ -140,6 +145,9 @@ public final class AziRouge extends JavaPlugin {
         if (portalService == null) {
             this.portalService = new PortalService(this, gameSessionManager);
         }
+        if (bossBattleService == null) {
+            this.bossBattleService = new BossBattleService(this, gameSessionManager);
+        }
         if (shopService == null) {
             this.shopService = new ShopService(this, gameSessionManager);
         }
@@ -159,6 +167,7 @@ public final class AziRouge extends JavaPlugin {
         gameMenuService.refresh();
         sessionScoreboardService.start();
         sessionGameplayService.start();
+        bossBattleService.start();
     }
 
     public PluginSettings settings() {
@@ -175,6 +184,10 @@ public final class AziRouge extends JavaPlugin {
 
     public PortalService portalService() {
         return portalService;
+    }
+
+    public BossBattleService bossBattleService() {
+        return bossBattleService;
     }
 
     public EconomyService economyService() {
@@ -219,6 +232,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(portalService, this);
+        getServer().getPluginManager().registerEvents(bossBattleService, this);
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);

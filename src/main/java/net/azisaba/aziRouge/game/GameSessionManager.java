@@ -104,6 +104,92 @@ public final class GameSessionManager {
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
+    public void beginBossBattle(GameSession session, String bossBattleId, Location destination, Collection<UUID> participants) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> beginBossBattle(session, bossBattleId, destination, participants));
+            return;
+        }
+        if (!sessionsById.containsKey(session.sessionId())) {
+            throw new IllegalStateException("The session is no longer active.");
+        }
+        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
+            throw new IllegalStateException("Boss battles can only be started between rounds.");
+        }
+        if (session.isBossBattleActive()) {
+            throw new IllegalStateException("A boss battle is already active.");
+        }
+
+        Set<UUID> activeParticipants = new HashSet<>(participants);
+        if (activeParticipants.isEmpty()) {
+            throw new IllegalStateException("There are no online members who can challenge the boss.");
+        }
+
+        session.setActiveParticipants(activeParticipants);
+        session.startBossBattle(bossBattleId, destination);
+        session.setRoundState(RoundState.ACTIVE);
+        session.setState(SessionState.IN_ROUND);
+        for (UUID playerId : activeParticipants) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) {
+                session.markDead(playerId);
+                continue;
+            }
+            setRoundSurvival(player);
+            initializeSessionPlayerState(player);
+            player.teleport(destination);
+        }
+        broadcastTitle(session, ChatColor.DARK_PURPLE + "Boss Battle", ChatColor.YELLOW + bossBattleId, 10, 60, 15);
+        broadcastSessionMessage(session, ChatColor.LIGHT_PURPLE + "Challenging boss battle: " + bossBattleId);
+        updateRoundAfterAliveChange(session);
+    }
+
+    public boolean reviveBossPlayer(GameSession session, Player player, Location location) {
+        if (!session.isBossBattleActive() || session.state() != SessionState.IN_ROUND || !session.deadPlayers().contains(player.getUniqueId())) {
+            return false;
+        }
+        session.markAlive(player.getUniqueId());
+        setRoundSurvival(player);
+        initializeSessionPlayerState(player);
+        Location target = location == null ? session.activeBossDestination() : location.clone();
+        if (target != null) {
+            player.teleport(target);
+        }
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && !player.isDead()) {
+            player.setHealth(Math.max(1.0D, maxHealth.getValue() / 2.0D));
+        }
+        broadcastSessionMessage(session, ChatColor.GREEN + player.getName() + " was revived. Alive: " + session.alivePlayers().size());
+        return true;
+    }
+
+    public void returnBossPlayerHome(GameSession session, Player player) {
+        if (!session.isBossBattleActive() || !session.isMember(player.getUniqueId())) {
+            return;
+        }
+        setRoundSurvival(player);
+        initializeSessionPlayerState(player);
+        player.teleport(session.returnSpawnLocation());
+        sendTitle(player, ChatColor.GREEN + "Returned Home", ChatColor.YELLOW + "Waiting for the party", 5, 40, 10);
+    }
+
+    public void finishBossBattleVictory(GameSession session) {
+        if (!session.isBossBattleActive()) {
+            return;
+        }
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                returnBossPlayerHome(session, player);
+            }
+        }
+        session.clearRoundPlayers();
+        session.clearBossBattle();
+        session.setRoundState(RoundState.ENDED);
+        session.setState(SessionState.BETWEEN_ROUNDS);
+        broadcastTitle(session, ChatColor.GOLD + "Boss Defeated", ChatColor.YELLOW + "Returned home", 10, 70, 20);
+        broadcastSessionMessage(session, ChatColor.GREEN + "Boss battle cleared. Prepare for the next round when ready.");
+    }
+
     public void cleanupLeftoverWorldFoldersOnStartup() {
         sessionWorldService.cleanupLeftoverWorldFoldersOnStartup();
     }
@@ -481,6 +567,9 @@ public final class GameSessionManager {
         if (session.state() != SessionState.IN_ROUND) {
             throw new IllegalStateException("No round is currently active in this session.");
         }
+        if (session.isBossBattleActive()) {
+            throw new IllegalStateException("Boss battles cannot be ended with the round end command.");
+        }
         if (!isInHomeArea(session, player.getLocation())) {
             throw new IllegalStateException("Rounds can only be ended inside the home area.");
         }
@@ -568,6 +657,7 @@ public final class GameSessionManager {
         cancelMobTask(session);
         cancelIdleTimeout(session);
         plugin.portalService().clearRoundPortals(session);
+        plugin.bossBattleService().clearBossBattle(session);
         evacuatePlayers(session);
         restoreOnlineMembers(session);
 
@@ -707,6 +797,15 @@ public final class GameSessionManager {
         if (session == null || session.state() != SessionState.IN_ROUND) {
             return;
         }
+        if (session.isBossBattleActive()) {
+            session.markDead(player.getUniqueId());
+            session.recordBossDeathLocation(player.getUniqueId(), player.getLocation());
+            sendTitle(player, ChatColor.RED + "Down", ChatColor.GRAY + "An ally can revive you by sneaking nearby", 10, 60, 20);
+            sendMessage(player, ChatColor.RED + "You are down in the boss battle. An alive ally can hold sneak at your death location to revive you.");
+            broadcastSessionMessage(session, ChatColor.RED + player.getName() + " went down. Alive: " + session.alivePlayers().size());
+            updateRoundAfterAliveChange(session);
+            return;
+        }
         session.markDead(player.getUniqueId());
         session.markPendingNextRound(player.getUniqueId());
         sendTitle(player, ChatColor.RED + "Down", ChatColor.GRAY + "Spectating until the next round", 10, 60, 20);
@@ -756,6 +855,10 @@ public final class GameSessionManager {
             Bukkit.getScheduler().runTask(plugin, () -> restoreGameOverPlayerAtHome(session, player));
             return;
         }
+        if (session.isBossBattleActive() && session.state() == SessionState.IN_ROUND && session.deadPlayers().contains(player.getUniqueId())) {
+            Bukkit.getScheduler().runTask(plugin, () -> makeBossSpectatorAtDeathLocation(session, player));
+            return;
+        }
         if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return;
         }
@@ -770,6 +873,10 @@ public final class GameSessionManager {
         }
         if (session.state() == SessionState.GAME_OVER) {
             return session.spawnLocation();
+        }
+        if (session.isBossBattleActive() && session.state() == SessionState.IN_ROUND && session.deadPlayers().contains(player.getUniqueId())) {
+            Location deathLocation = session.bossDeathLocation(player.getUniqueId());
+            return deathLocation == null ? session.activeBossDestination() : deathLocation;
         }
         if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return null;
@@ -913,6 +1020,9 @@ public final class GameSessionManager {
         moveOnlineMembersHome(session);
         clearOnlineMemberInventories(session);
         plugin.portalService().clearRoundPortals(session);
+        if (session.isBossBattleActive()) {
+            plugin.bossBattleService().clearBossBattle(session);
+        }
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.GAME_OVER);
         announceGameOver(session, "All players are out.");
@@ -946,6 +1056,23 @@ public final class GameSessionManager {
         } else {
             player.setSpectatorTarget(target);
             sendMessage(player, ChatColor.YELLOW + "You are spectating " + target.getName() + ". Use the compass to switch targets.");
+        }
+    }
+
+    private void makeBossSpectatorAtDeathLocation(GameSession session, Player player) {
+        initializeSessionPlayerState(player);
+        setSpectator(player);
+        SpectatorItemSupport.give(plugin, player);
+        Location deathLocation = session.bossDeathLocation(player.getUniqueId());
+        if (deathLocation != null) {
+            player.teleport(deathLocation);
+        }
+        Player target = selectSpectatorTarget(session, player, false);
+        if (target != null) {
+            player.setSpectatorTarget(target);
+            sendMessage(player, ChatColor.YELLOW + "You are spectating " + target.getName() + ". An ally can revive you at your death location.");
+        } else {
+            sendMessage(player, ChatColor.YELLOW + "You are spectating at your death location.");
         }
     }
 

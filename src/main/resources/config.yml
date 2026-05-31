@@ -155,6 +155,30 @@ player:
   sprint-stamina:
     drain-per-second: 1.0
     recovery-per-second: 1.5
+boss:
+  revive:
+    radius: 2.0
+    hold-ticks: 60
+  portal-cooldown-seconds: 3
+  battles:
+    - id: evoker
+      villager-tag: boss_evoker
+      min-round: 5
+      destination:
+        x: 0
+        y: 64
+        z: 768
+      yaw: 0.0
+      return-portal-material: END_PORTAL
+      return-portal-area:
+        min:
+          x: -1
+          y: 0
+          z: -1
+        max:
+          x: 1
+          y: 2
+          z: 1
 enemies:
   enabled: false
   mode: reserved
