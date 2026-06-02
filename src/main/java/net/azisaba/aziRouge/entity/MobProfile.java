@@ -29,7 +29,8 @@ import java.util.Random;
 public enum MobProfile {
     ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 12, 20.0D, 0.40D, 5.0D),
     SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D),
-    POWERED_CREEPER("powered_creeper", EntityType.CREEPER, 9, 8, 20.0D, 0.38D, 4.5D);
+    POWERED_CREEPER("powered_creeper", EntityType.CREEPER, 9, 8, 20.0D, 0.38D, 4.5D),
+    MINI_ENDERMAN("mini_enderman", EntityType.ENDERMAN, 9, 6, 20.0D, 0.3D, 5.0D);
 
     public static final String MOB_TAG = "azirouge_mob";
     private static final String PROFILE_TAG_PREFIX = "azirouge_profile:";
