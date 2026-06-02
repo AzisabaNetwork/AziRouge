@@ -109,11 +109,11 @@ public final class BossBattleService implements Listener {
 
         session.markBossDefeated();
         active.installReturnPortal(session.world());
-        broadcast(session, ChatColor.GOLD + "Boss defeated. A return portal has opened.");
+        broadcast(session, m("boss.defeated", "&6Boss defeated. A return portal has opened."));
         for (UUID playerId : session.onlineMembers()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                player.sendTitle(ChatColor.GOLD + "Boss Defeated", ChatColor.YELLOW + "Enter the portal to return", 10, 70, 20);
+                player.sendTitle(m("boss.title.defeated", "&6Boss Defeated"), m("boss.subtitle.enter-return-portal", "&eEnter the portal to return"), 10, 70, 20);
             }
         }
     }
@@ -156,20 +156,19 @@ public final class BossBattleService implements Listener {
 
     private void challengeBoss(Player player, GameSession session, BossBattleSettings battle) {
         if (!session.isMember(player.getUniqueId())) {
-            player.sendMessage(PREFIX + ChatColor.RED + "You are not a member of this session.");
+            player.sendMessage(PREFIX + m("boss.error.not-member", "&cYou are not a member of this session."));
             return;
         }
         if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Boss battles can only be challenged between rounds.");
+            player.sendMessage(PREFIX + m("boss.error.between-rounds-only", "&cBoss battles can only be challenged between rounds."));
             return;
         }
         if (session.currentRound() < battle.minRound()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "This boss requires round " + battle.minRound()
-                    + " or higher. Current round: " + session.currentRound());
+            player.sendMessage(PREFIX + m("boss.error.min-round", "&cThis boss requires round {min} or higher. Current round: {round}", "min", battle.minRound(), "round", session.currentRound()));
             return;
         }
         if (session.isBossBattleActive()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "A boss battle is already active.");
+            player.sendMessage(PREFIX + m("boss.error.already-active", "&cA boss battle is already active."));
             return;
         }
 
@@ -177,7 +176,7 @@ public final class BossBattleService implements Listener {
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "There are no online session members.");
+            player.sendMessage(PREFIX + m("boss.error.no-online-members", "&cThere are no online session members."));
             return;
         }
 
@@ -189,6 +188,24 @@ public final class BossBattleService implements Listener {
                 battle.yaw(),
                 0.0F
         );
+        plugin.confirmationService().request(
+                player,
+                plugin.messages().format(
+                        "boss.confirm-challenge",
+                        "Challenge boss {boss} with all online members?",
+                        "boss",
+                        battle.id()
+                ),
+                () -> beginConfirmedBossBattle(session, battle, destination, participants)
+        );
+    }
+
+    private void beginConfirmedBossBattle(
+            GameSession session,
+            BossBattleSettings battle,
+            Location destination,
+            List<UUID> participants
+    ) {
         ActiveBossBattle active = new ActiveBossBattle(
                 battle,
                 battle.returnPortalArea().offset(battle.destination())
@@ -250,7 +267,7 @@ public final class BossBattleService implements Listener {
                 Player deadPlayer = Bukkit.getPlayer(deadPlayerId);
                 active.reviveProgress().remove(deadPlayerId);
                 if (deadPlayer != null && sessionManager.reviveBossPlayer(session, deadPlayer, deathLocation)) {
-                    rescuer.sendMessage(PREFIX + ChatColor.GREEN + "Revived " + deadPlayer.getName() + ".");
+                    rescuer.sendMessage(PREFIX + m("boss.revived", "&aRevived {player}.", "player", deadPlayer.getName()));
                 }
             }
         }
@@ -298,6 +315,10 @@ public final class BossBattleService implements Listener {
                 player.sendMessage(PREFIX + message);
             }
         }
+    }
+
+    private String m(String key, String fallback, Object... replacements) {
+        return plugin.messages().format(key, fallback, replacements);
     }
 
     private void removeActiveBattle(GameSession session) {

@@ -10,9 +10,11 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 public final class SessionPlayerListener implements Listener {
+    private final net.azisaba.aziRouge.AziRouge plugin;
     private final GameSessionManager sessionManager;
 
-    public SessionPlayerListener(GameSessionManager sessionManager) {
+    public SessionPlayerListener(net.azisaba.aziRouge.AziRouge plugin, GameSessionManager sessionManager) {
+        this.plugin = plugin;
         this.sessionManager = sessionManager;
     }
 
@@ -26,7 +28,7 @@ public final class SessionPlayerListener implements Listener {
         World sourceWorld = event.getFrom().getWorld();
         if (!sessionManager.isSessionWorldEntryAllowed(event.getPlayer(), destinationWorld)) {
             event.setCancelled(true);
-            event.getPlayer().sendMessage("You are not a member of that AziRouge session.");
+            event.getPlayer().sendMessage(plugin.messages().prefixed("session.error.not-member-world", "&cYou are not a member of that AziRouge session."));
             return;
         }
         if (sourceWorld != null && sourceWorld.getUID().equals(destinationWorld.getUID())) {

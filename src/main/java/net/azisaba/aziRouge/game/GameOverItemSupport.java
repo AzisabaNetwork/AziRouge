@@ -19,8 +19,8 @@ public final class GameOverItemSupport {
     }
 
     public static void give(AziRouge plugin, Player player) {
-        player.getInventory().setItem(0, create(plugin, Material.RED_BED, "Leave Session", LEAVE));
-        player.getInventory().setItem(4, create(plugin, Material.COMPASS, "Open Menu", MENU));
+        player.getInventory().setItem(0, create(plugin, Material.RED_BED, plugin.messages().text("items.leave-session", "Leave Session"), LEAVE));
+        player.getInventory().setItem(4, create(plugin, Material.COMPASS, plugin.messages().text("items.open-menu", "Open Menu"), MENU));
     }
 
     public static void remove(AziRouge plugin, Player player) {

@@ -46,7 +46,7 @@ public final class SpectatorItemSupport {
         ItemStack item = new ItemStack(Material.COMPASS);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("Switch Spectator Target"));
+            meta.displayName(Component.text(plugin.messages().text("items.switch-spectator-target", "Switch Spectator Target")));
             meta.getPersistentDataContainer().set(key(plugin), PersistentDataType.STRING, SWITCH_TARGET);
             item.setItemMeta(meta);
         }

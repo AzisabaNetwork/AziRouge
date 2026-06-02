@@ -16,6 +16,7 @@ import net.azisaba.aziRouge.dungeon.TreasurePopulator;
 import net.azisaba.aziRouge.dungeon.TrapPopulator;
 import net.azisaba.aziRouge.dungeon.TrapTriggerListener;
 import net.azisaba.aziRouge.game.EconomyService;
+import net.azisaba.aziRouge.game.ConfirmationService;
 import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
@@ -29,6 +30,7 @@ import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.game.ShopService;
 import net.azisaba.aziRouge.game.GameMenuService;
 import net.azisaba.aziRouge.listener.GlobalJoinQuitListener;
+import net.azisaba.aziRouge.message.MessageService;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
@@ -37,6 +39,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AziRouge extends JavaPlugin {
     private PluginSettings settings;
+    private MessageService messageService;
     private DebugLogger debugLogger;
     private TemplateManager templateManager;
     private SchematicAdapter schematicAdapter;
@@ -51,6 +54,7 @@ public final class AziRouge extends JavaPlugin {
     private EconomyService economyService;
     private ShopService shopService;
     private GameMenuService gameMenuService;
+    private ConfirmationService confirmationService;
     private SessionScoreboardService sessionScoreboardService;
     private SessionGameplayService sessionGameplayService;
     private MiningService miningService;
@@ -58,6 +62,7 @@ public final class AziRouge extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        saveResource("messages.yml", false);
         saveResource("templates/example-basic.yml", false);
         saveResource("schematics/README.txt", false);
         reloadPluginState();
@@ -99,6 +104,7 @@ public final class AziRouge extends JavaPlugin {
 
     public void reloadPluginState() {
         reloadConfig();
+        this.messageService = new MessageService(this);
         this.settings = SettingsLoader.load(this);
         this.debugLogger = new DebugLogger(this, settings.debug().enabled());
         this.templateManager = new TemplateManager(this, debugLogger);
@@ -154,6 +160,9 @@ public final class AziRouge extends JavaPlugin {
         if (gameMenuService == null) {
             this.gameMenuService = new GameMenuService(this);
         }
+        if (confirmationService == null) {
+            this.confirmationService = new ConfirmationService(this);
+        }
         if (sessionScoreboardService == null) {
             this.sessionScoreboardService = new SessionScoreboardService(this, gameSessionManager);
         }
@@ -180,6 +189,18 @@ public final class AziRouge extends JavaPlugin {
 
     public GameSessionManager gameSessionManager() {
         return gameSessionManager;
+    }
+
+    public MessageService messages() {
+        return messageService;
+    }
+
+    public ConfirmationService confirmationService() {
+        return confirmationService;
+    }
+
+    public GameMenuService gameMenuService() {
+        return gameMenuService;
     }
 
     public PortalService portalService() {
@@ -230,11 +251,12 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TreasurePickupListener(this), this);
         getServer().getPluginManager().registerEvents(new TrapTriggerListener(this), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
-        getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);
+        getServer().getPluginManager().registerEvents(new SessionPlayerListener(this, gameSessionManager), this);
         getServer().getPluginManager().registerEvents(portalService, this);
         getServer().getPluginManager().registerEvents(bossBattleService, this);
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
+        getServer().getPluginManager().registerEvents(confirmationService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);
         getServer().getPluginManager().registerEvents(miningService, this);
         getServer().getPluginManager().registerEvents(new GlobalJoinQuitListener(this), this);

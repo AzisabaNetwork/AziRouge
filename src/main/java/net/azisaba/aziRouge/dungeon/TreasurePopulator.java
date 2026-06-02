@@ -98,7 +98,7 @@ public final class TreasurePopulator {
         }
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.lore(List.of(Component.text("Sell price: " + price)));
+            meta.lore(List.of(Component.text(plugin.messages().format("treasure.sell-price", "Sell price: {price}", "price", price))));
             item.setItemMeta(meta);
         }
         return item;

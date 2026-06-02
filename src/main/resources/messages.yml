@@ -1,0 +1,192 @@
+prefix: "&6[Azirouge] &r"
+
+confirmation:
+  title: "確認"
+  yes: "はい"
+  yes-tooltip: "実行します"
+  no: "いいえ"
+  no-tooltip: "キャンセルします"
+  prompt: "&e{description}"
+  accepted: "&a確認しました。実行します。"
+  cancelled: "&7操作をキャンセルしました。"
+  expired: "&7確認が時間切れになりました。もう一度操作してください。"
+
+menu:
+  title: "AziRouge メニュー"
+  session-title: "セッション"
+  round-title: "ラウンド"
+  create-session: "セッションを作成"
+  create-session-description: "新しいセッションを作成します。"
+  join-session: "セッションに参加"
+  join-session-description: "参加するセッションIDを入力してください。"
+  leave-session: "セッションを退出"
+  leave-no-session: "現在セッションに参加していません。"
+  leave-session-description: "セッション {session} から退出します。よろしいですか？"
+  start-round: "ラウンド開始"
+  start-round-description: "深さを選んでラウンドを開始します。"
+  end-round: "ラウンド終了"
+  end-round-description: "現在のラウンドを終了します。戦利品売却と維持費支払いが行われます。"
+  list-sessions: "セッション一覧"
+  back: "戻る"
+  close: "閉じる"
+  tooltip:
+    create-session: "セッションを作成してホームへ移動します。"
+    join-session: "入力したセッションに参加します。"
+    leave-session: "現在のセッションから退出します。"
+    start-round: "選択した深さでラウンドを開始します。"
+    end-round: "現在のラウンドを終了します。"
+    session: "セッション操作を開きます。"
+    round: "ラウンド操作を開きます。"
+    list-sessions: "現在のセッション一覧をチャットに表示します。"
+    create-session-open: "セッション作成の確認を開きます。"
+    join-session-open: "セッションIDを入力して参加します。"
+    list-sessions-joinable: "参加可能なセッションをチャットに表示します。"
+    leave-session-open: "退出確認を開きます。"
+    start-round-open: "深さを選んでラウンドを開始します。"
+    end-round-open: "ラウンド終了確認を開きます。"
+    back-session: "セッションメニューへ戻ります。"
+    back-main: "メインメニューへ戻ります。"
+    close: "何もせず閉じます。"
+  description:
+    no-session: "セッションを作成するか、既存のセッションに参加してください。"
+    session: "現在のセッション: {session}\n状態: {state}\n共有資金: {balance}\nラウンド: {round}"
+    round-no-session: "セッションに参加していません。ラウンドを始める前に作成または参加してください。"
+    round: "セッション: {session}\n状態: {state}\nラウンド: {round}\n深さ: {depth}\n共有資金: {balance}"
+
+scoreboard:
+  state: "状態"
+  round: "ラウンド"
+  money: "資金"
+  maintenance: "維持費"
+  goal: "目標"
+  next: "次"
+  goals:
+    lobby: "仲間を集める"
+    between-rounds: "次の探索に備える"
+    in-round-home: "宝を持ち帰る"
+    in-round-dungeon: "宝を集めて帰還"
+    game-over: "記録を確認"
+    closing: "終了処理中"
+  next-actions:
+    lobby: "ラウンドを開始"
+    between-rounds: "買い物・次ラウンド"
+    in-round-home: "ポータルから探索へ"
+    in-round-dungeon: "帰還ポータルを探す"
+    game-over: "セッションを退出"
+    closing: "少し待つ"
+
+commands:
+  menu-opened: "&aメニューを開きました。"
+
+shop:
+  confirm-purchase: "{item} x{amount} を共有資金 {price} で購入します。よろしいですか？"
+  unavailable: "&cショップは現在利用できません。"
+  not-enough-money-detail: "&c共有資金が足りません。価格={price} 残高={balance}"
+  not-enough-money: "&c共有資金が足りません。"
+  inventory-full: "&cインベントリに空きがありません。"
+  purchased: "&a{item} x{amount} を購入しました。価格={price} 残高={balance}"
+  only-during-rounds: "&cショップはラウンド中またはラウンド間のみ利用できます。"
+  no-trades: "&c現在の状態では取引が設定されていません: {state}"
+  lore:
+    price: "&e価格: {price}"
+    shared-money: "&7共有資金: {balance}"
+    can-mine: "&7採掘可能: {count}種類"
+    durability: "&7耐久値: {durability}"
+
+boss:
+  confirm-challenge: "オンライン中のメンバー全員でボス {boss} に挑戦します。よろしいですか？"
+  defeated: "&6ボスを倒しました。帰還ポータルが開きました。"
+  title:
+    defeated: "&6Boss Defeated"
+  subtitle:
+    enter-return-portal: "&e帰還ポータルに入ってください"
+  error:
+    not-member: "&cあなたはこのセッションのメンバーではありません。"
+    between-rounds-only: "&cボス戦はラウンド間のみ挑戦できます。"
+    min-round: "&cこのボスはラウンド {min} 以上で挑戦できます。現在: {round}"
+    already-active: "&cボス戦はすでに進行中です。"
+    no-online-members: "&cオンラインのセッションメンバーがいません。"
+  revived: "&a{player} を蘇生しました。"
+
+portal:
+  title:
+    enter-dungeon: "&5Entering Dungeon"
+    return-home: "&aReturned Home"
+  message:
+    enter-dungeon: "&7宝を集めたら、ダンジョン内の帰還ポータルで戻りましょう。"
+    return-home: "&e全員の準備ができたら、ホームでラウンドを終了しましょう。"
+
+guidance:
+  dungeon-reminder: "&e十分に探索したら、帰還ポータルを探し始めましょう。戦利品は持ち帰ってラウンド終了時に売却されます。"
+
+items:
+  leave-session: "セッションを退出"
+  open-menu: "メニューを開く"
+  switch-spectator-target: "観戦対象を切り替え"
+
+treasure:
+  hotbar-full: "&cホットバーがいっぱいです。宝を拾う前にホットバーを空けてください。"
+  sell-price: "売却価格: {price}"
+
+join:
+  beta-denied: "現在このサーバーはクローズドβ中です。参加権限がありません。"
+
+session:
+  title:
+    returned-home: "&aReturned Home"
+    returned: "&aReturned"
+    down: "&cDown"
+  subtitle:
+    waiting-party: "&eパーティーを待っています"
+    created: "&eセッション {session} を作成しました"
+    joined: "&eセッション {session} に参加しました"
+    boss-revive: "&7近くで味方がスニークすると蘇生できます"
+    spectating-next-round: "&7次のラウンドまで観戦します"
+    can-play-round: "&eこのラウンドに参加できます"
+  created: "&aセッション {session} を作成しました。招待: /azirouge session join {session}"
+  prepare-start-round: "&eホームで準備してから /azirouge round start でラウンドを開始しましょう。"
+  joined: "&aセッション {session} に参加しました。"
+  joined-in-round: "&eラウンド進行中のため、このラウンドは観戦になります。次のラウンドから参加できます。"
+  member-joined: "&e{player} がセッションに参加しました。人数: {players}/{max}"
+  left: "&eAziRouge セッション {session} から退出しました。"
+  member-left: "&e{player} がセッションから退出しました。人数: {players}/{max}"
+  boss-down: "&cボス戦でダウンしました。生存中の味方が死亡地点でスニークし続けると蘇生できます。"
+  member-down: "&c{player} がダウンしました。生存: {alive}"
+  out-this-round: "&cこのラウンドは脱落しました。次のラウンド開始時に復帰します。"
+  member-died: "&c{player} が倒れました。生存: {alive}"
+  no-spectator-target: "&e観戦できる生存プレイヤーがいません。"
+  now-spectating: "&e{player} を観戦しています。"
+  spectating-home-no-target: "&eホームで観戦中です。観戦できる生存プレイヤーがいません。"
+  spectating-target: "&e{player} を観戦しています。コンパスで対象を切り替えられます。"
+  boss-spectating-target: "&e{player} を観戦しています。味方が死亡地点で蘇生できます。"
+  boss-spectating-death-location: "&e死亡地点で観戦しています。"
+  game-over-returned-home: "&eゲームオーバーです。ホームに戻りました。次のセッションを作る前に退出してください。"
+  error:
+    not-member-world: "&cそのAziRougeセッションのメンバーではありません。"
+
+round:
+  title:
+    start: "&6Round {round}"
+    complete: "&aRound Complete"
+    ended: "&cRound Ended"
+  subtitle:
+    portal-open: "&eポータルが開きました"
+    result: "&e売却 {items}個 / +{amount} / 維持費 {maintenance}"
+  started: "&aラウンド {round} が始まりました。ホームのポータルから探索に向かいましょう。"
+  maintenance-due: "&eラウンド終了時の維持費: {maintenance} / 共有資金: {balance}"
+  ended-summary: "&aラウンド {round} 終了。売却数: {items} / 獲得: {amount}"
+  maintenance-paid: "&e維持費 {maintenance} を支払いました。共有資金: {balance}"
+  prepare-next: "&eホームで準備して、準備ができたら次のラウンドを開始しましょう。"
+  maintenance-unpaid: "&c維持費 {maintenance} を支払えませんでした。共有資金: {balance}"
+
+game-over:
+  title: "&4Game Over"
+  subtitle: "&c{reason}&7 / 到達ラウンド {round}"
+  reason-line: "&cゲームオーバー: {reason}"
+  reached-round: "&6到達ラウンド: {round}"
+  leave: "&e退出: /azirouge session leave"
+  next-session: "&e退出後、/azirouge session create または開始メニューから次のセッションを作成できます。"
+  auto-close: "&7このセッションはまもなく自動終了します。"
+  reason:
+    maintenance: "維持費を支払えませんでした。"
+    all-out: "全員が脱落しました。"

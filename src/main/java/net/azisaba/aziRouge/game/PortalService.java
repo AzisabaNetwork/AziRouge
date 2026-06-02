@@ -5,6 +5,7 @@ import net.azisaba.aziRouge.config.PortalSettings;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.ChatColor;
@@ -103,20 +104,24 @@ public final class PortalService implements Listener {
         if (contains(roundPortals.homeToDungeonArea(), to)) {
             teleportWithCooldown(
                     player,
+                    session,
                     roundPortals.dungeonDestination(),
                     roundPortals.dungeonYawOffset(),
-                    ChatColor.DARK_PURPLE + "Entering Dungeon",
-                    ChatColor.GRAY + "Collect loot, then return through the portal inside the dungeon."
+                    plugin.messages().text("portal.title.enter-dungeon", "&5Entering Dungeon"),
+                    plugin.messages().text("portal.message.enter-dungeon", "&7Collect loot, then return through the portal inside the dungeon."),
+                    true
             );
             return;
         }
         if (contains(roundPortals.dungeonToHomeArea(), to)) {
             teleportWithCooldown(
                     player,
+                    session,
                     roundPortals.homeDestination(),
                     roundPortals.homeYawOffset(),
-                    ChatColor.GREEN + "Returned Home",
-                    ChatColor.YELLOW + "End the round in the home area when everyone is ready."
+                    plugin.messages().text("portal.title.return-home", "&aReturned Home"),
+                    plugin.messages().text("portal.message.return-home", "&eEnd the round in the home area when everyone is ready."),
+                    false
             );
         }
     }
@@ -129,7 +134,7 @@ public final class PortalService implements Listener {
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
-    private void teleportWithCooldown(Player player, Location destination, float yawOffset, String title, String message) {
+    private void teleportWithCooldown(Player player, GameSession session, Location destination, float yawOffset, String title, String message, boolean enteredDungeon) {
         long now = System.currentTimeMillis();
         long cooldownUntil = cooldownUntilMillis.getOrDefault(player.getUniqueId(), 0L);
         if (cooldownUntil > now) {
@@ -146,7 +151,29 @@ public final class PortalService implements Listener {
         if (player.teleport(target)) {
             player.sendTitle(title, "", 5, 35, 10);
             player.sendMessage(PREFIX + message);
+            if (enteredDungeon) {
+                scheduleDungeonReminder(player, session);
+            }
         }
+    }
+
+    private void scheduleDungeonReminder(Player player, GameSession session) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            GameSession current = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
+            if (current == null
+                    || !player.isOnline()
+                    || !current.sessionId().equals(session.sessionId())
+                    || current.state() != SessionState.IN_ROUND
+                    || !current.alivePlayers().contains(player.getUniqueId())
+                    || !player.getWorld().getUID().equals(current.world().getUID())
+                    || current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())) {
+                return;
+            }
+            player.sendMessage(plugin.messages().prefixed(
+                    "guidance.dungeon-reminder",
+                    "&eIf you have enough loot, start looking for the return portal."
+            ));
+        }, 20L * 120L);
     }
 
     private Location dungeonDestination(GameSession session, PortalSettings settings) {
