@@ -31,7 +31,7 @@ public class RandomStrollGoal implements Goal<Mob> {
 
     @Override
     public boolean shouldActivate() {
-        return !targets.isEmpty() && mob.isValid() && !mob.isDead();
+        return !targets.isEmpty() && mob.isValid() && !mob.isDead() && mob.getTarget() == null;
     }
 
     @Override

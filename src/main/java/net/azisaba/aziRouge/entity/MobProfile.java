@@ -90,6 +90,10 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
 
+        if (mob.getType() == EntityType.ENDERMAN) {
+            applyAttribute(mob, Attribute.SCALE, 0.6);
+        }
+
         if (mob instanceof Creeper creeper) {
             creeper.setPowered(true);
             creeper.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false, true));
