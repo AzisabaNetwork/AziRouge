@@ -8,6 +8,7 @@ public record MobProfileSettings(
         double maxHealth,
         double movementSpeed,
         double attackDamage,
+        int maxAliveCount,
         MobAiSettings ai,
         List<MobDropEntrySettings> drops
 ) {

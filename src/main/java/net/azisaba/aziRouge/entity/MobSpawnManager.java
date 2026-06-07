@@ -2,13 +2,16 @@ package net.azisaba.aziRouge.entity;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.MobProfileSettings;
+import net.azisaba.aziRouge.config.MobSpawnLightSettings;
 import net.azisaba.aziRouge.config.MobSpawnSettings;
+import net.azisaba.aziRouge.config.TorchSpawnPenaltySettings;
 import net.azisaba.aziRouge.game.GameSession;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -19,7 +22,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -59,8 +64,9 @@ public final class MobSpawnManager {
         }
 
         for (int index = 0; index < mobSpawnSettings.countPerInterval(); index++) {
+            Map<MobProfile, Integer> aliveCounts = currentAliveCounts(session.world());
             int remainingPower = maxAlivePower - alivePower;
-            MobProfile profile = mobSpawnSettings.selectRandomProfile(random, remainingPower);
+            MobProfile profile = mobSpawnSettings.selectRandomProfile(random, remainingPower, aliveCounts);
             if (profile == null) {
                 break;
             }
@@ -79,6 +85,7 @@ public final class MobSpawnManager {
                 }
                 mobAiManager.track(livingEntity, profile);
                 alivePower += profileSettings.power();
+                aliveCounts.merge(profile, 1, Integer::sum);
             } else {
                 entity.remove();
             }
@@ -100,19 +107,67 @@ public final class MobSpawnManager {
         return totalPower;
     }
 
+    private Map<MobProfile, Integer> currentAliveCounts(World world) {
+        Map<MobProfile, Integer> counts = new EnumMap<>(MobProfile.class);
+        for (LivingEntity entity : world.getLivingEntities()) {
+            if (!entity.getScoreboardTags().contains(MobProfile.MOB_TAG)) {
+                continue;
+            }
+
+            MobProfile profile = MobProfile.fromEntity(entity);
+            if (profile != null) {
+                counts.merge(profile, 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
     private Location findSpawnLocation(GameSession session, Random random) {
         if (session.placedPieces().isEmpty()) {
             return null;
         }
 
-        for (int attempt = 0; attempt < Math.max(8, session.placedPieces().size() * 2); attempt++) {
+        MobSpawnLightSettings lightSettings = plugin.settings().azirouge().mobSpawn().light();
+        if (!lightSettings.enabled()) {
+            for (int attempt = 0; attempt < Math.max(8, session.placedPieces().size() * 2); attempt++) {
+                PlacedPiece piece = session.randomRoom(random);
+                Location location = findSpawnLocation(session.world(), piece.worldBounds(), random);
+                if (location != null) {
+                    return location;
+                }
+            }
+            return null;
+        }
+
+        List<SpawnCandidate> candidates = new ArrayList<>();
+        double totalWeight = 0.0D;
+        int attempts = Math.max(lightSettings.sampleAttemptsPerSpawn(), session.placedPieces().size() * 2);
+        for (int attempt = 0; attempt < attempts; attempt++) {
             PlacedPiece piece = session.randomRoom(random);
             Location location = findSpawnLocation(session.world(), piece.worldBounds(), random);
-            if (location != null) {
-                return location;
+            if (location == null) {
+                continue;
+            }
+            double weight = spawnWeight(location.getBlock(), lightSettings);
+            if (weight <= 0.0D) {
+                continue;
+            }
+            candidates.add(new SpawnCandidate(location, weight));
+            totalWeight += weight;
+        }
+
+        if (candidates.isEmpty() || totalWeight <= 0.0D) {
+            return null;
+        }
+
+        double cursor = random.nextDouble() * totalWeight;
+        for (SpawnCandidate candidate : candidates) {
+            cursor -= candidate.weight();
+            if (cursor <= 0.0D) {
+                return candidate.location();
             }
         }
-        return null;
+        return candidates.getLast().location();
     }
 
     private List<Location> strollTargets(GameSession session) {
@@ -151,6 +206,64 @@ public final class MobSpawnManager {
         return floor.getType().isSolid() && block.isPassable() && head.isPassable() && floor.getLightFromSky() == 0;
     }
 
+    private double spawnWeight(Block feet, MobSpawnLightSettings settings) {
+        double lightWeight = blockLightWeight(feet, settings);
+        double torchMultiplier = torchMultiplier(feet, settings);
+        return Math.max(0.0D, lightWeight * torchMultiplier);
+    }
+
+    private double blockLightWeight(Block feet, MobSpawnLightSettings settings) {
+        int maxEffectiveLight = settings.maxEffectiveBlockLight();
+        if (maxEffectiveLight <= 0) {
+            return 1.0D;
+        }
+
+        double lightRatio = Math.min(feet.getLightFromBlocks(), maxEffectiveLight) / (double) maxEffectiveLight;
+        double darkness = Math.max(0.0D, 1.0D - lightRatio);
+        double weightedDarkness = Math.pow(darkness, settings.curvePower());
+        return Math.max(settings.minWeight(), weightedDarkness);
+    }
+
+    private double torchMultiplier(Block feet, MobSpawnLightSettings settings) {
+        double multiplier = 1.0D;
+        for (TorchSpawnPenaltySettings torchSettings : settings.torchTypes().values()) {
+            if (torchSettings.radius() <= 0 || torchSettings.multiplier() >= 1.0D) {
+                continue;
+            }
+            if (hasNearbyMaterial(feet, torchSettings.materials(), torchSettings.radius())) {
+                multiplier *= torchSettings.multiplier();
+            }
+        }
+        return multiplier;
+    }
+
+    private boolean hasNearbyMaterial(Block center, java.util.Set<Material> materials, int radius) {
+        if (materials.isEmpty()) {
+            return false;
+        }
+
+        World world = center.getWorld();
+        int minY = Math.max(world.getMinHeight(), center.getY() - radius);
+        int maxY = Math.min(world.getMaxHeight() - 1, center.getY() + radius);
+        int radiusSquared = radius * radius;
+        for (int x = center.getX() - radius; x <= center.getX() + radius; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = center.getZ() - radius; z <= center.getZ() + radius; z++) {
+                    int dx = x - center.getX();
+                    int dy = y - center.getY();
+                    int dz = z - center.getZ();
+                    if (dx * dx + dy * dy + dz * dz > radiusSquared) {
+                        continue;
+                    }
+                    if (materials.contains(world.getBlockAt(x, y, z).getType())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     private int randomBetween(int min, int max, Random random) {
         if (max <= min) {
             return min;
@@ -164,5 +277,8 @@ public final class MobSpawnManager {
 
     private int interiorMax(int min, int max) {
         return max - min >= 2 ? max - 1 : max;
+    }
+
+    private record SpawnCandidate(Location location, double weight) {
     }
 }

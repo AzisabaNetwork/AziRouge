@@ -186,6 +186,32 @@ azirouge:
   mob-spawn-interval-seconds: 30
   mob-spawn-count-per-interval: 3
   mob-spawn-max-alive-power: 48
+  mob-spawn-light:
+    enabled: true
+    sample-attempts-per-spawn: 96
+    block-light:
+      max-effective-level: 14
+      curve-power: 2.0
+      min-weight: 0.05
+    torch-types:
+      torch:
+        materials:
+          - TORCH
+          - WALL_TORCH
+        radius: 8
+        multiplier: 0.30
+      soul_torch:
+        materials:
+          - SOUL_TORCH
+          - SOUL_WALL_TORCH
+        radius: 8
+        multiplier: 0.45
+      copper_torch:
+        materials:
+          - COPPER_TORCH
+          - COPPER_WALL_TORCH
+        radius: 8
+        multiplier: 0.20
   treasure:
     base-spawn-chance: 0.08
     depth-multiplier: 0.04
@@ -361,6 +387,23 @@ azirouge:
       ai:
         enabled: true
         tick-interval-ticks: 20
+    copper_golem:
+      weight: 3
+      power: 4
+      max-alive-count: 1
+      max-health: 20.0
+      movement-speed: 0.18
+      attack-damage: 0.0
+      drops: []
+      ai:
+        enabled: true
+        tick-interval-ticks: 20
+        torch-break:
+          enabled: true
+          search-radius: 10
+          break-distance: 1.8
+          break-ticks: 80
+          goal-speed: 0.7
   chest:
     base-spawn-chance: 0.1
     depth-multiplier: 0.05

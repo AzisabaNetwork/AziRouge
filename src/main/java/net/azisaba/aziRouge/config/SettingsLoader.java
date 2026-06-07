@@ -424,8 +424,84 @@ public final class SettingsLoader {
                 Math.max(1L, config.getLong("azirouge.mob-spawn-interval-seconds", 30L)),
                 Math.max(1, config.getInt("azirouge.mob-spawn-count-per-interval", 3)),
                 Math.max(0, config.getInt("azirouge.mob-spawn-max-alive-power", 48)),
+                loadMobSpawnLightSettings(config),
                 loadMobProfiles(config.getConfigurationSection("azirouge.mobs"))
         );
+    }
+
+    private static MobSpawnLightSettings loadMobSpawnLightSettings(FileConfiguration config) {
+        ConfigurationSection section = config.getConfigurationSection("azirouge.mob-spawn-light");
+        if (section == null) {
+            return defaultMobSpawnLightSettings();
+        }
+
+        ConfigurationSection blockLight = section.getConfigurationSection("block-light");
+        Map<String, TorchSpawnPenaltySettings> torchTypes = loadTorchSpawnPenaltySettings(
+                section.getConfigurationSection("torch-types")
+        );
+        return new MobSpawnLightSettings(
+                section.getBoolean("enabled", true),
+                Math.max(1, section.getInt("sample-attempts-per-spawn", 96)),
+                clampInt(blockLight == null ? 14 : blockLight.getInt("max-effective-level", 14), 0, 15),
+                Math.max(0.1D, blockLight == null ? 2.0D : blockLight.getDouble("curve-power", 2.0D)),
+                clamp(blockLight == null ? 0.05D : blockLight.getDouble("min-weight", 0.05D), 0.0D, 1.0D),
+                torchTypes
+        );
+    }
+
+    private static MobSpawnLightSettings defaultMobSpawnLightSettings() {
+        return new MobSpawnLightSettings(
+                true,
+                96,
+                14,
+                2.0D,
+                0.05D,
+                Map.of(
+                        "torch", new TorchSpawnPenaltySettings(
+                                "torch",
+                                java.util.Set.of(Material.TORCH, Material.WALL_TORCH),
+                                8,
+                                0.30D
+                        ),
+                        "soul_torch", new TorchSpawnPenaltySettings(
+                                "soul_torch",
+                                java.util.Set.of(Material.SOUL_TORCH, Material.SOUL_WALL_TORCH),
+                                8,
+                                0.45D
+                        ),
+                        "copper_torch", new TorchSpawnPenaltySettings(
+                                "copper_torch",
+                                java.util.Set.of(Material.COPPER_TORCH, Material.COPPER_WALL_TORCH),
+                                8,
+                                0.20D
+                        )
+                )
+        );
+    }
+
+    private static Map<String, TorchSpawnPenaltySettings> loadTorchSpawnPenaltySettings(ConfigurationSection section) {
+        if (section == null) {
+            return defaultMobSpawnLightSettings().torchTypes();
+        }
+
+        Map<String, TorchSpawnPenaltySettings> torchTypes = new LinkedHashMap<>();
+        for (String key : section.getKeys(false)) {
+            ConfigurationSection torchSection = section.getConfigurationSection(key);
+            if (torchSection == null) {
+                continue;
+            }
+            java.util.Set<Material> materials = loadMaterialSet(torchSection.getList("materials"));
+            if (materials.isEmpty()) {
+                continue;
+            }
+            torchTypes.put(key.toLowerCase(Locale.ROOT), new TorchSpawnPenaltySettings(
+                    key.toLowerCase(Locale.ROOT),
+                    materials,
+                    Math.max(0, torchSection.getInt("radius", 8)),
+                    clamp(torchSection.getDouble("multiplier", 1.0D), 0.0D, 1.0D)
+            ));
+        }
+        return torchTypes.isEmpty() ? defaultMobSpawnLightSettings().torchTypes() : Map.copyOf(torchTypes);
     }
 
     private static Map<String, MobProfileSettings> loadMobProfiles(ConfigurationSection section) {
@@ -448,6 +524,7 @@ public final class SettingsLoader {
                             Math.max(1.0D, profileSection.getDouble("max-health", defaults.maxHealth())),
                             Math.max(0.0D, profileSection.getDouble("movement-speed", defaults.movementSpeed())),
                             Math.max(0.0D, profileSection.getDouble("attack-damage", defaults.attackDamage())),
+                            Math.max(-1, profileSection.getInt("max-alive-count", defaults.maxAliveCount())),
                             ai,
                             drops
                     );
@@ -462,7 +539,21 @@ public final class SettingsLoader {
         }
         return new MobAiSettings(
                 section.getBoolean("enabled", defaults.enabled()),
-                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks()))
+                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks())),
+                loadTorchBreakSettings(section.getConfigurationSection("torch-break"), defaults.torchBreak())
+        );
+    }
+
+    private static TorchBreakSettings loadTorchBreakSettings(ConfigurationSection section, TorchBreakSettings defaults) {
+        if (section == null) {
+            return defaults;
+        }
+        return new TorchBreakSettings(
+                section.getBoolean("enabled", defaults.enabled()),
+                Math.max(1, section.getInt("search-radius", defaults.searchRadius())),
+                Math.max(0.1D, section.getDouble("break-distance", defaults.breakDistance())),
+                Math.max(1, section.getInt("break-ticks", defaults.breakTicks())),
+                Math.max(0.0D, section.getDouble("goal-speed", defaults.goalSpeed()))
         );
     }
 

@@ -48,6 +48,7 @@ public class RandomStrollGoal implements Goal<Mob> {
     public void stop() {
         currentTarget = null;
         stuckTicks = 0;
+        PathfindTargetRegistry.clear(mob);
         mob.getPathfinder().stopPathfinding();
     }
 
@@ -98,6 +99,7 @@ public class RandomStrollGoal implements Goal<Mob> {
         if (target == null || target.getWorld() == null || !target.getWorld().equals(mob.getWorld())) {
             return false;
         }
+        PathfindTargetRegistry.allow(mob, target);
         return mob.getPathfinder().moveTo(target, speed);
     }
 
