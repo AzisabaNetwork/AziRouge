@@ -154,12 +154,28 @@ public final class SessionGameplayService implements Listener {
             if (sessionManager.isActivePlaying(player)) {
                 applyBlockers(player);
                 updateSprintFood(player);
+                updateReachedDepth(player);
             } else {
                 sessionManager.ensureSpectatorTarget(player);
                 foodLevels.put(player.getUniqueId(), (double) FOOD_MAX);
                 removeBlockers(player.getInventory());
                 fixVitals(player);
             }
+        }
+    }
+
+    private void updateReachedDepth(Player player) {
+        GameSession session = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || !player.getWorld().getUID().equals(session.world().getUID())) {
+            return;
+        }
+        java.util.OptionalInt containingDepth = session.resolveContainingDepth(player.getLocation());
+        if (containingDepth.isEmpty()) {
+            return;
+        }
+        int depth = containingDepth.getAsInt();
+        if (session.updateMaxReachedDepth(player.getUniqueId(), depth)) {
+            plugin.statisticsService().recordMaxDepth(session.runId(), player, depth);
         }
     }
 

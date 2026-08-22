@@ -8,6 +8,7 @@ import net.azisaba.aziRouge.config.PluginSettings;
 import net.azisaba.aziRouge.config.SettingsLoader;
 import net.azisaba.aziRouge.debug.DebugLogger;
 import net.azisaba.aziRouge.dungeon.ChestPopulator;
+import net.azisaba.aziRouge.dungeon.ChestLootListener;
 import net.azisaba.aziRouge.dungeon.DungeonGenerator;
 import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
 import net.azisaba.aziRouge.dungeon.TreasurePickupListener;
@@ -30,6 +31,9 @@ import net.azisaba.aziRouge.listener.GlobalJoinQuitListener;
 import net.azisaba.aziRouge.schematic.MissingSchematicAdapter;
 import net.azisaba.aziRouge.schematic.SchematicAdapter;
 import net.azisaba.aziRouge.template.TemplateManager;
+import net.azisaba.aziRouge.statistics.LeaderboardDisplayService;
+import net.azisaba.aziRouge.statistics.StatisticsService;
+import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -50,6 +54,8 @@ public final class AziRouge extends JavaPlugin {
     private GameMenuService gameMenuService;
     private SessionScoreboardService sessionScoreboardService;
     private SessionGameplayService sessionGameplayService;
+    private StatisticsService statisticsService;
+    private LeaderboardDisplayService leaderboardDisplayService;
 
     @Override
     public void onEnable() {
@@ -85,6 +91,12 @@ public final class AziRouge extends JavaPlugin {
         if (schematicAdapter != null) {
             schematicAdapter.clearCache();
         }
+        if (leaderboardDisplayService != null) {
+            leaderboardDisplayService.shutdown();
+        }
+        if (statisticsService != null) {
+            statisticsService.shutdown();
+        }
     }
 
     public void reloadPluginState() {
@@ -119,6 +131,13 @@ public final class AziRouge extends JavaPlugin {
     }
 
     private void ensureRuntimeServices() {
+        java.util.concurrent.CompletableFuture<Void> statisticsReady;
+        if (statisticsService == null) {
+            this.statisticsService = new StatisticsService(this);
+            statisticsReady = statisticsService.start();
+        } else {
+            statisticsReady = statisticsService.reload();
+        }
         if (mobAiManager == null) {
             this.mobAiManager = new MobAiManager(this);
         }
@@ -146,6 +165,18 @@ public final class AziRouge extends JavaPlugin {
         if (sessionGameplayService == null) {
             this.sessionGameplayService = new SessionGameplayService(this, gameSessionManager);
         }
+        if (leaderboardDisplayService == null) {
+            this.leaderboardDisplayService = new LeaderboardDisplayService(this);
+            leaderboardDisplayService.start();
+        } else {
+            leaderboardDisplayService.reload();
+        }
+        statisticsReady.whenComplete((ignored, error) -> {
+            if (!isEnabled()) {
+                return;
+            }
+            Bukkit.getScheduler().runTask(this, leaderboardDisplayService::refreshNow);
+        });
         gameMenuService.refresh();
         sessionScoreboardService.start();
         sessionGameplayService.start();
@@ -183,6 +214,10 @@ public final class AziRouge extends JavaPlugin {
         return debugLogger;
     }
 
+    public StatisticsService statisticsService() {
+        return statisticsService;
+    }
+
     public void setDebugEnabled(boolean enabled) {
         debugLogger.setEnabled(enabled);
     }
@@ -201,6 +236,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(mobAiManager, this);
         getServer().getPluginManager().registerEvents(new MobDropListener(this, gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new TreasurePickupListener(this), this);
+        getServer().getPluginManager().registerEvents(new ChestLootListener(this), this);
         getServer().getPluginManager().registerEvents(new TrapTriggerListener(this), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerHealthListener(gameSessionManager), this);
         getServer().getPluginManager().registerEvents(new SessionPlayerListener(gameSessionManager), this);

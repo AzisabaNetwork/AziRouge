@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'com.gradleup.shadow' version '8.3.11'
     id("xyz.jpenilla.run-paper") version "2.3.1"
 }
 
@@ -21,6 +22,33 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.4.0")
+
+    implementation("com.zaxxer:HikariCP:7.1.0") {
+        exclude group: "org.slf4j", module: "slf4j-api"
+    }
+    implementation("org.mariadb.jdbc:mariadb-java-client:3.5.10")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.4")
+}
+
+tasks.named('jar') {
+    archiveClassifier.set('plain')
+}
+
+tasks.named('shadowJar') {
+    archiveClassifier.set('')
+    mergeServiceFiles()
+    relocate 'com.zaxxer.hikari', 'net.azisaba.aziRouge.lib.hikari'
+    relocate 'org.mariadb.jdbc', 'net.azisaba.aziRouge.lib.mariadb'
+}
+
+tasks.named('build') {
+    dependsOn tasks.named('shadowJar')
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 tasks {

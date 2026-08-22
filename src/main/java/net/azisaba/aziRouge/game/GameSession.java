@@ -16,8 +16,10 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.OptionalInt;
 
 public final class GameSession {
+    private final UUID runId;
     private final String sessionId;
     private final UUID owner;
     private final World world;
@@ -28,6 +30,7 @@ public final class GameSession {
     private final Set<UUID> deadPlayers = new HashSet<>();
     private final Set<UUID> pendingPlayersNextRound = new HashSet<>();
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
+    private final Map<UUID, Integer> maxReachedDepths = new HashMap<>();
     private List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
     private final Location returnSpawnLocation;
@@ -55,6 +58,7 @@ public final class GameSession {
             List<PlacedPiece> placedPieces,
             long sharedBalance
     ) {
+        this.runId = UUID.randomUUID();
         this.sessionId = sessionId;
         this.owner = owner;
         this.world = world;
@@ -65,6 +69,10 @@ public final class GameSession {
         this.placedPieces = List.copyOf(placedPieces);
         this.sharedBalance = Math.max(0L, sharedBalance);
         this.createdAt = Instant.now();
+    }
+
+    public UUID runId() {
+        return runId;
     }
 
     public String sessionId() {
@@ -347,6 +355,26 @@ public final class GameSession {
             }
         }
         return nearest == null ? 0 : nearest.depth();
+    }
+
+    public OptionalInt resolveContainingDepth(Location location) {
+        int x = location.getBlockX();
+        int y = location.getBlockY();
+        int z = location.getBlockZ();
+        return placedPieces.stream()
+                .filter(piece -> piece.worldBounds().contains(x, y, z))
+                .mapToInt(PlacedPiece::depth)
+                .findFirst();
+    }
+
+    public boolean updateMaxReachedDepth(UUID playerId, int depth) {
+        int normalizedDepth = Math.max(0, depth);
+        int previousDepth = maxReachedDepths.getOrDefault(playerId, -1);
+        if (normalizedDepth <= previousDepth) {
+            return false;
+        }
+        maxReachedDepths.put(playerId, normalizedDepth);
+        return true;
     }
 
     private double distanceSquaredToBox(int x, int y, int z, BlockBox bounds) {

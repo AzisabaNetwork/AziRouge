@@ -3,13 +3,17 @@ package net.azisaba.aziRouge.config;
 import net.azisaba.aziRouge.entity.MobProfile;
 import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
+import net.azisaba.aziRouge.statistics.RankingPeriod;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -68,6 +72,8 @@ public final class SettingsLoader {
                         doorMaterial
                 ),
                 new DebugSettings(config.getBoolean("debug.enabled", false)),
+                loadDatabaseSettings(config),
+                loadLeaderboardSettings(plugin, config),
                 loadSessionSettings(plugin, config),
                 loadHomeSettings(config),
                 loadDungeonSettings(config),
@@ -90,6 +96,71 @@ public final class SettingsLoader {
                         config.getBoolean("join.isbeta", false)
                 )
         );
+    }
+
+    private static DatabaseSettings loadDatabaseSettings(FileConfiguration config) {
+        return new DatabaseSettings(
+                config.getBoolean("database.enabled", false),
+                requireText(config.getString("database.host"), "127.0.0.1"),
+                clampInt(config.getInt("database.port", 3306), 1, 65_535),
+                requireText(config.getString("database.name"), "azirouge"),
+                requireText(config.getString("database.username"), "azirouge"),
+                config.getString("database.password", ""),
+                config.getBoolean("database.use-ssl", false),
+                clampInt(config.getInt("database.maximum-pool-size", 4), 1, 32),
+                Math.max(250L, config.getLong("database.connection-timeout-millis", 5_000L))
+        );
+    }
+
+    private static LeaderboardSettings loadLeaderboardSettings(JavaPlugin plugin, FileConfiguration config) {
+        ZoneId timezone;
+        String timezoneName = requireText(config.getString("leaderboard.timezone"), "UTC");
+        try {
+            timezone = ZoneId.of(timezoneName);
+        } catch (DateTimeException ex) {
+            plugin.getLogger().warning("Invalid leaderboard.timezone '" + timezoneName + "'. Falling back to UTC.");
+            timezone = ZoneId.of("UTC");
+        }
+
+        Map<RankingPeriod, LeaderboardDisplaySettings> displays = new EnumMap<>(RankingPeriod.class);
+        for (RankingPeriod period : RankingPeriod.values()) {
+            String key = period.name().toLowerCase(Locale.ROOT);
+            String path = "leaderboard.displays." + key;
+            displays.put(period, new LeaderboardDisplaySettings(
+                    requireText(config.getString(path + ".world"), "world"),
+                    config.getDouble(path + ".x", 0.5D),
+                    config.getDouble(path + ".y", defaultLeaderboardY(period)),
+                    config.getDouble(path + ".z", 0.5D),
+                    (float) config.getDouble(path + ".yaw", 0.0D),
+                    (float) config.getDouble(path + ".pitch", 0.0D),
+                    requireText(config.getString(path + ".title"), defaultLeaderboardTitle(period))
+            ));
+        }
+        return new LeaderboardSettings(
+                config.getBoolean("leaderboard.enabled", false),
+                timezone,
+                clampInt(config.getInt("leaderboard.top-size", 10), 1, 100),
+                Math.max(5L, config.getLong("leaderboard.update-interval-seconds", 60L)),
+                displays
+        );
+    }
+
+    private static double defaultLeaderboardY(RankingPeriod period) {
+        return switch (period) {
+            case DAILY -> 76.0D;
+            case WEEKLY -> 72.0D;
+            case MONTHLY -> 68.0D;
+            case TOTAL -> 64.0D;
+        };
+    }
+
+    private static String defaultLeaderboardTitle(RankingPeriod period) {
+        return switch (period) {
+            case DAILY -> "Daily Ranking";
+            case WEEKLY -> "Weekly Ranking";
+            case MONTHLY -> "Monthly Ranking";
+            case TOTAL -> "All-Time Ranking";
+        };
     }
 
     private static SessionSettings loadSessionSettings(JavaPlugin plugin, FileConfiguration config) {

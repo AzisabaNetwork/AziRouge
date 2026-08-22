@@ -5,6 +5,7 @@ import net.azisaba.aziRouge.game.GameSessionManager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.entity.Player;
 
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -27,6 +28,14 @@ public final class MobDropListener implements Listener {
         MobProfile profile = MobProfile.fromEntity(event.getEntity());
         if (profile == null) {
             return;
+        }
+
+        Player killer = event.getEntity().getKiller();
+        if (killer != null) {
+            sessionManager.sessionForWorld(event.getEntity().getWorld())
+                    .filter(session -> session.isMember(killer.getUniqueId()))
+                    .ifPresent(session -> plugin.statisticsService()
+                            .recordMobKill(session.runId(), killer, event.getEntity().getUniqueId()));
         }
 
         int depth = sessionManager.resolveDepth(event.getEntity().getWorld(), event.getEntity().getLocation());

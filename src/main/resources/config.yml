@@ -22,6 +22,57 @@ door:
   material: SPRUCE_DOOR
 debug:
   enabled: false
+database:
+  # MariaDB/MySQL persistence. Keep disabled until valid credentials are configured.
+  enabled: false
+  host: 127.0.0.1
+  port: 3306
+  name: azirouge
+  username: azirouge
+  password: "change-me"
+  use-ssl: false
+  maximum-pool-size: 4
+  connection-timeout-millis: 5000
+leaderboard:
+  # Enable after database.enabled is configured successfully.
+  enabled: false
+  # Calendar periods use this timezone; timestamps are stored in UTC.
+  timezone: Asia/Tokyo
+  top-size: 10
+  update-interval-seconds: 60
+  displays:
+    daily:
+      world: world
+      x: 0.5
+      y: 76.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+      title: Daily Ranking
+    weekly:
+      world: world
+      x: 0.5
+      y: 72.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+      title: Weekly Ranking
+    monthly:
+      world: world
+      x: 0.5
+      y: 68.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+      title: Monthly Ranking
+    total:
+      world: world
+      x: 0.5
+      y: 64.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+      title: All-Time Ranking
 sessions:
   default-max-players: 4
   max-max-players: 8
