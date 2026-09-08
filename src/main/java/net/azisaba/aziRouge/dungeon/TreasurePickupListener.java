@@ -72,6 +72,9 @@ public final class TreasurePickupListener implements Listener {
             return;
         }
         PlayerInventorySupport.addToHotbar(event.getPlayer().getInventory(), reward.clone());
+        plugin.gameSessionManager().sessionForPlayer(event.getPlayer().getUniqueId())
+                .ifPresent(session -> plugin.statisticsService()
+                        .recordTreasure(session.runId(), event.getPlayer(), display.getUniqueId()));
 
         event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8F, 1.1F);
         display.remove();

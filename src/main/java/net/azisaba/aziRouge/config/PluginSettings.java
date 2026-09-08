@@ -4,6 +4,8 @@ public record PluginSettings(
         GenerationSettings generation,
         DoorSettings door,
         DebugSettings debug,
+        DatabaseSettings database,
+        LeaderboardSettings leaderboard,
         SessionSettings sessions,
         HomeSettings home,
         DungeonSettings dungeon,

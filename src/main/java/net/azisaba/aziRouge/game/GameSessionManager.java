@@ -10,6 +10,8 @@ import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
 import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
+import net.azisaba.aziRouge.statistics.ExitReason;
+import net.azisaba.aziRouge.statistics.PlayerSnapshot;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
@@ -28,6 +30,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.event.ClickEvent;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -63,6 +66,7 @@ public final class GameSessionManager {
     private final Map<UUID, PlayerVitalsSnapshot> playerVitalsSnapshots = new HashMap<>();
     private final Map<UUID, Integer> spectatorTargetIndexes = new HashMap<>();
     private final Set<UUID> pendingSessionCreations = new HashSet<>();
+    private boolean shuttingDown;
 
     public GameSessionManager(AziRouge plugin, MobSpawnManager mobSpawnManager) {
         this.plugin = plugin;
@@ -364,6 +368,7 @@ public final class GameSessionManager {
                 sendMessage(player, m("session.prepare-start-round", "&ePrepare at home, then start a round with /azirouge round start."));
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
+                plugin.statisticsService().recordSessionJoin(session.runId(), player);
                 return session;
             } catch (RuntimeException ex) {
                 GameSession registered = sessionsByWorld.get(world.getUID());
@@ -418,6 +423,7 @@ public final class GameSessionManager {
             broadcastSessionMessage(session, m("session.member-joined", "&e{player} joined the session. Players: {players}/{max}",
                     "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
         }
+        plugin.statisticsService().recordSessionJoin(session.runId(), player);
         return session;
     }
 
@@ -442,6 +448,10 @@ public final class GameSessionManager {
         restoreGameMode(player);
         restorePlayerVitals(player);
         GameOverItemSupport.remove(plugin, player);
+        ExitReason exitReason = session.state() == SessionState.GAME_OVER
+                ? ExitReason.SESSION_END
+                : ExitReason.LEAVE;
+        plugin.statisticsService().recordSessionExit(session.runId(), player.getUniqueId(), exitReason);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
         }
@@ -547,6 +557,16 @@ public final class GameSessionManager {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
             }
+            plugin.statisticsService().recordRoundReached(
+                    session.runId(),
+                    participants.stream()
+                            .map(Bukkit::getPlayer)
+                            .filter(java.util.Objects::nonNull)
+                            .map(PlayerSnapshot::from)
+                            .toList(),
+                    session.currentRound(),
+                    maxDepth
+            );
             updateRoundAfterAliveChange(session);
             return result;
         } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
@@ -653,6 +673,7 @@ public final class GameSessionManager {
         session.setState(SessionState.CLOSING);
         UUID worldId = session.world().getUID();
         File worldFolder = session.world().getWorldFolder();
+        List<UUID> onlineMembers = List.copyOf(session.onlineMembers());
 
         cancelMobTask(session);
         cancelIdleTimeout(session);
@@ -660,6 +681,10 @@ public final class GameSessionManager {
         plugin.bossBattleService().clearBossBattle(session);
         evacuatePlayers(session);
         restoreOnlineMembers(session);
+        ExitReason sessionExitReason = shuttingDown ? ExitReason.PLUGIN_DISABLE : ExitReason.SESSION_END;
+        for (UUID playerId : onlineMembers) {
+            plugin.statisticsService().recordSessionExit(session.runId(), playerId, sessionExitReason);
+        }
 
         if (!session.world().getPlayers().isEmpty()) {
             plugin.getLogger().warning("Session world still has players after evacuation: " + session.world().getName());
@@ -739,6 +764,7 @@ public final class GameSessionManager {
             if (associatedSession != null) {
                 associatedSession.markOnline(player.getUniqueId());
                 cancelIdleTimeout(associatedSession);
+                plugin.statisticsService().recordSessionJoin(associatedSession.runId(), player);
                 if (associatedSession.state() == SessionState.IN_ROUND) {
                     associatedSession.markPendingNextRound(player.getUniqueId());
                     makeRoundSpectatorAtHome(associatedSession, player);
@@ -764,6 +790,7 @@ public final class GameSessionManager {
         playerToSessionId.put(player.getUniqueId(), session.sessionId());
         session.markOnline(player.getUniqueId());
         cancelIdleTimeout(session);
+        plugin.statisticsService().recordSessionJoin(session.runId(), player);
         initializeSessionPlayerState(player);
         if (session.state() == SessionState.IN_ROUND && !session.alivePlayers().contains(player.getUniqueId())) {
             session.markPendingNextRound(player.getUniqueId());
@@ -780,6 +807,7 @@ public final class GameSessionManager {
         }
 
         boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
+        plugin.statisticsService().recordSessionExit(session.runId(), player.getUniqueId(), ExitReason.DISCONNECT);
         session.markOffline(player.getUniqueId());
         restorePlayerAttributes(player);
         restoreGameMode(player);
@@ -806,7 +834,15 @@ public final class GameSessionManager {
             updateRoundAfterAliveChange(session);
             return;
         }
+        boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
         session.markDead(player.getUniqueId());
+        if (wasAlive) {
+            plugin.statisticsService().recordDeath(
+                    session.runId(),
+                    player,
+                    stableEventId(session, "death", player.getUniqueId())
+            );
+        }
         session.markPendingNextRound(player.getUniqueId());
         sendTitle(player, m("session.title.down", "&cDown"), m("session.subtitle.spectating-next-round", "&7Spectating until the next round"), 10, 60, 20);
         sendMessage(player, m("session.out-this-round", "&cYou are out for this round. You will return at the start of the next round."));
@@ -890,6 +926,7 @@ public final class GameSessionManager {
     }
 
     public void shutdown() {
+        shuttingDown = true;
         for (GameSession session : new ArrayList<>(sessionsById.values())) {
             endSession(session);
         }
@@ -1196,6 +1233,7 @@ public final class GameSessionManager {
     }
 
     private void announceGameOver(GameSession session, String reason) {
+        plugin.statisticsService().recordGameOver(session.runId());
         giveGameOverItems(session);
         launchGameOverFireworks(session);
         broadcastTitle(
@@ -1286,6 +1324,11 @@ public final class GameSessionManager {
 
     private void sendMessage(Player player, String message) {
         player.sendMessage(PREFIX + message);
+    }
+
+    private UUID stableEventId(GameSession session, String eventType, UUID playerId) {
+        String source = session.runId() + ":" + eventType + ":" + session.currentRound() + ":" + playerId;
+        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8));
     }
 
     private void sendMessage(Player player, Component message) {

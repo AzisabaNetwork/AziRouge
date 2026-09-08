@@ -8,7 +8,7 @@ softdepend:
 commands:
   azirouge:
     description: Manage AziRouge dungeon generation and game sessions.
-    usage: /azirouge <menu|start|end|session|round|dungeon|money|generate|reload|debug|author>
+    usage: /azirouge <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>
     permission: azirouge.command
 permissions:
   azirouge.command:
@@ -31,6 +31,12 @@ permissions:
     default: op
   azirouge.money:
     description: Allows viewing and editing AziRouge session money.
+    default: op
+  azirouge.stats:
+    description: Allows viewing your AziRouge player statistics.
+    default: true
+  azirouge.stats.others:
+    description: Allows viewing another player's AziRouge statistics.
     default: op
   azirouge.command.reload:
     description: Allows reloading AziRouge configuration.

@@ -14,6 +14,7 @@ import net.azisaba.aziRouge.math.Direction;
 import net.azisaba.aziRouge.math.IntVector3;
 import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
+import net.azisaba.aziRouge.statistics.PlayerStatistics;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.World;
@@ -55,7 +56,7 @@ public final class AziRougeCommand implements TabExecutor {
                 plugin.gameMenuService().openMenu(player);
                 return true;
             }
-            info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|money|generate|reload|debug|author>");
+            info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>");
             return true;
         }
 
@@ -67,6 +68,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "round" -> handleRound(sender, Arrays.copyOfRange(args, 1, args.length));
             case "dungeon" -> handleDungeon(sender, Arrays.copyOfRange(args, 1, args.length));
             case "money" -> handleMoney(sender, Arrays.copyOfRange(args, 1, args.length));
+            case "stats" -> handleStats(sender, Arrays.copyOfRange(args, 1, args.length));
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "reload" -> handleReload(sender, Arrays.copyOfRange(args, 1, args.length));
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -81,7 +83,7 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("start", "end", "menu", "session", "round", "dungeon", "money", "generate", "reload", "debug", "author").stream()
+            return List.of("start", "end", "session", "round", "dungeon", "money", "stats", "generate", "reload", "debug", "author").stream()
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -127,6 +129,13 @@ public final class AziRougeCommand implements TabExecutor {
         if (args.length == 2 && "money".equalsIgnoreCase(args[0])) {
             return List.of("set", "add").stream()
                     .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .toList();
+        }
+        if (args.length == 2 && "stats".equalsIgnoreCase(args[0]) && sender.hasPermission("azirouge.stats.others")) {
+            return Bukkit.getOnlinePlayers().stream()
+                    .map(Player::getName)
+                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(args[1].toLowerCase(Locale.ROOT)))
+                    .sorted(String.CASE_INSENSITIVE_ORDER)
                     .toList();
         }
         if (args.length == 3 && "money".equalsIgnoreCase(args[0])
@@ -556,6 +565,82 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
         return handleDungeonSelect(sender, Arrays.copyOfRange(args, 1, args.length));
+    }
+
+    private boolean handleStats(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("azirouge.stats")) {
+            error(sender, "You do not have permission to view AziRouge statistics.");
+            return true;
+        }
+        if (args.length > 1) {
+            info(sender, "Usage: /azirouge stats [onlinePlayer]");
+            return true;
+        }
+        String targetName;
+        java.util.concurrent.CompletableFuture<java.util.Optional<PlayerStatistics>> statisticsFuture;
+        if (args.length == 0) {
+            if (!(sender instanceof Player player)) {
+                info(sender, "Usage: /azirouge stats <player>");
+                return true;
+            }
+            targetName = player.getName();
+            statisticsFuture = plugin.statisticsService().playerStatistics(player.getUniqueId());
+        } else {
+            if (!sender.hasPermission("azirouge.stats.others")) {
+                error(sender, "You do not have permission to view another player's statistics.");
+                return true;
+            }
+            Player onlineTarget = Bukkit.getPlayerExact(args[0]);
+            targetName = onlineTarget == null ? args[0] : onlineTarget.getName();
+            statisticsFuture = onlineTarget == null
+                    ? plugin.statisticsService().playerStatistics(targetName)
+                    : plugin.statisticsService().playerStatistics(onlineTarget.getUniqueId());
+        }
+
+        info(sender, "Loading statistics for " + targetName + "...");
+        statisticsFuture.whenComplete((statistics, throwable) -> {
+            if (!plugin.isEnabled()) {
+                return;
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (throwable != null || !plugin.statisticsService().isAvailable()) {
+                    error(sender, "The statistics database is currently unavailable.");
+                    return;
+                }
+                if (statistics.isEmpty()) {
+                    info(sender, "No AziRouge statistics have been recorded for " + targetName + ".");
+                    return;
+                }
+                sendStatistics(sender, statistics.get());
+            });
+        });
+        return true;
+    }
+
+    private void sendStatistics(CommandSender sender, PlayerStatistics statistics) {
+        info(sender, "Statistics: " + statistics.playerName());
+        info(sender, "Max round=" + statistics.maxRound()
+                + " / total rounds=" + statistics.totalRoundsReached()
+                + " / sessions=" + statistics.sessionsJoined());
+        info(sender, "Deaths=" + statistics.deaths()
+                + " / game overs=" + statistics.gameOvers()
+                + " / max depth=" + statistics.maxDepth());
+        info(sender, "Play time=" + formatDuration(statistics.totalPlaySeconds())
+                + " / longest=" + formatDuration(statistics.longestPlaySeconds()));
+        info(sender, "Mob kills=" + statistics.mobKills()
+                + " / chests=" + statistics.chestsOpened()
+                + " / treasures=" + statistics.treasuresCollected());
+        info(sender, "Total sales=" + statistics.totalSales()
+                + " / early leaves=" + statistics.earlyLeaves()
+                + " / disconnects=" + statistics.disconnects());
+    }
+
+    private String formatDuration(long totalSeconds) {
+        long normalized = Math.max(0L, totalSeconds);
+        long hours = normalized / 3600L;
+        long minutes = (normalized % 3600L) / 60L;
+        long seconds = normalized % 60L;
+        return String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds);
     }
 
     private boolean handleDungeonSelect(CommandSender sender, String[] args) {

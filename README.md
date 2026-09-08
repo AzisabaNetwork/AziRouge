@@ -274,3 +274,47 @@ shop:
         amount: 4
         price: 24
 ```
+
+## MariaDB player statistics / leaderboard
+
+プレイヤー統計とランキングはMariaDBへ保存します。DB停止中もゲームセッションは継続しますが、統計の保存とランキング更新は一時停止します。
+
+```sql
+CREATE DATABASE azirouge CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'azirouge'@'%' IDENTIFIED BY 'replace-with-a-strong-password';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX ON azirouge.* TO 'azirouge'@'%';
+FLUSH PRIVILEGES;
+```
+
+接続情報とTextDisplayの配置は `config.yml` で設定します。テーブルとインデックスはプラグイン起動時に自動作成されます。
+
+```yaml
+database:
+  enabled: true
+  host: 127.0.0.1
+  port: 3306
+  name: azirouge
+  username: azirouge
+  password: "replace-with-a-strong-password"
+  use-ssl: false
+  maximum-pool-size: 4
+  connection-timeout-millis: 5000
+leaderboard:
+  enabled: true
+  timezone: Asia/Tokyo
+  top-size: 10
+  update-interval-seconds: 60
+  displays:
+    daily:
+      world: world
+      x: 0.5
+      y: 76.0
+      z: 0.5
+      yaw: 0.0
+      pitch: 0.0
+      title: Daily Ranking
+```
+
+`daily`、`weekly`、`monthly`、`total` の各配置を個別に指定できます。日次は当日0時、週次は月曜日0時、月次は当月1日を、`leaderboard.timezone` のカレンダー境界として集計します。同点の場合は対象ラウンドへの到達時刻が早いプレイヤーを上位にします。
+
+`/azirouge stats` で自分の統計を、`azirouge.stats.others` 権限があれば `/azirouge stats <player>` でオフラインを含む他プレイヤーの統計を確認できます。記録対象は最大・総到達ラウンド数、セッション参加数、死亡・ゲームオーバー数、実際に到達した最大ダンジョン深度、累積・最長プレイ時間、Mob撃破数、宝箱・宝物取得数、累積売却金額、途中離脱・切断数です。

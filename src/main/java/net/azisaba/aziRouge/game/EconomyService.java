@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 
 import java.util.Map;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 public final class EconomyService {
     private final AziRouge plugin;
@@ -55,6 +56,14 @@ public final class EconomyService {
             }
             PlayerInventorySupport.SaleResult playerResult =
                     PlayerInventorySupport.sellPricedStorageContents(player.getInventory(), prices);
+            if (playerResult.totalAmount() > 0L) {
+                plugin.statisticsService().recordSale(
+                        session.runId(),
+                        player,
+                        playerResult.totalAmount(),
+                        saleEventId(session, playerId)
+                );
+            }
             totalAmount += playerResult.totalAmount();
             totalItems += playerResult.itemCount();
         }
@@ -69,5 +78,10 @@ public final class EconomyService {
     }
 
     public record MaintenancePaymentResult(long cost, boolean paid) {
+    }
+
+    private UUID saleEventId(GameSession session, UUID playerId) {
+        String source = session.runId() + ":sale:" + session.currentRound() + ":" + playerId;
+        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8));
     }
 }
