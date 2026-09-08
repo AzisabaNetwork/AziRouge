@@ -4,6 +4,7 @@ public record AziRougeSettings(
         MobSpawnSettings mobSpawn,
         ChestSettings chest,
         TreasureSettings treasure,
-        TrapSettings traps
+        TrapSettings traps,
+        MiningSettings mining
 ) {
 }

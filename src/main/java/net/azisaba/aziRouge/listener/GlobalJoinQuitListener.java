@@ -4,7 +4,10 @@ import io.papermc.paper.event.block.BlockBreakBlockEvent;
 import io.papermc.paper.event.player.AsyncPlayerSpawnLocationEvent;
 import io.papermc.paper.event.player.PlayerInsertLecternBookEvent;
 import net.azisaba.aziRouge.AziRouge;
+import net.azisaba.aziRouge.game.GameSession;
+import net.azisaba.aziRouge.game.SessionState;
 import net.kyori.adventure.text.Component;
+import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -28,7 +31,7 @@ public class GlobalJoinQuitListener implements Listener {
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent e) {
         if (plugin.settings().joinSettings().isBeta() && !e.getPlayer().hasPermission("azirouge.beta.join")) {
-            e.getPlayer().kick(Component.text("This server is currently in closed beta. You do not have permission to join."));
+            e.getPlayer().kick(Component.text(plugin.messages().text("join.beta-denied", "This server is currently in closed beta. You do not have permission to join.")));
         }
     }
 
@@ -62,9 +65,19 @@ public class GlobalJoinQuitListener implements Listener {
     @EventHandler
     public void onDamage(EntityDamageEvent e) {
         if (!(e.getEntity() instanceof Player p)) return;
+        if (isAliveBossParticipant(p)) return;
         if (p.getWorld().getName().equals("world")) {
             e.setCancelled(true);
         }
+    }
+
+    private boolean isAliveBossParticipant(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        return session != null
+                && session.state() == SessionState.IN_ROUND
+                && session.isBossBattleActive()
+                && session.alivePlayers().contains(player.getUniqueId())
+                && player.getGameMode() != GameMode.SPECTATOR;
     }
 
 }

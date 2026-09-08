@@ -14,6 +14,7 @@ public record PluginSettings(
         ShopSettings shop,
         GuiSettings gui,
         PlayerSettings player,
+        BossSettings boss,
         EnemySettings enemies,
         AziRougeSettings azirouge,
         JoinSettings joinSettings

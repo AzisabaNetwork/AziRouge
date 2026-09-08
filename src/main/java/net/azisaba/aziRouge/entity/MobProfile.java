@@ -12,14 +12,12 @@ import org.bukkit.Registry;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Creature;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Mob;
+import org.bukkit.entity.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
 import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
 
 import java.util.ArrayList;
@@ -29,9 +27,11 @@ import java.util.Locale;
 import java.util.Random;
 
 public enum MobProfile {
-    ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 12, 20.0D, 0.40D, 5.0D),
-    SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D),
-    SPIDER_STALKER("spider_stalker", EntityType.SPIDER, 9, 8, 28.0D, 0.38D, 4.5D);
+    ZOMBIE_BRUTE("zombie_brute", EntityType.ZOMBIE, 12, 12, 20.0D, 0.40D, 5.0D, -1),
+    SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D, -1),
+    POWERED_CREEPER("powered_creeper", EntityType.CREEPER, 9, 8, 20.0D, 0.38D, 4.5D, -1),
+    MINI_ENDERMAN("mini_enderman", EntityType.ENDERMAN, 9, 6, 20.0D, 0.3D, 5.0D, -1),
+    COPPER_GOLEM("copper_golem", EntityType.COPPER_GOLEM, 3, 4, 20.0D, 0.18D, 0.0D, 1);
 
     public static final String MOB_TAG = "azirouge_mob";
     private static final String PROFILE_TAG_PREFIX = "azirouge_profile:";
@@ -45,7 +45,7 @@ public enum MobProfile {
     private final double attackDamage;
     private final MobProfileSettings defaultSettings;
 
-    MobProfile(String key, EntityType entityType, int weight, int power, double maxHealth, double movementSpeed, double attackDamage) {
+    MobProfile(String key, EntityType entityType, int weight, int power, double maxHealth, double movementSpeed, double attackDamage, int maxAliveCount) {
         this.key = key;
         this.entityType = entityType;
         this.weight = weight;
@@ -59,6 +59,7 @@ public enum MobProfile {
                 maxHealth,
                 movementSpeed,
                 attackDamage,
+                maxAliveCount,
                 new MobAiSettings(true, 20L),
                 defaultDropsFor(key)
         );
@@ -90,6 +91,20 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
         applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
+
+        if (mob.getType() == EntityType.ENDERMAN) {
+            applyAttribute(mob, Attribute.SCALE, 0.6);
+        }
+
+        if (mob instanceof Creeper creeper) {
+            creeper.setPowered(true);
+            creeper.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 0, false, false, true));
+        }
+
+        if (mob.getType() == EntityType.COPPER_GOLEM) {
+            mob.setInvulnerable(true);
+        }
+
         if (mob instanceof Mob m) {
             m.getPathfinder().setCanOpenDoors(true);
             Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
@@ -97,6 +112,7 @@ public enum MobProfile {
             if (m instanceof Creature creature) {
                 Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RANDOM_STROLL);
                 Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.WATER_AVOIDING_RANDOM_STROLL);
+                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RESTRICT_SUN);
             }
             Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m));
         }

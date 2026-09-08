@@ -165,6 +165,18 @@ shop:
         material: TORCH
         amount: 16
         price: 10
+      - id: mining_pickaxe
+        material: IRON_PICKAXE
+        amount: 1
+        price: 35
+        durability: 64
+        can-destroy:
+          - COAL_ORE
+          - IRON_ORE
+          - GOLD_ORE
+          - DIAMOND_ORE
+          - EMERALD_ORE
+          - CHISELED_DEEPSLATE
     between-round:
       - id: bread
         material: BREAD
@@ -174,6 +186,18 @@ shop:
         material: COOKED_BEEF
         amount: 3
         price: 36
+      - id: mining_pickaxe
+        material: IRON_PICKAXE
+        amount: 1
+        price: 80
+        durability: 64
+        can-destroy:
+          - COAL_ORE
+          - IRON_ORE
+          - GOLD_ORE
+          - DIAMOND_ORE
+          - EMERALD_ORE
+          - CHISELED_DEEPSLATE
 gui:
   depth:
     max: 12
@@ -182,6 +206,30 @@ player:
   sprint-stamina:
     drain-per-second: 1.0
     recovery-per-second: 1.5
+boss:
+  revive:
+    radius: 2.0
+    hold-ticks: 60
+  portal-cooldown-seconds: 3
+  battles:
+    - id: evoker
+      villager-tag: boss_evoker
+      min-round: 5
+      destination:
+        x: 0
+        y: 64
+        z: 768
+      yaw: 0.0
+      return-portal-material: END_PORTAL
+      return-portal-area:
+        min:
+          x: -1
+          y: 0
+          z: -1
+        max:
+          x: 1
+          y: 2
+          z: 1
 enemies:
   enabled: false
   mode: reserved
@@ -189,10 +237,37 @@ azirouge:
   mob-spawn-interval-seconds: 30
   mob-spawn-count-per-interval: 3
   mob-spawn-max-alive-power: 48
+  mob-spawn-light:
+    enabled: true
+    sample-attempts-per-spawn: 96
+    block-light:
+      max-effective-level: 14
+      curve-power: 2.0
+      min-weight: 0.05
+    torch-types:
+      torch:
+        materials:
+          - TORCH
+          - WALL_TORCH
+        radius: 8
+        multiplier: 0.30
+      soul_torch:
+        materials:
+          - SOUL_TORCH
+          - SOUL_WALL_TORCH
+        radius: 8
+        multiplier: 0.45
+      copper_torch:
+        materials:
+          - COPPER_TORCH
+          - COPPER_WALL_TORCH
+        radius: 8
+        multiplier: 0.20
   treasure:
     base-spawn-chance: 0.08
     depth-multiplier: 0.04
     max-spawn-chance: 0.65
+    min-per-dungeon: 1
     tiers:
       tier-1:
         min-rolls: 1
@@ -251,6 +326,7 @@ azirouge:
     base-spawn-chance: 0.06
     depth-multiplier: 0.03
     max-spawn-chance: 0.35
+    min-per-dungeon: 1
     definitions:
       - key: landmine
         weight: 10
@@ -267,6 +343,36 @@ azirouge:
         set-fire: true
         break-blocks: false
         min-depth: 4
+  mining:
+    enabled: true
+    ores-per-piece: 2
+    triggers-per-dungeon: 4
+    backing-material: STONE
+    trigger-material: CHISELED_DEEPSLATE
+    min-trigger-gimmick-distance: 16
+    chain-step-ticks: 4
+    ores:
+      - material: COAL_ORE
+        weight: 12
+        min-depth: 0
+      - material: IRON_ORE
+        weight: 8
+        min-depth: 1
+      - material: GOLD_ORE
+        weight: 4
+        min-depth: 3
+      - material: DIAMOND_ORE
+        weight: 2
+        min-depth: 5
+    gimmicks:
+      - type: TUNNEL_BREAKTHROUGH
+        weight: 3
+      - type: OPEN_DOOR
+        weight: 3
+      - type: REDSTONE_DOOR
+        weight: 2
+      - type: SUMMON_CHEST
+        weight: 0
   mobs:
     zombie_brute:
       weight: 12
@@ -332,6 +438,23 @@ azirouge:
       ai:
         enabled: true
         tick-interval-ticks: 20
+    copper_golem:
+      weight: 3
+      power: 4
+      max-alive-count: 1
+      max-health: 20.0
+      movement-speed: 0.18
+      attack-damage: 0.0
+      drops: []
+      ai:
+        enabled: true
+        tick-interval-ticks: 20
+        torch-break:
+          enabled: true
+          search-radius: 10
+          break-distance: 1.8
+          break-ticks: 80
+          goal-speed: 0.7
   chest:
     base-spawn-chance: 0.1
     depth-multiplier: 0.05

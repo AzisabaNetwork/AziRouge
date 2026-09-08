@@ -63,6 +63,10 @@ public final class GameMenuService implements Listener {
         // This service does not own any entities.
     }
 
+    public void openMenu(Player player) {
+        showMenuDialog(player);
+    }
+
     @EventHandler(ignoreCancelled = true)
     public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) {
@@ -109,7 +113,7 @@ public final class GameMenuService implements Listener {
             plugin.gameSessionManager().handleSpectatorCompass(event.getPlayer());
         } else if (GameOverItemSupport.isLeaveItem(plugin, item)) {
             event.setCancelled(true);
-            event.getPlayer().performCommand("azirouge session leave");
+            showLeaveSessionConfirmation(event.getPlayer());
         } else if (GameOverItemSupport.isMenuItem(plugin, item)) {
             event.setCancelled(true);
             showMenuDialog(event.getPlayer());
@@ -119,9 +123,9 @@ public final class GameMenuService implements Listener {
     private void showCreateSessionDialog(Player player) {
         showConfirmationDialog(
                 player,
-                text("Create Session"),
-                text("Create a new session."),
-                action("Create", "Create a session and move to the home world.", "/azirouge session create"),
+                message("menu.create-session", "Create Session"),
+                message("menu.create-session-description", "Create a new session."),
+                action(label("menu.create-session", "Create"), label("menu.tooltip.create-session", "Create a session and move to the home world."), "/azirouge session create --confirm"),
                 closeAction()
         );
     }
@@ -129,10 +133,10 @@ public final class GameMenuService implements Listener {
     private void showJoinSessionDialog(Player player) {
         showDialog(
                 player,
-                text("Join Session"),
-                text("Enter the session ID to join."),
+                message("menu.join-session", "Join Session"),
+                message("menu.join-session-description", "Enter the session ID to join."),
                 List.of(sessionIdInput()),
-                List.of(action("Join", "Join the entered session.", "/azirouge session join $(sessionId)")),
+                List.of(action(label("menu.join-session", "Join"), label("menu.tooltip.join-session", "Join the entered session."), "/azirouge session join $(sessionId) --confirm")),
                 1
         );
     }
@@ -140,24 +144,24 @@ public final class GameMenuService implements Listener {
     private void showLeaveSessionConfirmation(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         String description = session == null
-                ? "You are not currently in a session."
-                : "Leave session " + session.sessionId() + "? You can join another session after leaving.";
+                ? label("menu.leave-no-session", "You are not currently in a session.")
+                : plugin.messages().format("menu.leave-session-description", "Leave session {session}? You can join another session after leaving.", "session", session.sessionId());
         showConfirmationDialog(
                 player,
-                text("Leave Session"),
+                message("menu.leave-session", "Leave Session"),
                 text(description),
-                action("Leave Session", "Leave your current session.", "/azirouge session leave"),
-                menuAction("Back", "Return to the session menu.", this::showSessionMenuDialog)
+                action(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session", "Leave your current session."), "/azirouge session leave --confirm"),
+                menuAction(label("menu.back", "Back"), label("menu.tooltip.back-session", "Return to the session menu."), this::showSessionMenuDialog)
         );
     }
 
     private void showStartRoundDialog(Player player) {
         showDialog(
                 player,
-                text("Start Round"),
-                text("Choose a depth and start the round."),
+                message("menu.start-round", "Start Round"),
+                message("menu.start-round-description", "Choose a depth and start the round."),
                 List.of(depthInput()),
-                List.of(action("Start", "Start the round with the selected depth.", "/azirouge round start test $(depth)")),
+                List.of(action(label("menu.start-round", "Start"), label("menu.tooltip.start-round", "Start the round with the selected depth."), "/azirouge round start test $(depth) --confirm")),
                 1
         );
     }
@@ -165,9 +169,9 @@ public final class GameMenuService implements Listener {
     private void showEndRoundConfirmation(Player player) {
         showConfirmationDialog(
                 player,
-                text("End Round"),
-                text("End the current round? Loot will be sold and maintenance will be charged."),
-                action("End Round", "End the current round.", "/azirouge round end"),
+                message("menu.end-round", "End Round"),
+                message("menu.end-round-description", "End the current round? Loot will be sold and maintenance will be charged."),
+                action(label("menu.end-round", "End Round"), label("menu.tooltip.end-round", "End the current round."), "/azirouge round end --confirm"),
                 closeAction()
         );
     }
@@ -176,13 +180,13 @@ public final class GameMenuService implements Listener {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         showDialog(
                 player,
-                text("AziRouge " + MENU),
+                message("menu.title", "AziRouge Menu"),
                 text(menuDescription(session)),
                 List.of(),
                 List.of(
-                        menuAction("Session", "Open session actions.", this::showSessionMenuDialog),
-                        menuAction("Round", "Open round actions.", this::showRoundDialog),
-                        action("List Sessions", "Show active sessions in chat.", "/azirouge session list"),
+                        menuAction(label("menu.session-title", "Session"), label("menu.tooltip.session", "Open session actions."), this::showSessionMenuDialog),
+                        menuAction(label("menu.round-title", "Round"), label("menu.tooltip.round", "Open round actions."), this::showRoundDialog),
+                        action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions", "Show active sessions in chat."), "/azirouge session list"),
                         closeAction()
                 ),
                 2
@@ -192,15 +196,15 @@ public final class GameMenuService implements Listener {
     private void showSessionMenuDialog(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         List<ActionButton> actions = new ArrayList<>();
-        actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
-        actions.add(menuAction("Join Session", "Enter a session ID and join.", this::showJoinSessionDialog));
-        actions.add(action("List Sessions", "Show joinable sessions in chat.", "/azirouge session list"));
-        actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
-        actions.add(menuAction("Back", "Return to the main menu.", this::showMenuDialog));
+        actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
+        actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
+        actions.add(action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions-joinable", "Show joinable sessions in chat."), "/azirouge session list"));
+        actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
+        actions.add(menuAction(label("menu.back", "Back"), label("menu.tooltip.back-main", "Return to the main menu."), this::showMenuDialog));
 
         showDialog(
                 player,
-                text(SESSION + " " + MENU),
+                message("menu.session-title", "Session Menu"),
                 text(menuDescription(session)),
                 List.of(),
                 actions,
@@ -212,22 +216,22 @@ public final class GameMenuService implements Listener {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         List<ActionButton> actions = new ArrayList<>();
         if (session == null) {
-            actions.add(menuAction("Join Session", "Enter a session ID and join.", this::showJoinSessionDialog));
-            actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
+            actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
+            actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
         } else if (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS) {
-            actions.add(menuAction("Start Round", "Choose a depth and start the round.", this::showStartRoundDialog));
-            actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
+            actions.add(menuAction(label("menu.start-round", "Start Round"), label("menu.tooltip.start-round-open", "Choose a depth and start the round."), this::showStartRoundDialog));
+            actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
         } else if (session.state() == SessionState.IN_ROUND) {
-            actions.add(menuAction("End Round", "Open the end round confirmation.", this::showEndRoundConfirmation));
+            actions.add(menuAction(label("menu.end-round", "End Round"), label("menu.tooltip.end-round-open", "Open the end round confirmation."), this::showEndRoundConfirmation));
         } else if (session.state() == SessionState.GAME_OVER) {
-            actions.add(menuAction("Leave Session", "Open the leave session confirmation.", this::showLeaveSessionConfirmation));
-            actions.add(menuAction("Create Session", "Open the create session confirmation.", this::showCreateSessionDialog));
+            actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
+            actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
         }
-        actions.add(menuAction("Back", "Return to the main menu.", this::showMenuDialog));
+        actions.add(menuAction(label("menu.back", "Back"), label("menu.tooltip.back-main", "Return to the main menu."), this::showMenuDialog));
 
         showDialog(
                 player,
-                text(ROUND + " " + MENU),
+                message("menu.round-title", "Round Menu"),
                 text(roundDescription(session)),
                 List.of(),
                 actions,
@@ -306,8 +310,8 @@ public final class GameMenuService implements Listener {
 
     private ActionButton closeAction() {
         return ActionButton.create(
-                text(CLOSE),
-                text("Do nothing."),
+                message("menu.close", CLOSE),
+                message("menu.tooltip.close", "Do nothing."),
                 80,
                 null
         );
@@ -341,27 +345,39 @@ public final class GameMenuService implements Listener {
 
     private String menuDescription(GameSession session) {
         if (session == null) {
-            return "Create a session, join a session, or list active sessions.";
+            return label("menu.description.no-session", "Create a session, join a session, or list active sessions.");
         }
-        return "Current session: " + session.sessionId()
-                + "\nState: " + session.state()
-                + "\nShared balance: " + session.sharedBalance()
-                + "\nRound: " + session.currentRound();
+        return plugin.messages().format("menu.description.session",
+                "Current session: {session}\nState: {state}\nShared balance: {balance}\nRound: {round}",
+                "session", session.sessionId(),
+                "state", session.state(),
+                "balance", session.sharedBalance(),
+                "round", session.currentRound());
     }
 
     private String roundDescription(GameSession session) {
         if (session == null) {
-            return "You are not in a session. Join or create a session before starting a round.";
+            return label("menu.description.round-no-session", "You are not in a session. Join or create a session before starting a round.");
         }
-        return "Session: " + session.sessionId()
-                + "\nState: " + session.state()
-                + "\nRound: " + session.currentRound()
-                + "\nDepth: " + session.getMaxDepth()
-                + "\nShared balance: " + session.sharedBalance();
+        return plugin.messages().format("menu.description.round",
+                "Session: {session}\nState: {state}\nRound: {round}\nDepth: {depth}\nShared balance: {balance}",
+                "session", session.sessionId(),
+                "state", session.state(),
+                "round", session.currentRound(),
+                "depth", session.getMaxDepth(),
+                "balance", session.sharedBalance());
     }
 
     private Component text(String value) {
         return Component.text(value);
+    }
+
+    private Component message(String key, String fallback) {
+        return Component.text(label(key, fallback));
+    }
+
+    private String label(String key, String fallback) {
+        return plugin.messages().text(key, fallback);
     }
 
     private Optional<String> resolveTrigger(Entity clicked) {

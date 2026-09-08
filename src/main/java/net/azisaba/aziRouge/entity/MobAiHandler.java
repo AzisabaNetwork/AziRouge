@@ -1,5 +1,6 @@
 package net.azisaba.aziRouge.entity;
 
+import com.destroystokyo.paper.event.entity.EntityPathfindEvent;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
@@ -18,5 +19,8 @@ public interface MobAiHandler {
     }
 
     default void onAttack(LivingEntity mob, EntityDamageByEntityEvent event, MobAiContext context) {
+    }
+
+    default void onPathFound(LivingEntity mob, EntityPathfindEvent event, MobAiContext context) {
     }
 }

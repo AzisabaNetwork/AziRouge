@@ -66,7 +66,15 @@ public final class SessionGameplayService implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (isSessionPlayer(event.getPlayer()) && !sessionManager.isActivePlaying(event.getPlayer())) {
+        if (!isSessionPlayer(event.getPlayer())) {
+            return;
+        }
+        if (!sessionManager.isActivePlaying(event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
+        ItemStack tool = event.getPlayer().getInventory().getItemInMainHand();
+        if (!ItemAdventurePredicateSupport.canBreak(tool, event.getBlock())) {
             event.setCancelled(true);
         }
     }

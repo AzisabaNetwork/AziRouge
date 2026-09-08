@@ -30,6 +30,7 @@ public final class GameSession {
     private final Set<UUID> deadPlayers = new HashSet<>();
     private final Set<UUID> pendingPlayersNextRound = new HashSet<>();
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
+    private final Map<UUID, Location> bossDeathLocations = new HashMap<>();
     private final Map<UUID, Integer> maxReachedDepths = new HashMap<>();
     private List<PlacedPiece> placedPieces;
     private final Location spawnLocation;
@@ -46,6 +47,9 @@ public final class GameSession {
     private long sharedBalance;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
+    private String activeBossBattleId;
+    private Location activeBossDestination;
+    private boolean bossDefeated;
 
     public GameSession(
             String sessionId,
@@ -248,6 +252,40 @@ public final class GameSession {
         this.idleTimeoutTask = idleTimeoutTask;
     }
 
+    public boolean isBossBattleActive() {
+        return activeBossBattleId != null;
+    }
+
+    public String activeBossBattleId() {
+        return activeBossBattleId;
+    }
+
+    public Location activeBossDestination() {
+        return activeBossDestination == null ? null : activeBossDestination.clone();
+    }
+
+    public boolean isBossDefeated() {
+        return bossDefeated;
+    }
+
+    public void startBossBattle(String bossBattleId, Location destination) {
+        this.activeBossBattleId = bossBattleId;
+        this.activeBossDestination = destination == null ? null : destination.clone();
+        this.bossDefeated = false;
+        this.bossDeathLocations.clear();
+    }
+
+    public void markBossDefeated() {
+        this.bossDefeated = true;
+    }
+
+    public void clearBossBattle() {
+        this.activeBossBattleId = null;
+        this.activeBossDestination = null;
+        this.bossDefeated = false;
+        this.bossDeathLocations.clear();
+    }
+
     public boolean isMember(UUID playerId) {
         return members.contains(playerId);
     }
@@ -267,6 +305,7 @@ public final class GameSession {
         deadPlayers.remove(playerId);
         pendingPlayersNextRound.remove(playerId);
         savedReturnLocations.remove(playerId);
+        bossDeathLocations.remove(playerId);
     }
 
     public void markOnline(UUID playerId) {
@@ -292,6 +331,13 @@ public final class GameSession {
         }
     }
 
+    public void markAlive(UUID playerId) {
+        deadPlayers.remove(playerId);
+        pendingPlayersNextRound.remove(playerId);
+        alivePlayers.add(playerId);
+        bossDeathLocations.remove(playerId);
+    }
+
     public void markPendingNextRound(UUID playerId) {
         if (!alivePlayers.contains(playerId)) {
             pendingPlayersNextRound.add(playerId);
@@ -302,6 +348,7 @@ public final class GameSession {
         alivePlayers.clear();
         deadPlayers.clear();
         pendingPlayersNextRound.clear();
+        bossDeathLocations.clear();
     }
 
     public void clearAlivePlayers() {
@@ -329,6 +376,17 @@ public final class GameSession {
 
     public void removeSavedLocation(UUID playerId) {
         savedReturnLocations.remove(playerId);
+    }
+
+    public void recordBossDeathLocation(UUID playerId, Location location) {
+        if (location != null) {
+            bossDeathLocations.put(playerId, location.clone());
+        }
+    }
+
+    public Location bossDeathLocation(UUID playerId) {
+        Location location = bossDeathLocations.get(playerId);
+        return location == null ? null : location.clone();
     }
 
     public PlacedPiece randomRoom(Random random) {

@@ -82,6 +82,7 @@ public final class SettingsLoader {
                 loadShopSettings(plugin, config),
                 loadGuiSettings(config),
                 loadPlayerSettings(config),
+                loadBossSettings(plugin, config),
                 new EnemySettings(
                         config.getBoolean("enemies.enabled", false),
                         requireText(config.getString("enemies.mode"), "reserved")
@@ -90,7 +91,8 @@ public final class SettingsLoader {
                         loadMobSpawnSettings(config),
                         loadChestSettings(plugin, config),
                         loadTreasureSettings(plugin, config),
-                        loadTrapSettings(config)
+                        loadTrapSettings(config),
+                        loadMiningSettings(plugin, config)
                 ),
                 new JoinSettings(
                         config.getBoolean("join.isbeta", false)
@@ -232,6 +234,53 @@ public final class SettingsLoader {
         );
     }
 
+    private static BossSettings loadBossSettings(JavaPlugin plugin, FileConfiguration config) {
+        List<BossBattleSettings> battles = new ArrayList<>();
+        List<?> rawBattles = config.getList("boss.battles");
+        if (rawBattles != null) {
+            for (Object rawBattle : rawBattles) {
+                Map<?, ?> values = asMap(rawBattle);
+                if (values == null || values.isEmpty()) {
+                    plugin.getLogger().warning("Ignoring malformed boss battle: " + rawBattle);
+                    continue;
+                }
+                String id = normalizeOptionalText(stringValue(values.get("id")));
+                if (id == null) {
+                    plugin.getLogger().warning("Ignoring boss battle without id: " + values);
+                    continue;
+                }
+                Material portalMaterial = materialOr(
+                        stringValue(values.get("return-portal-material")),
+                        Material.END_PORTAL
+                );
+                if (portalMaterial == null || !portalMaterial.isBlock()) {
+                    plugin.getLogger().warning("Ignoring boss battle with invalid portal material: " + values);
+                    continue;
+                }
+                battles.add(new BossBattleSettings(
+                        id.toLowerCase(Locale.ROOT),
+                        requireText(stringValue(values.get("villager-tag")), "boss_" + id.toLowerCase(Locale.ROOT)),
+                        Math.max(0, intValue(values.get("min-round"), 5)),
+                        loadVector(values.get("destination"), new IntVector3(0, 64, 768)),
+                        (float) doubleValue(values.get("yaw"), 0.0D),
+                        loadRelativeBlockBox(
+                                values.get("return-portal-area"),
+                                new IntVector3(-1, 0, -1),
+                                new IntVector3(1, 2, 1)
+                        ),
+                        portalMaterial
+                ));
+            }
+        }
+
+        return new BossSettings(
+                List.copyOf(battles),
+                Math.max(0.5D, config.getDouble("boss.revive.radius", 2.0D)),
+                Math.max(1, config.getInt("boss.revive.hold-ticks", 60)),
+                Math.max(1, config.getInt("boss.portal-cooldown-seconds", 3))
+        );
+    }
+
     private static List<ShopTradeSettings> loadShopTrades(JavaPlugin plugin, List<?> rawTrades, String path) {
         if (rawTrades == null || rawTrades.isEmpty()) {
             return List.of();
@@ -255,9 +304,91 @@ public final class SettingsLoader {
             }
 
             int amount = clampInt(intValue(values.get("amount"), 1), 1, material.getMaxStackSize());
-            trades.add(new ShopTradeSettings(id.toLowerCase(Locale.ROOT), material, amount, price));
+            trades.add(new ShopTradeSettings(
+                    id.toLowerCase(Locale.ROOT),
+                    material,
+                    amount,
+                    price,
+                    loadMaterialSet(values.get("can-destroy")),
+                    optionalPositiveInt(values.get("durability"))
+            ));
         }
         return List.copyOf(trades);
+    }
+
+    private static MiningSettings loadMiningSettings(JavaPlugin plugin, FileConfiguration config) {
+        Material backing = materialOr(config.getString("azirouge.mining.backing-material"), Material.STONE);
+        Material trigger = materialOr(config.getString("azirouge.mining.trigger-material"), Material.CHISELED_DEEPSLATE);
+        return new MiningSettings(
+                config.getBoolean("azirouge.mining.enabled", true),
+                Math.max(0, config.getInt("azirouge.mining.ores-per-piece", 2)),
+                Math.max(0, config.getInt("azirouge.mining.triggers-per-dungeon", 2)),
+                backing.isBlock() ? backing : Material.STONE,
+                trigger.isBlock() ? trigger : Material.CHISELED_DEEPSLATE,
+                Math.max(1, config.getInt("azirouge.mining.min-trigger-gimmick-distance", 16)),
+                Math.max(1, config.getInt("azirouge.mining.chain-step-ticks", 2)),
+                loadMiningOres(plugin, config.getList("azirouge.mining.ores")),
+                loadMiningGimmicks(config.getList("azirouge.mining.gimmicks"))
+        );
+    }
+
+    private static List<MiningOreSettings> loadMiningOres(JavaPlugin plugin, List<?> rawOres) {
+        if (rawOres == null || rawOres.isEmpty()) {
+            return List.of(
+                    new MiningOreSettings(Material.COAL_ORE, 12, 0, Integer.MAX_VALUE),
+                    new MiningOreSettings(Material.IRON_ORE, 8, 1, Integer.MAX_VALUE),
+                    new MiningOreSettings(Material.GOLD_ORE, 4, 3, Integer.MAX_VALUE)
+            );
+        }
+
+        List<MiningOreSettings> ores = new ArrayList<>();
+        for (Object rawOre : rawOres) {
+            Map<?, ?> values = asMap(rawOre);
+            if (values == null) {
+                continue;
+            }
+            Material material = materialOr(stringValue(values.get("material")), null);
+            if (material == null || !material.isBlock()) {
+                plugin.getLogger().warning("Ignoring invalid mining ore: " + values);
+                continue;
+            }
+            int minDepth = Math.max(0, intValue(values.get("min-depth"), 0));
+            int maxDepth = Math.max(minDepth, intValue(values.get("max-depth"), Integer.MAX_VALUE));
+            ores.add(new MiningOreSettings(material, Math.max(1, intValue(values.get("weight"), 1)), minDepth, maxDepth));
+        }
+        return ores.isEmpty() ? List.of(new MiningOreSettings(Material.COAL_ORE, 1, 0, Integer.MAX_VALUE)) : List.copyOf(ores);
+    }
+
+    private static List<MiningGimmickSettings> loadMiningGimmicks(List<?> rawGimmicks) {
+        if (rawGimmicks == null || rawGimmicks.isEmpty()) {
+            return List.of(
+                    new MiningGimmickSettings(MiningGimmickType.TUNNEL_BREAKTHROUGH, 3),
+                    new MiningGimmickSettings(MiningGimmickType.OPEN_DOOR, 2),
+                    new MiningGimmickSettings(MiningGimmickType.REDSTONE_DOOR, 2),
+                    new MiningGimmickSettings(MiningGimmickType.SUMMON_CHEST, 3)
+            );
+        }
+
+        List<MiningGimmickSettings> gimmicks = new ArrayList<>();
+        for (Object rawGimmick : rawGimmicks) {
+            Map<?, ?> values = asMap(rawGimmick);
+            if (values == null) {
+                continue;
+            }
+            String typeName = normalizeOptionalText(stringValue(values.get("type")));
+            if (typeName == null) {
+                continue;
+            }
+            try {
+                gimmicks.add(new MiningGimmickSettings(
+                        MiningGimmickType.valueOf(typeName.replace('-', '_')),
+                        Math.max(0, intValue(values.get("weight"), 1))
+                ));
+            } catch (IllegalArgumentException ignored) {
+                // Ignore malformed gimmick type.
+            }
+        }
+        return gimmicks.isEmpty() ? List.of(new MiningGimmickSettings(MiningGimmickType.SUMMON_CHEST, 1)) : List.copyOf(gimmicks);
     }
 
     private static EconomySettings loadEconomySettings(JavaPlugin plugin, FileConfiguration config) {
@@ -328,6 +459,29 @@ public final class SettingsLoader {
         return BlockBox.fromPoints(min, max);
     }
 
+    private static BlockBox loadRelativeBlockBox(Object rawValue, IntVector3 defaultMin, IntVector3 defaultMax) {
+        Map<?, ?> values = asMap(rawValue);
+        if (values == null) {
+            return BlockBox.fromPoints(defaultMin, defaultMax);
+        }
+        return BlockBox.fromPoints(
+                loadVector(values.get("min"), defaultMin),
+                loadVector(values.get("max"), defaultMax)
+        );
+    }
+
+    private static IntVector3 loadVector(Object rawValue, IntVector3 defaultValue) {
+        Map<?, ?> values = asMap(rawValue);
+        if (values == null) {
+            return defaultValue;
+        }
+        return new IntVector3(
+                intValue(values.get("x"), defaultValue.x()),
+                intValue(values.get("y"), defaultValue.y()),
+                intValue(values.get("z"), defaultValue.z())
+        );
+    }
+
     private static Path resolvePath(JavaPlugin plugin, String value) {
         Path path = Path.of(value);
         if (path.isAbsolute()) {
@@ -341,8 +495,84 @@ public final class SettingsLoader {
                 Math.max(1L, config.getLong("azirouge.mob-spawn-interval-seconds", 30L)),
                 Math.max(1, config.getInt("azirouge.mob-spawn-count-per-interval", 3)),
                 Math.max(0, config.getInt("azirouge.mob-spawn-max-alive-power", 48)),
+                loadMobSpawnLightSettings(config),
                 loadMobProfiles(config.getConfigurationSection("azirouge.mobs"))
         );
+    }
+
+    private static MobSpawnLightSettings loadMobSpawnLightSettings(FileConfiguration config) {
+        ConfigurationSection section = config.getConfigurationSection("azirouge.mob-spawn-light");
+        if (section == null) {
+            return defaultMobSpawnLightSettings();
+        }
+
+        ConfigurationSection blockLight = section.getConfigurationSection("block-light");
+        Map<String, TorchSpawnPenaltySettings> torchTypes = loadTorchSpawnPenaltySettings(
+                section.getConfigurationSection("torch-types")
+        );
+        return new MobSpawnLightSettings(
+                section.getBoolean("enabled", true),
+                Math.max(1, section.getInt("sample-attempts-per-spawn", 96)),
+                clampInt(blockLight == null ? 14 : blockLight.getInt("max-effective-level", 14), 0, 15),
+                Math.max(0.1D, blockLight == null ? 2.0D : blockLight.getDouble("curve-power", 2.0D)),
+                clamp(blockLight == null ? 0.05D : blockLight.getDouble("min-weight", 0.05D), 0.0D, 1.0D),
+                torchTypes
+        );
+    }
+
+    private static MobSpawnLightSettings defaultMobSpawnLightSettings() {
+        return new MobSpawnLightSettings(
+                true,
+                96,
+                14,
+                2.0D,
+                0.05D,
+                Map.of(
+                        "torch", new TorchSpawnPenaltySettings(
+                                "torch",
+                                java.util.Set.of(Material.TORCH, Material.WALL_TORCH),
+                                8,
+                                0.30D
+                        ),
+                        "soul_torch", new TorchSpawnPenaltySettings(
+                                "soul_torch",
+                                java.util.Set.of(Material.SOUL_TORCH, Material.SOUL_WALL_TORCH),
+                                8,
+                                0.45D
+                        ),
+                        "copper_torch", new TorchSpawnPenaltySettings(
+                                "copper_torch",
+                                java.util.Set.of(Material.COPPER_TORCH, Material.COPPER_WALL_TORCH),
+                                8,
+                                0.20D
+                        )
+                )
+        );
+    }
+
+    private static Map<String, TorchSpawnPenaltySettings> loadTorchSpawnPenaltySettings(ConfigurationSection section) {
+        if (section == null) {
+            return defaultMobSpawnLightSettings().torchTypes();
+        }
+
+        Map<String, TorchSpawnPenaltySettings> torchTypes = new LinkedHashMap<>();
+        for (String key : section.getKeys(false)) {
+            ConfigurationSection torchSection = section.getConfigurationSection(key);
+            if (torchSection == null) {
+                continue;
+            }
+            java.util.Set<Material> materials = loadMaterialSet(torchSection.getList("materials"));
+            if (materials.isEmpty()) {
+                continue;
+            }
+            torchTypes.put(key.toLowerCase(Locale.ROOT), new TorchSpawnPenaltySettings(
+                    key.toLowerCase(Locale.ROOT),
+                    materials,
+                    Math.max(0, torchSection.getInt("radius", 8)),
+                    clamp(torchSection.getDouble("multiplier", 1.0D), 0.0D, 1.0D)
+            ));
+        }
+        return torchTypes.isEmpty() ? defaultMobSpawnLightSettings().torchTypes() : Map.copyOf(torchTypes);
     }
 
     private static Map<String, MobProfileSettings> loadMobProfiles(ConfigurationSection section) {
@@ -365,6 +595,7 @@ public final class SettingsLoader {
                             Math.max(1.0D, profileSection.getDouble("max-health", defaults.maxHealth())),
                             Math.max(0.0D, profileSection.getDouble("movement-speed", defaults.movementSpeed())),
                             Math.max(0.0D, profileSection.getDouble("attack-damage", defaults.attackDamage())),
+                            Math.max(-1, profileSection.getInt("max-alive-count", defaults.maxAliveCount())),
                             ai,
                             drops
                     );
@@ -379,7 +610,21 @@ public final class SettingsLoader {
         }
         return new MobAiSettings(
                 section.getBoolean("enabled", defaults.enabled()),
-                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks()))
+                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks())),
+                loadTorchBreakSettings(section.getConfigurationSection("torch-break"), defaults.torchBreak())
+        );
+    }
+
+    private static TorchBreakSettings loadTorchBreakSettings(ConfigurationSection section, TorchBreakSettings defaults) {
+        if (section == null) {
+            return defaults;
+        }
+        return new TorchBreakSettings(
+                section.getBoolean("enabled", defaults.enabled()),
+                Math.max(1, section.getInt("search-radius", defaults.searchRadius())),
+                Math.max(0.1D, section.getDouble("break-distance", defaults.breakDistance())),
+                Math.max(1, section.getInt("break-ticks", defaults.breakTicks())),
+                Math.max(0.0D, section.getDouble("goal-speed", defaults.goalSpeed()))
         );
     }
 
@@ -462,6 +707,7 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 1.0D
         );
+        int minPerDungeon = Math.max(0, config.getInt("azirouge.treasure.min-per-dungeon", 1));
 
         ConfigurationSection tiers = config.getConfigurationSection("azirouge.treasure.tiers");
         ChestLootTierSettings defaultTier1 = defaultTreasureTier1();
@@ -471,6 +717,7 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 depthMultiplier,
                 maxSpawnChance,
+                minPerDungeon,
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-1"), defaultTier1, "treasure.tier-1"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-2"), defaultTier2, "treasure.tier-2"),
                 loadTier(plugin, tiers == null ? null : tiers.getConfigurationSection("tier-3"), defaultTier3, "treasure.tier-3")
@@ -485,10 +732,12 @@ public final class SettingsLoader {
                 baseSpawnChance,
                 1.0D
         );
+        int minPerDungeon = Math.max(0, config.getInt("azirouge.traps.min-per-dungeon", 1));
         return new TrapSettings(
                 baseSpawnChance,
                 depthMultiplier,
                 maxSpawnChance,
+                minPerDungeon,
                 loadTrapDefinitions(config.getList("azirouge.traps.definitions"))
         );
     }
@@ -599,8 +848,46 @@ public final class SettingsLoader {
                 minAmount,
                 maxAmount,
                 normalizeOptionalText(stringValue(values.get("potion-type"))),
-                loadStoredEnchantments(values.get("stored-enchantments"))
+                loadStoredEnchantments(values.get("stored-enchantments")),
+                loadMaterialSet(values.get("can-destroy")),
+                optionalPositiveInt(values.get("durability"))
         );
+    }
+
+    private static java.util.Set<Material> loadMaterialSet(Object rawValue) {
+        List<?> rawList;
+        if (rawValue instanceof List<?> list) {
+            rawList = list;
+        } else {
+            String single = stringValue(rawValue);
+            rawList = single == null || single.isBlank() ? List.of() : List.of(single);
+        }
+
+        java.util.Set<Material> materials = new java.util.LinkedHashSet<>();
+        for (Object raw : rawList) {
+            Material material = Material.matchMaterial(String.valueOf(raw).trim());
+            if (material != null && material.isBlock()) {
+                materials.add(material);
+            }
+        }
+        return materials.isEmpty() ? java.util.Set.of() : java.util.Set.copyOf(materials);
+    }
+
+    private static Integer optionalPositiveInt(Object value) {
+        String text = stringValue(value);
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        int parsed = intValue(value, -1);
+        return parsed > 0 ? parsed : null;
+    }
+
+    private static Material materialOr(String value, Material fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        Material material = Material.matchMaterial(value.trim());
+        return material == null ? fallback : material;
     }
 
     private static Map<String, Integer> loadStoredEnchantments(Object rawValue) {

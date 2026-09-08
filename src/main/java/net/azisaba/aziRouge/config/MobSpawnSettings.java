@@ -9,6 +9,7 @@ public record MobSpawnSettings(
         long intervalSeconds,
         int countPerInterval,
         int maxAlivePower,
+        MobSpawnLightSettings light,
         Map<String, MobProfileSettings> profiles
 ) {
     public long intervalTicks() {
@@ -20,7 +21,7 @@ public record MobSpawnSettings(
         return settings == null ? profile.defaultSettings() : settings;
     }
 
-    public MobProfile selectRandomProfile(Random random, int remainingPower) {
+    public MobProfile selectRandomProfile(Random random, int remainingPower, Map<MobProfile, Integer> aliveCounts) {
         if (remainingPower <= 0) {
             return null;
         }
@@ -28,7 +29,7 @@ public record MobSpawnSettings(
         int totalWeight = 0;
         for (MobProfile profile : MobProfile.values()) {
             MobProfileSettings settings = profile(profile);
-            if (settings.weight() <= 0 || settings.power() > remainingPower) {
+            if (!canSpawnProfile(profile, settings, remainingPower, aliveCounts)) {
                 continue;
             }
             totalWeight += settings.weight();
@@ -40,7 +41,7 @@ public record MobSpawnSettings(
         int cursor = random.nextInt(totalWeight);
         for (MobProfile profile : MobProfile.values()) {
             MobProfileSettings settings = profile(profile);
-            if (settings.weight() <= 0 || settings.power() > remainingPower) {
+            if (!canSpawnProfile(profile, settings, remainingPower, aliveCounts)) {
                 continue;
             }
             cursor -= settings.weight();
@@ -49,5 +50,18 @@ public record MobSpawnSettings(
             }
         }
         return null;
+    }
+
+    private boolean canSpawnProfile(
+            MobProfile profile,
+            MobProfileSettings settings,
+            int remainingPower,
+            Map<MobProfile, Integer> aliveCounts
+    ) {
+        if (settings.weight() <= 0 || settings.power() > remainingPower) {
+            return false;
+        }
+        int maxAliveCount = settings.maxAliveCount();
+        return maxAliveCount < 0 || aliveCounts.getOrDefault(profile, 0) < maxAliveCount;
     }
 }

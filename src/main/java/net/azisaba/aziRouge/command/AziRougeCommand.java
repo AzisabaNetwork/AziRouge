@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements TabExecutor {
     private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
+    private static final String CONFIRM_FLAG = "--confirm";
     // Hardcoded for now; add more presets here as additional template sets are authored.
     private static final Map<String, TemplatePreset> TEMPLATE_PRESETS = Map.of(
             "test", new TemplatePreset(List.of("templates/test.yml"), "root")
@@ -51,20 +52,25 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
+            if (sender instanceof Player player) {
+                plugin.gameMenuService().openMenu(player);
+                return true;
+            }
             info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>");
             return true;
         }
 
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "start" -> handleStart(sender, Arrays.copyOfRange(args, 1, args.length));
-            case "end" -> handleEnd(sender);
+            case "end" -> handleEnd(sender, Arrays.copyOfRange(args, 1, args.length));
+            case "menu" -> handleMenu(sender);
             case "session" -> handleSession(sender, Arrays.copyOfRange(args, 1, args.length));
             case "round" -> handleRound(sender, Arrays.copyOfRange(args, 1, args.length));
             case "dungeon" -> handleDungeon(sender, Arrays.copyOfRange(args, 1, args.length));
             case "money" -> handleMoney(sender, Arrays.copyOfRange(args, 1, args.length));
             case "stats" -> handleStats(sender, Arrays.copyOfRange(args, 1, args.length));
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
-            case "reload" -> handleReload(sender);
+            case "reload" -> handleReload(sender, Arrays.copyOfRange(args, 1, args.length));
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
             case "author" -> handleAuthor(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
@@ -169,7 +175,17 @@ public final class AziRougeCommand implements TabExecutor {
         return List.of();
     }
 
+    private boolean handleMenu(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            error(sender, "This command can only be run by a player.");
+            return true;
+        }
+        plugin.gameMenuService().openMenu(player);
+        return true;
+    }
+
     private boolean handleStart(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.start")) {
             error(sender, "You do not have permission to start an AziRouge session.");
             return true;
@@ -187,7 +203,6 @@ public final class AziRougeCommand implements TabExecutor {
             error(sender, "You are already associated with an active session. Use /azirouge end first.");
             return true;
         }
-
         TemplateSelection templateSelection;
         try {
             templateSelection = resolveTemplateSelection(
@@ -228,7 +243,7 @@ public final class AziRougeCommand implements TabExecutor {
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "create" -> handleSessionCreate(sender, Arrays.copyOfRange(args, 1, args.length));
             case "join" -> handleSessionJoin(sender, Arrays.copyOfRange(args, 1, args.length));
-            case "leave" -> handleSessionLeave(sender);
+            case "leave" -> handleSessionLeave(sender, Arrays.copyOfRange(args, 1, args.length));
             case "list" -> handleSessionList(sender);
             case "forceend" -> handleSessionForceEnd(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
@@ -239,6 +254,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleSessionCreate(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
             error(sender, "You do not have permission to manage AziRouge sessions.");
             return true;
@@ -275,6 +291,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleSessionJoin(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
             error(sender, "You do not have permission to manage AziRouge sessions.");
             return true;
@@ -287,7 +304,6 @@ public final class AziRougeCommand implements TabExecutor {
             info(sender, "Usage: /azirouge session join <sessionId>");
             return true;
         }
-
         try {
             GameSession session = plugin.gameSessionManager().joinSession(player, args[0]);
             success(sender, "Joined session " + session.sessionId()
@@ -298,16 +314,24 @@ public final class AziRougeCommand implements TabExecutor {
         return true;
     }
 
-    private boolean handleSessionLeave(CommandSender sender) {
+    private boolean handleSessionLeave(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
             error(sender, "You do not have permission to manage AziRouge sessions.");
+            return true;
+        }
+        if (args.length != 0) {
+            info(sender, "Usage: /azirouge session leave");
             return true;
         }
         if (!(sender instanceof Player player)) {
             error(sender, "This command can only be run by a player.");
             return true;
         }
+        return handleSessionLeave(sender, player);
+    }
 
+    private boolean handleSessionLeave(CommandSender sender, Player player) {
         try {
             GameSession session = plugin.gameSessionManager().leaveSession(player);
             success(sender, "Left session " + session.sessionId() + ".");
@@ -350,6 +374,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleSessionForceEnd(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session.forceend") && !sender.hasPermission("azirouge.end")) {
             error(sender, "You do not have permission to force-end AziRouge sessions.");
             return true;
@@ -379,7 +404,7 @@ public final class AziRougeCommand implements TabExecutor {
         }
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "start" -> handleRoundStart(sender, Arrays.copyOfRange(args, 1, args.length));
-            case "end" -> handleRoundEnd(sender);
+            case "end" -> handleRoundEnd(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
                 error(sender, "Unknown round subcommand: " + args[0]);
                 yield true;
@@ -388,6 +413,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleRoundStart(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
             error(sender, "You do not have permission to manage AziRouge rounds.");
             return true;
@@ -415,7 +441,6 @@ public final class AziRougeCommand implements TabExecutor {
         String presetName = args.length >= 1 && !args[0].isBlank()
                 ? args[0].toLowerCase(Locale.ROOT)
                 : session.selectedPreset();
-
         try {
             TemplateSelection templateSelection = resolveTemplateSelection(
                     plugin.settings().generation(),
@@ -448,8 +473,17 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleRoundEnd(CommandSender sender) {
+        return handleRoundEnd(sender, new String[0]);
+    }
+
+    private boolean handleRoundEnd(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!(sender instanceof Player player)) {
             error(sender, "This command can only be run by a player.");
+            return true;
+        }
+        if (args.length != 0) {
+            info(sender, "Usage: /azirouge round end");
             return true;
         }
         try {
@@ -468,6 +502,7 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleMoney(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.money")) {
             error(sender, "You do not have permission to manage AziRouge money.");
             return true;
@@ -649,9 +684,14 @@ public final class AziRougeCommand implements TabExecutor {
         return true;
     }
 
-    private boolean handleEnd(CommandSender sender) {
+    private boolean handleEnd(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.end")) {
             error(sender, "You do not have permission to end an AziRouge session.");
+            return true;
+        }
+        if (args.length != 0) {
+            info(sender, "Usage: /azirouge end");
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -664,7 +704,6 @@ public final class AziRougeCommand implements TabExecutor {
             error(sender, "You are not in an active session.");
             return true;
         }
-
         if (plugin.gameSessionManager().endSession(session)) {
             success(sender, "Ended session world " + session.world().getName() + ".");
         } else {
@@ -674,11 +713,11 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private boolean handleGenerate(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.command.generate")) {
             error(sender, "You do not have permission to generate dungeons.");
             return true;
         }
-
         GenerationSettings defaults = plugin.settings().generation();
         Map<String, String> options = parseOptions(args);
         List<String> overriddenPatterns = options.containsKey("patterns")
@@ -750,9 +789,14 @@ public final class AziRougeCommand implements TabExecutor {
         return true;
     }
 
-    private boolean handleReload(CommandSender sender) {
+    private boolean handleReload(CommandSender sender, String[] args) {
+        args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.command.reload")) {
             error(sender, "You do not have permission to reload AziRouge.");
+            return true;
+        }
+        if (args.length != 0) {
+            info(sender, "Usage: /azirouge reload");
             return true;
         }
         plugin.reloadPluginState();
@@ -882,6 +926,12 @@ public final class AziRougeCommand implements TabExecutor {
 
         error(player, "Unknown entrance action: " + args[0]);
         return true;
+    }
+
+    private String[] withoutConfirmFlag(String[] args) {
+        return Arrays.stream(args)
+                .filter(arg -> !CONFIRM_FLAG.equalsIgnoreCase(arg))
+                .toArray(String[]::new);
     }
 
     private Map<String, String> parseOptions(String[] args) {

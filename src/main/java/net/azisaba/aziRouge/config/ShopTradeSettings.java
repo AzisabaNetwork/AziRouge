@@ -6,6 +6,8 @@ public record ShopTradeSettings(
         String id,
         Material material,
         int amount,
-        long price
+        long price,
+        java.util.Set<Material> canDestroy,
+        Integer durability
 ) {
 }

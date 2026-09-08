@@ -52,7 +52,7 @@ public final class GameSessionManager {
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
             Attribute.ATTACK_SPEED, 4.0D,
-            Attribute.ENTITY_INTERACTION_RANGE, 2.3D
+            Attribute.ENTITY_INTERACTION_RANGE, 2.7D
     );
 
     private final AziRouge plugin;
@@ -106,6 +106,92 @@ public final class GameSessionManager {
                 && session.alivePlayers().contains(player.getUniqueId())
                 && player.getWorld().getUID().equals(session.world().getUID())
                 && player.getGameMode() != GameMode.SPECTATOR;
+    }
+
+    public void beginBossBattle(GameSession session, String bossBattleId, Location destination, Collection<UUID> participants) {
+        if (!Bukkit.isPrimaryThread()) {
+            Bukkit.getScheduler().runTask(plugin, () -> beginBossBattle(session, bossBattleId, destination, participants));
+            return;
+        }
+        if (!sessionsById.containsKey(session.sessionId())) {
+            throw new IllegalStateException("The session is no longer active.");
+        }
+        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
+            throw new IllegalStateException("Boss battles can only be started between rounds.");
+        }
+        if (session.isBossBattleActive()) {
+            throw new IllegalStateException("A boss battle is already active.");
+        }
+
+        Set<UUID> activeParticipants = new HashSet<>(participants);
+        if (activeParticipants.isEmpty()) {
+            throw new IllegalStateException("There are no online members who can challenge the boss.");
+        }
+
+        session.setActiveParticipants(activeParticipants);
+        session.startBossBattle(bossBattleId, destination);
+        session.setRoundState(RoundState.ACTIVE);
+        session.setState(SessionState.IN_ROUND);
+        for (UUID playerId : activeParticipants) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) {
+                session.markDead(playerId);
+                continue;
+            }
+            setRoundSurvival(player);
+            initializeSessionPlayerState(player);
+            player.teleport(destination);
+        }
+        broadcastTitle(session, ChatColor.DARK_PURPLE + "Boss Battle", ChatColor.YELLOW + bossBattleId, 10, 60, 15);
+        broadcastSessionMessage(session, ChatColor.LIGHT_PURPLE + "Challenging boss battle: " + bossBattleId);
+        updateRoundAfterAliveChange(session);
+    }
+
+    public boolean reviveBossPlayer(GameSession session, Player player, Location location) {
+        if (!session.isBossBattleActive() || session.state() != SessionState.IN_ROUND || !session.deadPlayers().contains(player.getUniqueId())) {
+            return false;
+        }
+        session.markAlive(player.getUniqueId());
+        setRoundSurvival(player);
+        initializeSessionPlayerState(player);
+        Location target = location == null ? session.activeBossDestination() : location.clone();
+        if (target != null) {
+            player.teleport(target);
+        }
+        AttributeInstance maxHealth = player.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth != null && !player.isDead()) {
+            player.setHealth(Math.max(1.0D, maxHealth.getValue() / 2.0D));
+        }
+        broadcastSessionMessage(session, ChatColor.GREEN + player.getName() + " was revived. Alive: " + session.alivePlayers().size());
+        return true;
+    }
+
+    public void returnBossPlayerHome(GameSession session, Player player) {
+        if (!session.isBossBattleActive() || !session.isMember(player.getUniqueId())) {
+            return;
+        }
+        setRoundSurvival(player);
+        initializeSessionPlayerState(player);
+        player.teleport(session.returnSpawnLocation());
+        sendTitle(player, m("session.title.returned-home", "&aReturned Home"), m("session.subtitle.waiting-party", "&eWaiting for the party"), 5, 40, 10);
+    }
+
+    public void finishBossBattleVictory(GameSession session) {
+        if (!session.isBossBattleActive()) {
+            return;
+        }
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                returnBossPlayerHome(session, player);
+            }
+        }
+        session.clearRoundPlayers();
+        session.clearBossBattle();
+        session.setRoundState(RoundState.ENDED);
+        session.setState(SessionState.BETWEEN_ROUNDS);
+        broadcastTitle(session, ChatColor.GOLD + "Boss Defeated", ChatColor.YELLOW + "Returned home", 10, 70, 20);
+        broadcastSessionMessage(session, ChatColor.GREEN + "Boss battle cleared. Prepare for the next round when ready.");
     }
 
     public void cleanupLeftoverWorldFoldersOnStartup() {
@@ -276,10 +362,10 @@ public final class GameSessionManager {
                 }
 
                 preparePlayerForSessionEntry(player);
-                sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "Session " + session.sessionId() + " created", 10, 50, 10);
-                sendMessage(player, ChatColor.GREEN + "Created session " + session.sessionId() + ". Invite players with /azirouge session join " + session.sessionId() + ".");
+                sendTitle(player, ChatColor.GOLD + "AziRouge", m("session.subtitle.created", "&eSession {session} created", "session", session.sessionId()), 10, 50, 10);
+                sendMessage(player, m("session.created", "&aCreated session {session}. Invite players with /azirouge session join {session}.", "session", session.sessionId()));
                 sendCopyableSessionId(player, session);
-                sendMessage(player, ChatColor.YELLOW + "Prepare at home, then start a round with /azirouge round start.");
+                sendMessage(player, m("session.prepare-start-round", "&ePrepare at home, then start a round with /azirouge round start."));
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
                 plugin.statisticsService().recordSessionJoin(session.runId(), player);
@@ -329,13 +415,13 @@ public final class GameSessionManager {
         } else {
             restoreGameMode(player);
         }
-        sendTitle(player, ChatColor.GOLD + "AziRouge", ChatColor.YELLOW + "Joined session " + session.sessionId(), 10, 50, 10);
-        sendMessage(player, ChatColor.GREEN + "Joined session " + session.sessionId() + ".");
+        sendTitle(player, ChatColor.GOLD + "AziRouge", m("session.subtitle.joined", "&eJoined session {session}", "session", session.sessionId()), 10, 50, 10);
+        sendMessage(player, m("session.joined", "&aJoined session {session}.", "session", session.sessionId()));
         if (session.state() == SessionState.IN_ROUND) {
-            sendMessage(player, ChatColor.YELLOW + "A round is in progress, so you will spectate this round. You can play from the next round.");
+            sendMessage(player, m("session.joined-in-round", "&eA round is in progress, so you will spectate this round. You can play from the next round."));
         } else {
-            broadcastSessionMessage(session, ChatColor.YELLOW + player.getName() + " joined the session. Players: "
-                    + session.members().size() + "/" + session.maxPlayers());
+            broadcastSessionMessage(session, m("session.member-joined", "&e{player} joined the session. Players: {players}/{max}",
+                    "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
         }
         plugin.statisticsService().recordSessionJoin(session.runId(), player);
         return session;
@@ -374,9 +460,9 @@ public final class GameSessionManager {
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
-        sendMessage(player, ChatColor.YELLOW + "Left AziRouge session " + session.sessionId() + ".");
-        broadcastSessionMessage(session, ChatColor.YELLOW + player.getName() + " left the session. Players: "
-                + session.members().size() + "/" + session.maxPlayers());
+        sendMessage(player, m("session.left", "&eLeft AziRouge session {session}.", "session", session.sessionId()));
+        broadcastSessionMessage(session, m("session.member-left", "&e{player} left the session. Players: {players}/{max}",
+                "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
         return session;
     }
 
@@ -501,6 +587,9 @@ public final class GameSessionManager {
         if (session.state() != SessionState.IN_ROUND) {
             throw new IllegalStateException("No round is currently active in this session.");
         }
+        if (session.isBossBattleActive()) {
+            throw new IllegalStateException("Boss battles cannot be ended with the round end command.");
+        }
         if (!isInHomeArea(session, player.getLocation())) {
             throw new IllegalStateException("Rounds can only be ended inside the home area.");
         }
@@ -530,7 +619,7 @@ public final class GameSessionManager {
         announceRoundEnd(session, result);
         if (!maintenanceResult.paid()) {
             clearOnlineMemberInventories(session);
-            announceGameOver(session, "The session could not pay maintenance.");
+            announceGameOver(session, m("game-over.reason.maintenance", "The session could not pay maintenance."));
         }
         return result;
     }
@@ -589,6 +678,7 @@ public final class GameSessionManager {
         cancelMobTask(session);
         cancelIdleTimeout(session);
         plugin.portalService().clearRoundPortals(session);
+        plugin.bossBattleService().clearBossBattle(session);
         evacuatePlayers(session);
         restoreOnlineMembers(session);
         ExitReason sessionExitReason = shuttingDown ? ExitReason.PLUGIN_DISABLE : ExitReason.SESSION_END;
@@ -735,6 +825,15 @@ public final class GameSessionManager {
         if (session == null || session.state() != SessionState.IN_ROUND) {
             return;
         }
+        if (session.isBossBattleActive()) {
+            session.markDead(player.getUniqueId());
+            session.recordBossDeathLocation(player.getUniqueId(), player.getLocation());
+            sendTitle(player, m("session.title.down", "&cDown"), m("session.subtitle.boss-revive", "&7An ally can revive you by sneaking nearby"), 10, 60, 20);
+            sendMessage(player, m("session.boss-down", "&cYou are down in the boss battle. An alive ally can hold sneak at your death location to revive you."));
+            broadcastSessionMessage(session, m("session.member-down", "&c{player} went down. Alive: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
+            updateRoundAfterAliveChange(session);
+            return;
+        }
         boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
         session.markDead(player.getUniqueId());
         if (wasAlive) {
@@ -745,9 +844,9 @@ public final class GameSessionManager {
             );
         }
         session.markPendingNextRound(player.getUniqueId());
-        sendTitle(player, ChatColor.RED + "Down", ChatColor.GRAY + "Spectating until the next round", 10, 60, 20);
-        sendMessage(player, ChatColor.RED + "You are out for this round. You will return at the start of the next round.");
-        broadcastSessionMessage(session, ChatColor.RED + player.getName() + " died. Alive: " + session.alivePlayers().size());
+        sendTitle(player, m("session.title.down", "&cDown"), m("session.subtitle.spectating-next-round", "&7Spectating until the next round"), 10, 60, 20);
+        sendMessage(player, m("session.out-this-round", "&cYou are out for this round. You will return at the start of the next round."));
+        broadcastSessionMessage(session, m("session.member-died", "&c{player} died. Alive: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
         updateRoundAfterAliveChange(session);
     }
 
@@ -758,11 +857,11 @@ public final class GameSessionManager {
         }
         Player target = selectSpectatorTarget(session, player, true);
         if (target == null) {
-            sendMessage(player, ChatColor.YELLOW + "No alive players are available to spectate.");
+            sendMessage(player, m("session.no-spectator-target", "&eNo alive players are available to spectate."));
             return;
         }
         player.setSpectatorTarget(target);
-        sendMessage(player, ChatColor.YELLOW + "Now spectating " + target.getName() + ".");
+        sendMessage(player, m("session.now-spectating", "&eNow spectating {player}.", "player", target.getName()));
     }
 
     public void ensureSpectatorTarget(Player player) {
@@ -792,6 +891,10 @@ public final class GameSessionManager {
             Bukkit.getScheduler().runTask(plugin, () -> restoreGameOverPlayerAtHome(session, player));
             return;
         }
+        if (session.isBossBattleActive() && session.state() == SessionState.IN_ROUND && session.deadPlayers().contains(player.getUniqueId())) {
+            Bukkit.getScheduler().runTask(plugin, () -> makeBossSpectatorAtDeathLocation(session, player));
+            return;
+        }
         if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return;
         }
@@ -806,6 +909,10 @@ public final class GameSessionManager {
         }
         if (session.state() == SessionState.GAME_OVER) {
             return session.spawnLocation();
+        }
+        if (session.isBossBattleActive() && session.state() == SessionState.IN_ROUND && session.deadPlayers().contains(player.getUniqueId())) {
+            Location deathLocation = session.bossDeathLocation(player.getUniqueId());
+            return deathLocation == null ? session.activeBossDestination() : deathLocation;
         }
         if (session.state() != SessionState.IN_ROUND || session.alivePlayers().contains(player.getUniqueId())) {
             return null;
@@ -950,9 +1057,12 @@ public final class GameSessionManager {
         moveOnlineMembersHome(session);
         clearOnlineMemberInventories(session);
         plugin.portalService().clearRoundPortals(session);
+        if (session.isBossBattleActive()) {
+            plugin.bossBattleService().clearBossBattle(session);
+        }
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.GAME_OVER);
-        announceGameOver(session, "All players are out.");
+        announceGameOver(session, m("game-over.reason.all-out", "All players are out."));
     }
 
     private void setSpectator(Player player) {
@@ -979,10 +1089,27 @@ public final class GameSessionManager {
         Player target = selectSpectatorTarget(session, player, false);
         if (target == null) {
             player.teleport(session.spawnLocation());
-            sendMessage(player, ChatColor.YELLOW + "You are spectating at home. No alive players are available.");
+            sendMessage(player, m("session.spectating-home-no-target", "&eYou are spectating at home. No alive players are available."));
         } else {
             player.setSpectatorTarget(target);
-            sendMessage(player, ChatColor.YELLOW + "You are spectating " + target.getName() + ". Use the compass to switch targets.");
+            sendMessage(player, m("session.spectating-target", "&eYou are spectating {player}. Use the compass to switch targets.", "player", target.getName()));
+        }
+    }
+
+    private void makeBossSpectatorAtDeathLocation(GameSession session, Player player) {
+        initializeSessionPlayerState(player);
+        setSpectator(player);
+        SpectatorItemSupport.give(plugin, player);
+        Location deathLocation = session.bossDeathLocation(player.getUniqueId());
+        if (deathLocation != null) {
+            player.teleport(deathLocation);
+        }
+        Player target = selectSpectatorTarget(session, player, false);
+        if (target != null) {
+            player.setSpectatorTarget(target);
+            sendMessage(player, m("session.boss-spectating-target", "&eYou are spectating {player}. An ally can revive you at your death location.", "player", target.getName()));
+        } else {
+            sendMessage(player, m("session.boss-spectating-death-location", "&eYou are spectating at your death location."));
         }
     }
 
@@ -994,7 +1121,7 @@ public final class GameSessionManager {
         initializeSessionPlayerState(player);
         player.teleport(session.spawnLocation());
         GameOverItemSupport.give(plugin, player);
-        sendMessage(player, ChatColor.YELLOW + "Game over. You returned home. Leave this session before creating the next one.");
+        sendMessage(player, m("session.game-over-returned-home", "&eGame over. You returned home. Leave this session before creating the next one."));
     }
 
     private void restoreRoundInactivePlayersForNextRound(GameSession session) {
@@ -1006,7 +1133,7 @@ public final class GameSessionManager {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
-                sendTitle(player, ChatColor.GREEN + "Returned", ChatColor.YELLOW + "You can play this round", 10, 45, 10);
+                sendTitle(player, m("session.title.returned", "&aReturned"), m("session.subtitle.can-play-round", "&eYou can play this round"), 10, 45, 10);
             }
         }
         for (UUID playerId : session.pendingPlayersNextRound()) {
@@ -1018,7 +1145,7 @@ public final class GameSessionManager {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
-                sendTitle(player, ChatColor.GREEN + "Returned", ChatColor.YELLOW + "You can play this round", 10, 45, 10);
+                sendTitle(player, m("session.title.returned", "&aReturned"), m("session.subtitle.can-play-round", "&eYou can play this round"), 10, 45, 10);
             }
         }
     }
@@ -1078,35 +1205,30 @@ public final class GameSessionManager {
         long maintenance = plugin.economyService().maintenanceCostForRound(session.currentRound());
         broadcastTitle(
                 session,
-                ChatColor.GOLD + "Round " + session.currentRound(),
-                ChatColor.YELLOW + "The portal is open",
+                m("round.title.start", "&6Round {round}", "round", session.currentRound()),
+                m("round.subtitle.portal-open", "&eThe portal is open"),
                 10,
                 60,
                 15
         );
-        broadcastSessionMessage(session, ChatColor.GREEN + "Round " + session.currentRound()
-                + " has started. Enter the dungeon through the home portal.");
-        broadcastSessionMessage(session, ChatColor.YELLOW + "Maintenance due at round end: " + maintenance
-                + " / Shared balance: " + session.sharedBalance());
+        broadcastSessionMessage(session, m("round.started", "&aRound {round} has started. Enter the dungeon through the home portal.", "round", session.currentRound()));
+        broadcastSessionMessage(session, m("round.maintenance-due", "&eMaintenance due at round end: {maintenance} / Shared balance: {balance}", "maintenance", maintenance, "balance", session.sharedBalance()));
     }
 
     private void announceRoundEnd(GameSession session, RoundEndResult result) {
         String title = result.maintenancePaid()
-                ? ChatColor.GREEN + "Round Complete"
-                : ChatColor.RED + "Round Ended";
-        String subtitle = ChatColor.YELLOW + "Sold " + result.itemCount()
-                + " items / +" + result.totalAmount()
-                + " / Maintenance " + result.maintenanceCost();
+                ? m("round.title.complete", "&aRound Complete")
+                : m("round.title.ended", "&cRound Ended");
+        String subtitle = m("round.subtitle.result", "&eSold {items} items / +{amount} / Maintenance {maintenance}",
+                "items", result.itemCount(), "amount", result.totalAmount(), "maintenance", result.maintenanceCost());
         broadcastTitle(session, title, subtitle, 10, 70, 20);
-        broadcastSessionMessage(session, ChatColor.GREEN + "Round " + session.currentRound()
-                + " ended. Sold items: " + result.itemCount() + " / Earned: " + result.totalAmount());
+        broadcastSessionMessage(session, m("round.ended-summary", "&aRound {round} ended. Sold items: {items} / Earned: {amount}",
+                "round", session.currentRound(), "items", result.itemCount(), "amount", result.totalAmount()));
         if (result.maintenancePaid()) {
-            broadcastSessionMessage(session, ChatColor.YELLOW + "Paid maintenance " + result.maintenanceCost()
-                    + ". Shared balance: " + session.sharedBalance());
-            broadcastSessionMessage(session, ChatColor.YELLOW + "Prepare at home, then start the next round when ready.");
+            broadcastSessionMessage(session, m("round.maintenance-paid", "&ePaid maintenance {maintenance}. Shared balance: {balance}", "maintenance", result.maintenanceCost(), "balance", session.sharedBalance()));
+            broadcastSessionMessage(session, m("round.prepare-next", "&ePrepare at home, then start the next round when ready."));
         } else {
-            broadcastSessionMessage(session, ChatColor.RED + "Could not pay maintenance " + result.maintenanceCost()
-                    + ". Shared balance: " + session.sharedBalance());
+            broadcastSessionMessage(session, m("round.maintenance-unpaid", "&cCould not pay maintenance {maintenance}. Shared balance: {balance}", "maintenance", result.maintenanceCost(), "balance", session.sharedBalance()));
         }
     }
 
@@ -1116,17 +1238,17 @@ public final class GameSessionManager {
         launchGameOverFireworks(session);
         broadcastTitle(
                 session,
-                ChatColor.DARK_RED + "Game Over",
-                ChatColor.RED + reason + ChatColor.GRAY + " / Reached round " + session.currentRound(),
+                m("game-over.title", "&4Game Over"),
+                m("game-over.subtitle", "&c{reason}&7 / Reached round {round}", "reason", reason, "round", session.currentRound()),
                 10,
                 100,
                 30
         );
-        broadcastSessionMessage(session, ChatColor.RED + "Game over: " + reason);
-        broadcastSessionMessage(session, ChatColor.GOLD + "Reached round: " + session.currentRound());
-        broadcastSessionMessage(session, ChatColor.YELLOW + "Leave this session: /azirouge session leave");
-        broadcastSessionMessage(session, ChatColor.YELLOW + "Create the next session after leaving with /azirouge session create, or right-click the start menu.");
-        broadcastSessionMessage(session, ChatColor.GRAY + "This session will be closed automatically soon.");
+        broadcastSessionMessage(session, m("game-over.reason-line", "&cGame over: {reason}", "reason", reason));
+        broadcastSessionMessage(session, m("game-over.reached-round", "&6Reached round: {round}", "round", session.currentRound()));
+        broadcastSessionMessage(session, m("game-over.leave", "&eLeave this session: /azirouge session leave"));
+        broadcastSessionMessage(session, m("game-over.next-session", "&eCreate the next session after leaving with /azirouge session create, or right-click the start menu."));
+        broadcastSessionMessage(session, m("game-over.auto-close", "&7This session will be closed automatically soon."));
         scheduleGameOverShutdown(session);
     }
 
@@ -1194,6 +1316,10 @@ public final class GameSessionManager {
 
     private void sendTitle(Player player, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
         player.sendTitle(title, subtitle, fadeIn, stay, fadeOut);
+    }
+
+    private String m(String key, String fallback, Object... replacements) {
+        return plugin.messages().format(key, fallback, replacements);
     }
 
     private void sendMessage(Player player, String message) {

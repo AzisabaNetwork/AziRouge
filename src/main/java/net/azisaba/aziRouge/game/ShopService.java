@@ -15,6 +15,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.ArrayList;
@@ -66,48 +67,60 @@ public final class ShopService implements Listener {
             return;
         }
 
-        handlePurchase(player, holder, trade, event.getView().getTopInventory());
+        Inventory inventory = event.getView().getTopInventory();
+        plugin.confirmationService().request(
+                player,
+                plugin.messages().format(
+                        "shop.confirm-purchase",
+                        "Purchase {item} x{amount} for {price} shared money?",
+                        "item",
+                        trade.material().name(),
+                        "amount",
+                        trade.amount(),
+                        "price",
+                        trade.price()
+                ),
+                () -> handlePurchase(player, holder, trade, inventory)
+        );
     }
 
     private void handlePurchase(Player player, ShopHolder holder, ShopTradeSettings trade, Inventory inventory) {
         GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
         if (session == null || !canUseShop(player, session)) {
             player.closeInventory();
-            player.sendMessage(PREFIX + ChatColor.RED + "The shop is currently unavailable.");
+            player.sendMessage(PREFIX + m("shop.unavailable", "&cThe shop is currently unavailable."));
             return;
         }
 
         if (session.sharedBalance() < trade.price()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Not enough shared money. Price=" + trade.price()
-                    + " Balance=" + session.sharedBalance());
+            player.sendMessage(PREFIX + m("shop.not-enough-money-detail", "&cNot enough shared money. Price={price} Balance={balance}", "price", trade.price(), "balance", session.sharedBalance()));
             return;
         }
 
-        ItemStack purchased = new ItemStack(trade.material(), trade.amount());
+        ItemStack purchased = tradeItem(trade);
         if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Your inventory has no free space.");
+            player.sendMessage(PREFIX + m("shop.inventory-full", "&cYour inventory has no free space."));
             return;
         }
 
         if (!session.withdrawSharedBalance(trade.price())) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Not enough shared money.");
+            player.sendMessage(PREFIX + m("shop.not-enough-money", "&cNot enough shared money."));
             return;
         }
         player.getInventory().addItem(purchased);
-        player.sendMessage(PREFIX + ChatColor.GREEN + "Purchased " + trade.material().name() + " x" + trade.amount()
-                + ". Price=" + trade.price() + " Balance=" + session.sharedBalance());
+        player.sendMessage(PREFIX + m("shop.purchased", "&aPurchased {item} x{amount}. Price={price} Balance={balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
         refreshShop(inventory, holder, session);
     }
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(PREFIX + ChatColor.RED + "The shop is only available during or between rounds.");
+            player.sendMessage(PREFIX + m("shop.only-during-rounds", "&cThe shop is only available during or between rounds."));
             return;
         }
 
         List<ShopTradeSettings> trades = tradesFor(session);
         if (trades.isEmpty()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "No trades are configured for the current state: " + session.state());
+            player.sendMessage(PREFIX + m("shop.no-trades", "&cNo trades are configured for the current state: {state}", "state", session.state()));
             return;
         }
 
@@ -132,15 +145,32 @@ public final class ShopService implements Listener {
     }
 
     private ItemStack displayItem(ShopTradeSettings trade, GameSession session) {
-        ItemStack item = new ItemStack(trade.material(), trade.amount());
+        ItemStack item = tradeItem(trade);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(ChatColor.GREEN + trade.material().name());
-            meta.setLore(List.of(
-                    ChatColor.YELLOW + "Price: " + trade.price(),
-                    ChatColor.GRAY + "Shared money: " + session.sharedBalance()
-            ));
+            List<String> lore = new ArrayList<>();
+            lore.add(m("shop.lore.price", "&ePrice: {price}", "price", trade.price()));
+            lore.add(m("shop.lore.shared-money", "&7Shared money: {balance}", "balance", session.sharedBalance()));
+            if (!trade.canDestroy().isEmpty()) {
+                lore.add(m("shop.lore.can-mine", "&7Can mine: {count} block types", "count", trade.canDestroy().size()));
+            }
+            if (trade.durability() != null) {
+                lore.add(m("shop.lore.durability", "&7Durability: {durability}", "durability", trade.durability()));
+            }
+            meta.setLore(lore);
             item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack tradeItem(ShopTradeSettings trade) {
+        ItemStack item = new ItemStack(trade.material(), trade.amount());
+        ItemAdventurePredicateSupport.setCanBreak(item, trade.canDestroy());
+        if (item.getItemMeta() instanceof Damageable damageable && trade.durability() != null) {
+            int damage = Math.max(0, item.getType().getMaxDurability() - trade.durability());
+            damageable.setDamage(damage);
+            item.setItemMeta(damageable);
         }
         return item;
     }
@@ -168,12 +198,16 @@ public final class ShopService implements Listener {
     }
 
     private int inventorySizeFor(int tradeCount) {
-        return Math.min(54, Math.max(9, ((tradeCount + 8) / 9) * 9));
+        return Math.clamp(((tradeCount + 8) / 9) * 9, 9, 54);
     }
 
     private String shopTitle(GameSession session) {
         return ChatColor.DARK_GREEN + plugin.settings().shop().title()
                 + ChatColor.GRAY + " $" + session.sharedBalance();
+    }
+
+    private String m(String key, String fallback, Object... replacements) {
+        return plugin.messages().format(key, fallback, replacements);
     }
 
     private static final class ShopHolder implements InventoryHolder {

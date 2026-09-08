@@ -4,6 +4,7 @@ public record TreasureSettings(
         double baseSpawnChance,
         double depthMultiplier,
         double maxSpawnChance,
+        int minPerDungeon,
         ChestLootTierSettings tier1,
         ChestLootTierSettings tier2,
         ChestLootTierSettings tier3

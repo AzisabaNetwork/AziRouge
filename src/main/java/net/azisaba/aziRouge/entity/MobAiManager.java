@@ -1,5 +1,6 @@
 package net.azisaba.aziRouge.entity;
 
+import com.destroystokyo.paper.event.entity.EntityPathfindEvent;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.MobAiSettings;
 import net.azisaba.aziRouge.config.MobProfileSettings;
@@ -9,6 +10,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -31,7 +33,7 @@ public final class MobAiManager implements Listener {
         this.handlers = Map.of(
                 MobProfile.ZOMBIE_BRUTE, new ZombieBruteAiHandler(),
                 MobProfile.SKELETON_ARCHER, new SkeletonArcherAiHandler(),
-                MobProfile.SPIDER_STALKER, new SpiderStalkerAiHandler()
+                MobProfile.COPPER_GOLEM, new CopperGolemAiHandler()
         );
         this.tickTask = new BukkitRunnable() {
             @Override
@@ -49,6 +51,7 @@ public final class MobAiManager implements Listener {
     public void shutdown() {
         tickTask.cancel();
         trackedMobs.clear();
+        PathfindTargetRegistry.clearAll();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -67,6 +70,20 @@ public final class MobAiManager implements Listener {
             return;
         }
         handler(profile).onTarget(livingEntity, event, new MobAiContext(plugin, profile, settings));
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity targetMob)) {
+            return;
+        }
+
+        MobProfile targetProfile = resolveProfile(targetMob);
+        if (targetProfile != MobProfile.COPPER_GOLEM) {
+            return;
+        }
+        event.setCancelled(true);
+        targetMob.setInvulnerable(true);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -92,9 +109,28 @@ public final class MobAiManager implements Listener {
         }
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityPathfind(EntityPathfindEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
+            return;
+        }
+
+        MobProfile profile = resolveProfile(livingEntity);
+        if (profile == null) {
+            return;
+        }
+
+        MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(profile);
+        if (!settings.ai().enabled()) {
+            return;
+        }
+        handler(profile).onPathFound(livingEntity, event, new MobAiContext(plugin, profile, settings));
+    }
+
     @EventHandler
     public void onEntityDeath(EntityDeathEvent event) {
         trackedMobs.remove(event.getEntity().getUniqueId());
+        PathfindTargetRegistry.clear(event.getEntity());
     }
 
     private void runSpawnHook(LivingEntity mob, MobProfile profile) {
@@ -112,10 +148,12 @@ public final class MobAiManager implements Listener {
             Map.Entry<UUID, MobProfile> entry = iterator.next();
             Entity entity = Bukkit.getEntity(entry.getKey());
             if (!(entity instanceof LivingEntity livingEntity) || !entity.isValid() || entity.isDead()) {
+                PathfindTargetRegistry.clear(entry.getKey());
                 iterator.remove();
                 continue;
             }
             if (!livingEntity.getScoreboardTags().contains(MobProfile.MOB_TAG)) {
+                PathfindTargetRegistry.clear(entry.getKey());
                 iterator.remove();
                 continue;
             }

@@ -68,7 +68,7 @@ public final class TreasurePickupListener implements Listener {
         }
 
         if (!PlayerInventorySupport.canFitHotbar(event.getPlayer().getInventory(), reward)) {
-            event.getPlayer().sendMessage(ChatColor.RED + "Your hotbar is full. Clear a hotbar slot before picking up treasure.");
+            event.getPlayer().sendMessage(plugin.messages().text("treasure.hotbar-full", "&cYour hotbar is full. Clear a hotbar slot before picking up treasure."));
             return;
         }
         PlayerInventorySupport.addToHotbar(event.getPlayer().getInventory(), reward.clone());
