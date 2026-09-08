@@ -22,8 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ShopService implements Listener {
-    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
-
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
 
@@ -88,39 +86,39 @@ public final class ShopService implements Listener {
         GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
         if (session == null || !canUseShop(player, session)) {
             player.closeInventory();
-            player.sendMessage(PREFIX + m("shop.unavailable", "&cThe shop is currently unavailable."));
+            player.sendMessage(plugin.messages().prefix() + m("shop.unavailable", "&cショップは現在利用できません。"));
             return;
         }
 
         if (session.sharedBalance() < trade.price()) {
-            player.sendMessage(PREFIX + m("shop.not-enough-money-detail", "&cNot enough shared money. Price={price} Balance={balance}", "price", trade.price(), "balance", session.sharedBalance()));
+            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money-detail", "&c共有資金が足りません。価格 {price} / 残高 {balance}", "price", trade.price(), "balance", session.sharedBalance()));
             return;
         }
 
         ItemStack purchased = tradeItem(trade);
         if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
-            player.sendMessage(PREFIX + m("shop.inventory-full", "&cYour inventory has no free space."));
+            player.sendMessage(plugin.messages().prefix() + m("shop.inventory-full", "&cインベントリに空きがありません。"));
             return;
         }
 
         if (!session.withdrawSharedBalance(trade.price())) {
-            player.sendMessage(PREFIX + m("shop.not-enough-money", "&cNot enough shared money."));
+            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money", "&c共有資金が足りません。"));
             return;
         }
         player.getInventory().addItem(purchased);
-        player.sendMessage(PREFIX + m("shop.purchased", "&aPurchased {item} x{amount}. Price={price} Balance={balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
+        player.sendMessage(plugin.messages().prefix() + m("shop.purchased", "&a{item} x{amount} を購入しました。価格 {price} / 残高 {balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
         refreshShop(inventory, holder, session);
     }
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(PREFIX + m("shop.only-during-rounds", "&cThe shop is only available during or between rounds."));
+            player.sendMessage(plugin.messages().prefix() + m("shop.only-during-rounds", "&cショップはラウンド中またはラウンド間だけ使えます。"));
             return;
         }
 
         List<ShopTradeSettings> trades = tradesFor(session);
         if (trades.isEmpty()) {
-            player.sendMessage(PREFIX + m("shop.no-trades", "&cNo trades are configured for the current state: {state}", "state", session.state()));
+            player.sendMessage(plugin.messages().prefix() + m("shop.no-trades", "&cいまは購入できる商品がありません。"));
             return;
         }
 

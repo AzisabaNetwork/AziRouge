@@ -100,9 +100,6 @@ public final class AziRouge extends JavaPlugin {
         if (mobAiManager != null) {
             mobAiManager.shutdown();
         }
-        if (gameMenuService != null) {
-            gameMenuService.shutdown();
-        }
         if (schematicAdapter != null) {
             schematicAdapter.clearCache();
         }
@@ -151,7 +148,7 @@ public final class AziRouge extends JavaPlugin {
         java.util.concurrent.CompletableFuture<Void> statisticsReady;
         if (statisticsService == null) {
             this.statisticsService = new StatisticsService(this);
-            statisticsReady = statisticsService.start();
+            statisticsReady = statisticsService.reload();
         } else {
             statisticsReady = statisticsService.reload();
         }
@@ -194,7 +191,7 @@ public final class AziRouge extends JavaPlugin {
         }
         if (leaderboardDisplayService == null) {
             this.leaderboardDisplayService = new LeaderboardDisplayService(this);
-            leaderboardDisplayService.start();
+            leaderboardDisplayService.reload();
         } else {
             leaderboardDisplayService.reload();
         }
@@ -204,7 +201,6 @@ public final class AziRouge extends JavaPlugin {
             }
             Bukkit.getScheduler().runTask(this, leaderboardDisplayService::refreshNow);
         });
-        gameMenuService.refresh();
         sessionScoreboardService.start();
         sessionGameplayService.start();
         bossBattleService.start();
@@ -246,14 +242,6 @@ public final class AziRouge extends JavaPlugin {
         return economyService;
     }
 
-    public ShopService shopService() {
-        return shopService;
-    }
-
-    public MiningService miningService() {
-        return miningService;
-    }
-
     public TemplateAuthoringService templateAuthoringService() {
         return templateAuthoringService;
     }
@@ -292,7 +280,6 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(bossBattleService, this);
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
-        getServer().getPluginManager().registerEvents(confirmationService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);
         getServer().getPluginManager().registerEvents(miningService, this);
         getServer().getPluginManager().registerEvents(new GlobalJoinQuitListener(this), this);

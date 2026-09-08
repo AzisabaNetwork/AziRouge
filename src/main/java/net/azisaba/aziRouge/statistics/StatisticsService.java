@@ -55,10 +55,6 @@ public final class StatisticsService {
         );
     }
 
-    public CompletableFuture<Void> start() {
-        return reload();
-    }
-
     public CompletableFuture<Void> reload() {
         DatabaseSettings settings = plugin.settings().database();
         return submitLifecycle(() -> replaceDatabase(settings));
@@ -103,10 +99,6 @@ public final class StatisticsService {
         }, null);
     }
 
-    public CompletableFuture<Void> recordDeath(UUID runId, Player player) {
-        return recordDeath(runId, player, UUID.randomUUID());
-    }
-
     public CompletableFuture<Void> recordDeath(UUID runId, Player player, UUID deathEventId) {
         return recordCounter(runId, player, deathEventId, StatisticsDatabase.CounterEvent.DEATH, 1L, "record death");
     }
@@ -131,10 +123,6 @@ public final class StatisticsService {
         }, null);
     }
 
-    public CompletableFuture<Void> recordMobKill(UUID runId, Player player) {
-        return recordMobKill(runId, player, UUID.randomUUID());
-    }
-
     public CompletableFuture<Void> recordMobKill(UUID runId, Player player, UUID mobId) {
         return recordCounter(runId, player, mobId, StatisticsDatabase.CounterEvent.MOB_KILL, 1L, "record mob kill");
     }
@@ -143,16 +131,8 @@ public final class StatisticsService {
         return recordCounter(runId, player, chestId, StatisticsDatabase.CounterEvent.CHEST_OPENED, 1L, "record chest opened");
     }
 
-    public CompletableFuture<Void> recordTreasure(UUID runId, Player player) {
-        return recordTreasure(runId, player, UUID.randomUUID());
-    }
-
     public CompletableFuture<Void> recordTreasure(UUID runId, Player player, UUID treasureId) {
         return recordCounter(runId, player, treasureId, StatisticsDatabase.CounterEvent.TREASURE, 1L, "record treasure");
-    }
-
-    public CompletableFuture<Void> recordSale(UUID runId, Player player, long amount) {
-        return recordSale(runId, player, amount, UUID.randomUUID());
     }
 
     public CompletableFuture<Void> recordSale(UUID runId, Player player, long amount, UUID saleId) {

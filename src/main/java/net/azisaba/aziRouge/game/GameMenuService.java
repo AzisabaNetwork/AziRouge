@@ -36,31 +36,10 @@ public final class GameMenuService implements Listener {
     private static final String TAG_ROUND = "round";
     private static final String TAG_MENU = "menu";
 
-    private static final String SESSION = "Session";
-    private static final String ROUND = "Round";
-    private static final String CREATE = "Create";
-    private static final String JOIN = "Join";
-    private static final String LIST = "List";
-    private static final String LEAVE = "Leave";
-    private static final String START = "Start";
-    private static final String END = "End";
-    private static final String MENU = "Menu";
-    private static final String CLOSE = "Close";
-    private static final String DEPTH = "Depth";
-    private static final String SESSION_ID = "Session ID";
-
     private final AziRouge plugin;
 
     public GameMenuService(AziRouge plugin) {
         this.plugin = plugin;
-    }
-
-    public void refresh() {
-        // Dialog trigger entities are placed in-game and detected by scoreboard tag.
-    }
-
-    public void shutdown() {
-        // This service does not own any entities.
     }
 
     public void openMenu(Player player) {
@@ -144,8 +123,8 @@ public final class GameMenuService implements Listener {
     private void showLeaveSessionConfirmation(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         String description = session == null
-                ? label("menu.leave-no-session", "You are not currently in a session.")
-                : plugin.messages().format("menu.leave-session-description", "Leave session {session}? You can join another session after leaving.", "session", session.sessionId());
+                ? label("menu.leave-no-session", "セッションに参加していません。")
+                : plugin.messages().format("menu.leave-session-description", "セッション {session} から退出します。よろしいですか？", "session", session.sessionId());
         showConfirmationDialog(
                 player,
                 message("menu.leave-session", "Leave Session"),
@@ -310,8 +289,8 @@ public final class GameMenuService implements Listener {
 
     private ActionButton closeAction() {
         return ActionButton.create(
-                message("menu.close", CLOSE),
-                message("menu.tooltip.close", "Do nothing."),
+                message("menu.close", "閉じる"),
+                message("menu.tooltip.close", "メニューを閉じます。"),
                 80,
                 null
         );
@@ -321,7 +300,7 @@ public final class GameMenuService implements Listener {
         return DialogInput.text(
                 "sessionId",
                 200,
-                text(SESSION_ID),
+                message("menu.session-id", "セッションID"),
                 true,
                 "",
                 6,
@@ -334,7 +313,7 @@ public final class GameMenuService implements Listener {
         return DialogInput.numberRange(
                 "depth",
                 200,
-                text(DEPTH),
+                message("menu.depth", "深さ"),
                 "%s: %s",
                 1.0F,
                 settings.maxDepth(),
@@ -345,27 +324,31 @@ public final class GameMenuService implements Listener {
 
     private String menuDescription(GameSession session) {
         if (session == null) {
-            return label("menu.description.no-session", "Create a session, join a session, or list active sessions.");
+            return label("menu.description.no-session", "セッションを作成するか、既存のセッションに参加してください。");
         }
         return plugin.messages().format("menu.description.session",
-                "Current session: {session}\nState: {state}\nShared balance: {balance}\nRound: {round}",
+                "現在のセッション: {session}\n状態: {state}\n共有資金: {balance}\nラウンド: {round}",
                 "session", session.sessionId(),
-                "state", session.state(),
+                "state", stateName(session),
                 "balance", session.sharedBalance(),
                 "round", session.currentRound());
     }
 
     private String roundDescription(GameSession session) {
         if (session == null) {
-            return label("menu.description.round-no-session", "You are not in a session. Join or create a session before starting a round.");
+            return label("menu.description.round-no-session", "セッションに参加していません。ラウンドの前に作成または参加してください。");
         }
         return plugin.messages().format("menu.description.round",
-                "Session: {session}\nState: {state}\nRound: {round}\nDepth: {depth}\nShared balance: {balance}",
+                "セッション: {session}\n状態: {state}\nラウンド: {round}\n深さ: {depth}\n共有資金: {balance}",
                 "session", session.sessionId(),
-                "state", session.state(),
+                "state", stateName(session),
                 "round", session.currentRound(),
                 "depth", session.getMaxDepth(),
                 "balance", session.sharedBalance());
+    }
+
+    private String stateName(GameSession session) {
+        return plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name());
     }
 
     private Component text(String value) {

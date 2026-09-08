@@ -3,7 +3,6 @@ package net.azisaba.aziRouge.dungeon;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.game.PlayerInventorySupport;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
@@ -68,7 +67,7 @@ public final class TreasurePickupListener implements Listener {
         }
 
         if (!PlayerInventorySupport.canFitHotbar(event.getPlayer().getInventory(), reward)) {
-            event.getPlayer().sendMessage(plugin.messages().text("treasure.hotbar-full", "&cYour hotbar is full. Clear a hotbar slot before picking up treasure."));
+            event.getPlayer().sendMessage(plugin.messages().prefixed("treasure.hotbar-full", "&cホットバーがいっぱいです。空きを作ってから拾ってください。"));
             return;
         }
         PlayerInventorySupport.addToHotbar(event.getPlayer().getInventory(), reward.clone());

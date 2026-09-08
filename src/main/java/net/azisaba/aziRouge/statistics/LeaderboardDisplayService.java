@@ -35,10 +35,6 @@ public final class LeaderboardDisplayService {
         this.periodKey = new NamespacedKey(plugin, PERIOD_KEY);
     }
 
-    public void start() {
-        restart();
-    }
-
     public void reload() {
         restart();
     }

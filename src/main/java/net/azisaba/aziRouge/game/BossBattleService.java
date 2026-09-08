@@ -4,7 +4,6 @@ import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.BossBattleSettings;
 import net.azisaba.aziRouge.math.BlockBox;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -31,8 +30,6 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class BossBattleService implements Listener {
-    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
-
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<String, ActiveBossBattle> activeBattles = new HashMap<>();
@@ -156,19 +153,19 @@ public final class BossBattleService implements Listener {
 
     private void challengeBoss(Player player, GameSession session, BossBattleSettings battle) {
         if (!session.isMember(player.getUniqueId())) {
-            player.sendMessage(PREFIX + m("boss.error.not-member", "&cYou are not a member of this session."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.not-member", "&cYou are not a member of this session."));
             return;
         }
         if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            player.sendMessage(PREFIX + m("boss.error.between-rounds-only", "&cBoss battles can only be challenged between rounds."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.between-rounds-only", "&cBoss battles can only be challenged between rounds."));
             return;
         }
         if (session.currentRound() < battle.minRound()) {
-            player.sendMessage(PREFIX + m("boss.error.min-round", "&cThis boss requires round {min} or higher. Current round: {round}", "min", battle.minRound(), "round", session.currentRound()));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.min-round", "&cThis boss requires round {min} or higher. Current round: {round}", "min", battle.minRound(), "round", session.currentRound()));
             return;
         }
         if (session.isBossBattleActive()) {
-            player.sendMessage(PREFIX + m("boss.error.already-active", "&cA boss battle is already active."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.already-active", "&cA boss battle is already active."));
             return;
         }
 
@@ -176,7 +173,7 @@ public final class BossBattleService implements Listener {
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            player.sendMessage(PREFIX + m("boss.error.no-online-members", "&cThere are no online session members."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.no-online-members", "&cThere are no online session members."));
             return;
         }
 
@@ -267,7 +264,7 @@ public final class BossBattleService implements Listener {
                 Player deadPlayer = Bukkit.getPlayer(deadPlayerId);
                 active.reviveProgress().remove(deadPlayerId);
                 if (deadPlayer != null && sessionManager.reviveBossPlayer(session, deadPlayer, deathLocation)) {
-                    rescuer.sendMessage(PREFIX + m("boss.revived", "&aRevived {player}.", "player", deadPlayer.getName()));
+                    rescuer.sendMessage(plugin.messages().prefix() + m("boss.revived", "&aRevived {player}.", "player", deadPlayer.getName()));
                 }
             }
         }
@@ -312,7 +309,7 @@ public final class BossBattleService implements Listener {
         for (UUID playerId : session.onlineMembers()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                player.sendMessage(PREFIX + message);
+                player.sendMessage(plugin.messages().prefix() + message);
             }
         }
     }

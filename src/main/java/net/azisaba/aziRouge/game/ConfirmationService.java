@@ -11,14 +11,13 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Listener;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class ConfirmationService implements Listener {
+public final class ConfirmationService {
     private static final long TIMEOUT_MILLIS = 15_000L;
 
     private final AziRouge plugin;

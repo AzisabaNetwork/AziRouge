@@ -194,10 +194,6 @@ public final class GameSession {
         return true;
     }
 
-    public Map<UUID, Location> savedLocations() {
-        return savedReturnLocations();
-    }
-
     public Map<UUID, Location> savedReturnLocations() {
         return Collections.unmodifiableMap(savedReturnLocations);
     }
@@ -208,10 +204,6 @@ public final class GameSession {
 
     public BukkitTask idleTimeoutTask() {
         return idleTimeoutTask;
-    }
-
-    public Instant startedAt() {
-        return createdAt;
     }
 
     public Instant createdAt() {

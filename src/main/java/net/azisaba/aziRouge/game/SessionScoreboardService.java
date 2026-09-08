@@ -73,7 +73,11 @@ public final class SessionScoreboardService {
         }
 
         Scoreboard scoreboard = manager.getNewScoreboard();
-        Objective objective = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy", ChatColor.GOLD + "AziRouge");
+        Objective objective = scoreboard.registerNewObjective(
+                OBJECTIVE_NAME,
+                "dummy",
+                plugin.messages().text("scoreboard.title", "AziRouge")
+        );
         objective.setDisplaySlot(DisplaySlot.SIDEBAR);
 
         registerHiddenNameTagTeam(scoreboard, session);
@@ -83,7 +87,7 @@ public final class SessionScoreboardService {
                 : session.currentRound() + 1;
         long maintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
         setLine(objective, ChatColor.DARK_GRAY.toString(), 8);
-        setLine(objective, label("state", "State") + session.state().getDisplayName(), 7);
+        setLine(objective, label("state", "状態") + stateName(session), 7);
         setLine(objective, label("round", "Round") + session.currentRound(), 6);
         setLine(objective, label("money", "Money") + session.sharedBalance(), 5);
         setLine(objective, label("maintenance", "Maintenance") + maintenance, 4);
@@ -122,6 +126,10 @@ public final class SessionScoreboardService {
 
     private void setLine(Objective objective, String text, int score) {
         objective.getScore(text).setScore(score);
+    }
+
+    private String stateName(GameSession session) {
+        return plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name());
     }
 
     private String label(String key, String fallback) {

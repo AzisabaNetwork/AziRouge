@@ -30,11 +30,7 @@ public final class MobAiManager implements Listener {
 
     public MobAiManager(AziRouge plugin) {
         this.plugin = plugin;
-        this.handlers = Map.of(
-                MobProfile.ZOMBIE_BRUTE, new ZombieBruteAiHandler(),
-                MobProfile.SKELETON_ARCHER, new SkeletonArcherAiHandler(),
-                MobProfile.COPPER_GOLEM, new CopperGolemAiHandler()
-        );
+        this.handlers = Map.of(MobProfile.COPPER_GOLEM, new CopperGolemAiHandler());
         this.tickTask = new BukkitRunnable() {
             @Override
             public void run() {

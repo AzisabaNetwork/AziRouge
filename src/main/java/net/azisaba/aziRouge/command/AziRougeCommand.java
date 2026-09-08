@@ -16,7 +16,6 @@ import net.azisaba.aziRouge.schematic.SchematicPlacementException;
 import net.azisaba.aziRouge.template.TemplateLoadException;
 import net.azisaba.aziRouge.statistics.PlayerStatistics;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -36,9 +35,7 @@ import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements TabExecutor {
-    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
     private static final String CONFIRM_FLAG = "--confirm";
-    // Hardcoded for now; add more presets here as additional template sets are authored.
     private static final Map<String, TemplatePreset> TEMPLATE_PRESETS = Map.of(
             "test", new TemplatePreset(List.of("templates/test.yml"), "root")
     );
@@ -56,7 +53,7 @@ public final class AziRougeCommand implements TabExecutor {
                 plugin.gameMenuService().openMenu(player);
                 return true;
             }
-            info(sender, "Usage: /" + label + " <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>");
+            tell(sender, "commands.usage.root", "&e使い方: /{label} <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>", "label", label);
             return true;
         }
 
@@ -74,7 +71,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "debug" -> handleDebug(sender, Arrays.copyOfRange(args, 1, args.length));
             case "author" -> handleAuthor(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                error(sender, "Unknown subcommand: " + args[0]);
+                tell(sender, "commands.unknown.subcommand", "&c不明なサブコマンドです: {subcommand}", "subcommand", args[0]);
                 yield true;
             }
         };
@@ -177,7 +174,7 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleMenu(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         plugin.gameMenuService().openMenu(player);
@@ -187,20 +184,20 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleStart(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.start")) {
-            error(sender, "You do not have permission to start an AziRouge session.");
+            tell(sender, "commands.permission.start", "&cAziRougeセッションを開始する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length > 1) {
-            info(sender, "Usage: /azirouge start [template-preset]");
-            info(sender, "Available presets: " + String.join(", ", templatePresetNames()));
+            tell(sender, "commands.usage.start", "&e使い方: /azirouge start [template-preset]");
+            tell(sender, "commands.presets", "&e利用可能なプリセット: {presets}", "presets", String.join(", ", templatePresetNames()));
             return true;
         }
         if (plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).isPresent()) {
-            error(sender, "You are already associated with an active session. Use /azirouge end first.");
+            tell(sender, "commands.already-in-session", "&cすでにセッションに参加しています。先に /azirouge end を実行してください。");
             return true;
         }
         TemplateSelection templateSelection;
@@ -212,23 +209,24 @@ public final class AziRougeCommand implements TabExecutor {
                     null
             );
         } catch (IllegalArgumentException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
             return true;
         }
-        info(sender, "Creating session...");
+        tell(sender, "session.creating", "&eセッションを作成しています...");
         plugin.gameSessionManager().startSessionAsync(
                 player,
                 templateSelection.templatePatterns(),
                 templateSelection.startPieceId()
         ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ex != null) {
-                reportSessionCreationFailure(sender, "Session start failed", ex);
+                reportSessionCreationFailure(sender, "commands.start-failed", "&cセッション開始に失敗しました: {reason}", ex);
                 return;
             }
-            success(sender, "Started a new session in world " + session.world().getName()
-                    + " id=" + session.sessionId()
-                    + " money=" + session.sharedBalance()
-                    + " using template preset " + templateSelection.presetName() + ".");
+            tell(sender, "session.started-detail", "&aセッションを開始しました。ワールド {world} / ID {session} / 資金 {money} / プリセット {preset}",
+                    "world", session.world().getName(),
+                    "session", session.sessionId(),
+                    "money", session.sharedBalance(),
+                    "preset", templateSelection.presetName());
             sendCopyableSessionId(sender, session);
         }));
         return true;
@@ -236,7 +234,7 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleSession(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /azirouge session <create|join|leave|list|forceend>");
+            tell(sender, "commands.usage.session", "&e使い方: /azirouge session <create|join|leave|list|forceend>");
             return true;
         }
 
@@ -247,7 +245,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "list" -> handleSessionList(sender);
             case "forceend" -> handleSessionForceEnd(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                error(sender, "Unknown session subcommand: " + args[0]);
+                tell(sender, "commands.unknown.session", "&c不明なセッションサブコマンドです: {subcommand}", "subcommand", args[0]);
                 yield true;
             }
         };
@@ -256,35 +254,36 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleSessionCreate(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
-            error(sender, "You do not have permission to manage AziRouge sessions.");
+            tell(sender, "commands.permission.session", "&cAziRougeセッションを操作する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length > 1) {
-            info(sender, "Usage: /azirouge session create [maxPlayers]");
+            tell(sender, "commands.usage.session-create", "&e使い方: /azirouge session create [maxPlayers]");
             return true;
         }
 
         int maxPlayers = args.length == 0
                 ? plugin.settings().sessions().defaultMaxPlayers()
                 : parseInt(args[0], plugin.settings().sessions().defaultMaxPlayers());
-        info(sender, "Creating session...");
+        tell(sender, "session.creating", "&eセッションを作成しています...");
         plugin.gameSessionManager().startSessionAsync(player,
                 plugin.settings().generation().templatePatterns(),
                 plugin.settings().generation().startPieceId(),
                 maxPlayers
         ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ex != null) {
-                reportSessionCreationFailure(sender, "Session creation failed", ex);
+                reportSessionCreationFailure(sender, "commands.create-failed", "&cセッション作成に失敗しました: {reason}", ex);
                 return;
             }
-            success(sender, "Created session " + session.sessionId()
-                    + " players=1/" + session.maxPlayers()
-                    + " money=" + session.sharedBalance()
-                    + " world=" + session.world().getName() + ".");
+            tell(sender, "session.created-detail", "&aセッション {session} を作成しました。人数 1/{max} / 資金 {money} / ワールド {world}",
+                    "session", session.sessionId(),
+                    "max", session.maxPlayers(),
+                    "money", session.sharedBalance(),
+                    "world", session.world().getName());
             sendCopyableSessionId(sender, session);
         }));
         return true;
@@ -293,23 +292,25 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleSessionJoin(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
-            error(sender, "You do not have permission to manage AziRouge sessions.");
+            tell(sender, "commands.permission.session", "&cAziRougeセッションを操作する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length != 1) {
-            info(sender, "Usage: /azirouge session join <sessionId>");
+            tell(sender, "commands.usage.session-join", "&e使い方: /azirouge session join <sessionId>");
             return true;
         }
         try {
             GameSession session = plugin.gameSessionManager().joinSession(player, args[0]);
-            success(sender, "Joined session " + session.sessionId()
-                    + " players=" + session.members().size() + "/" + session.maxPlayers() + ".");
+            tell(sender, "session.joined-detail", "&aセッション {session} に参加しました。人数 {players}/{max}",
+                    "session", session.sessionId(),
+                    "players", session.members().size(),
+                    "max", session.maxPlayers());
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
         }
         return true;
     }
@@ -317,15 +318,15 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleSessionLeave(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
-            error(sender, "You do not have permission to manage AziRouge sessions.");
+            tell(sender, "commands.permission.session", "&cAziRougeセッションを操作する権限がありません。");
             return true;
         }
         if (args.length != 0) {
-            info(sender, "Usage: /azirouge session leave");
+            tell(sender, "commands.usage.session-leave", "&e使い方: /azirouge session leave");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         return handleSessionLeave(sender, player);
@@ -334,41 +335,45 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleSessionLeave(CommandSender sender, Player player) {
         try {
             GameSession session = plugin.gameSessionManager().leaveSession(player);
-            success(sender, "Left session " + session.sessionId() + ".");
+            tell(sender, "session.left", "&eセッション {session} から退出しました。", "session", session.sessionId());
         } catch (IllegalStateException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
         }
         return true;
     }
 
     private boolean handleSessionList(CommandSender sender) {
         if (!sender.hasPermission("azirouge.session.list")) {
-            error(sender, "You do not have permission to manage AziRouge sessions.");
+            tell(sender, "commands.permission.session-list", "&cAziRougeセッション一覧を見る権限がありません。");
             return true;
         }
         List<GameSession> sessions = plugin.gameSessionManager().sessions().stream()
                 .sorted((left, right) -> left.sessionId().compareTo(right.sessionId()))
                 .toList();
         if (sessions.isEmpty()) {
-            info(sender, "No active sessions.");
+            tell(sender, "commands.no-sessions", "&e稼働中のセッションはありません。");
             return true;
         }
 
-        info(sender, "Active sessions:");
+        tell(sender, "commands.active-sessions", "&e稼働中のセッション:");
         for (GameSession session : sessions) {
-            info(sender, session.sessionId()
-                    + " state=" + session.state()
-                    + " roundState=" + session.roundState()
-                    + " money=" + session.sharedBalance()
-                    + " players=" + session.onlineMembers().size() + "/" + session.members().size() + "/" + session.maxPlayers()
-                    + " round=" + session.currentRound()
-                    + " alive=" + session.alivePlayers().size()
-                    + " dead=" + session.deadPlayers().size()
-                    + " pending=" + session.pendingPlayersNextRound().size()
-                    + " preset=" + session.selectedPreset()
-                    + " maxDepth=" + session.getMaxDepth()
-                    + " world=" + session.world().getName()
-                    + " owner=" + session.owner());
+            tell(sender, "commands.session-line",
+                    "&e{session} 状態={state} ラウンド状態={roundState} 資金={money} 人数={online}/{members}/{max} ラウンド={round} 生存={alive} 脱落={dead} 待機={pending} プリセット={preset} 深さ={maxDepth} ワールド={world} 作成者={owner}",
+                    "session", session.sessionId(),
+                    "state", plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name()),
+                    "roundState", session.roundState(),
+                    "money", session.sharedBalance(),
+                    "online", session.onlineMembers().size(),
+                    "members", session.members().size(),
+                    "max", session.maxPlayers(),
+                    "round", session.currentRound(),
+                    "alive", session.alivePlayers().size(),
+                    "dead", session.deadPlayers().size(),
+                    "pending", session.pendingPlayersNextRound().size(),
+                    "preset", session.selectedPreset(),
+                    "maxDepth", session.getMaxDepth(),
+                    "world", session.world().getName(),
+                    "owner", session.owner());
         }
         return true;
     }
@@ -376,37 +381,37 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleSessionForceEnd(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session.forceend") && !sender.hasPermission("azirouge.end")) {
-            error(sender, "You do not have permission to force-end AziRouge sessions.");
+            tell(sender, "commands.permission.session-forceend", "&cAziRougeセッションを強制終了する権限がありません。");
             return true;
         }
         if (args.length != 1) {
-            info(sender, "Usage: /azirouge session forceend <sessionId>");
+            tell(sender, "commands.usage.session-forceend", "&e使い方: /azirouge session forceend <sessionId>");
             return true;
         }
 
         GameSession session = plugin.gameSessionManager().sessionById(args[0]).orElse(null);
         if (session == null) {
-            error(sender, "Session not found: " + args[0]);
+            tell(sender, "session.error.not-found", "&cセッションが見つかりません: {session}", "session", args[0]);
             return true;
         }
         if (plugin.gameSessionManager().endSession(session)) {
-            success(sender, "Force-ended session " + session.sessionId() + ".");
+            tell(sender, "commands.force-ended", "&aセッション {session} を強制終了しました。", "session", session.sessionId());
         } else {
-            error(sender, "Failed to fully end session " + session.sessionId() + ". Check server logs.");
+            tell(sender, "commands.force-end-failed", "&cセッション {session} を完全に終了できませんでした。サーバーログを確認してください。", "session", session.sessionId());
         }
         return true;
     }
 
     private boolean handleRound(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /azirouge round <start|end>");
+            tell(sender, "commands.usage.round", "&e使い方: /azirouge round <start|end>");
             return true;
         }
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "start" -> handleRoundStart(sender, Arrays.copyOfRange(args, 1, args.length));
             case "end" -> handleRoundEnd(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                error(sender, "Unknown round subcommand: " + args[0]);
+                tell(sender, "commands.unknown.round", "&c不明なラウンドサブコマンドです: {subcommand}", "subcommand", args[0]);
                 yield true;
             }
         };
@@ -415,27 +420,27 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleRoundStart(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
-            error(sender, "You do not have permission to manage AziRouge rounds.");
+            tell(sender, "commands.permission.round", "&cAziRougeラウンドを操作する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length > 2) {
-            info(sender, "Usage: /azirouge round start [preset] [maxDepth]");
+            tell(sender, "commands.usage.round-start", "&e使い方: /azirouge round start [preset] [maxDepth]");
             return true;
         }
 
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session == null) {
-            error(sender, "You are not in an active session.");
+            tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
             return true;
         }
 
         Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
         if (maxDepth == null) {
-            error(sender, "maxDepth must be a positive integer.");
+            tell(sender, "round.error.max-depth", "&c深さは1以上の整数にしてください。");
             return true;
         }
         String presetName = args.length >= 1 && !args[0].isBlank()
@@ -455,48 +460,56 @@ public final class AziRougeCommand implements TabExecutor {
                     templateSelection.presetName(),
                     maxDepth
             );
-            success(sender, "Started round " + session.currentRound()
-                    + " session=" + session.sessionId()
-                    + " preset=" + templateSelection.presetName()
-                    + " maxDepth=" + maxDepth
-                    + " maintenanceDueAtEnd=" + plugin.economyService().maintenanceCostForRound(session.currentRound())
-                    + " balance=" + session.sharedBalance()
-                    + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
-                    + " origin=" + format(session.currentDungeonOrigin()));
+            tell(sender, "round.started-detail",
+                    "&aラウンド {round} を開始しました。セッション {session} / プリセット {preset} / 深さ {depth} / 終了時維持費 {maintenance} / 残高 {balance} / ピース {pieces}/{target} / 原点 {origin}",
+                    "round", session.currentRound(),
+                    "session", session.sessionId(),
+                    "preset", templateSelection.presetName(),
+                    "depth", maxDepth,
+                    "maintenance", plugin.economyService().maintenanceCostForRound(session.currentRound()),
+                    "balance", session.sharedBalance(),
+                    "pieces", result.placedPieceCount(),
+                    "target", result.targetPieceCount(),
+                    "origin", format(session.currentDungeonOrigin()));
         } catch (TemplateLoadException | SchematicPlacementException ex) {
-            error(sender, "Round start failed: " + ex.getMessage());
+            tell(sender, "round.error.start-failed", "&cラウンド開始に失敗しました: {reason}", "reason", ex.getMessage());
             plugin.getLogger().warning("Round start failed: " + ex.getMessage());
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
         }
         return true;
-    }
-
-    private boolean handleRoundEnd(CommandSender sender) {
-        return handleRoundEnd(sender, new String[0]);
     }
 
     private boolean handleRoundEnd(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length != 0) {
-            info(sender, "Usage: /azirouge round end");
+            tell(sender, "commands.usage.round-end", "&e使い方: /azirouge round end");
             return true;
         }
         try {
             var sellResult = plugin.gameSessionManager().endRound(player);
             GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-            success(sender, "Ended round" + (session == null ? "." : " " + session.currentRound()
-                    + ". soldItems=" + sellResult.itemCount()
-                    + " sold=" + sellResult.totalAmount()
-                    + " maintenance=" + sellResult.maintenanceCost()
-                    + " maintenancePaid=" + sellResult.maintenancePaid()
-                    + " balance=" + session.sharedBalance() + "."));
+            if (session == null) {
+                tell(sender, "round.ended-summary", "&aラウンド {round} 終了。売却数: {items} / 獲得: {amount}",
+                        "round", "",
+                        "items", sellResult.itemCount(),
+                        "amount", sellResult.totalAmount());
+            } else {
+                tell(sender, "round.ended-detail",
+                        "&aラウンド {round} を終了しました。売却 {items}個 / 獲得 {amount} / 維持費 {maintenance} / 支払い {paid} / 残高 {balance}",
+                        "round", session.currentRound(),
+                        "items", sellResult.itemCount(),
+                        "amount", sellResult.totalAmount(),
+                        "maintenance", sellResult.maintenanceCost(),
+                        "paid", sellResult.maintenancePaid(),
+                        "balance", session.sharedBalance());
+            }
         } catch (IllegalStateException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
         }
         return true;
     }
@@ -504,64 +517,69 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleMoney(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.money")) {
-            error(sender, "You do not have permission to manage AziRouge money.");
+            tell(sender, "commands.permission.money", "&cAziRougeの資金を操作する権限がありません。");
             return true;
         }
         if (args.length == 0) {
             if (!(sender instanceof Player player)) {
-                info(sender, "Usage: /azirouge money <set|add> <sessionId> <amount>");
+                tell(sender, "commands.usage.money-console", "&e使い方: /azirouge money <set|add> <sessionId> <amount>");
                 return true;
             }
             GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
             if (session == null) {
-                error(sender, "You are not in an active session.");
+                tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
                 return true;
             }
             int maintenanceRound = session.state() == net.azisaba.aziRouge.game.SessionState.IN_ROUND
                     ? session.currentRound()
                     : session.currentRound() + 1;
             long nextMaintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
-            info(sender, "Session " + session.sessionId()
-                    + " money=" + session.sharedBalance()
-                    + " maintenanceRound=" + maintenanceRound
-                    + " maintenance=" + nextMaintenance + ".");
+            tell(sender, "commands.money-status", "&eセッション {session} 資金={money} 維持費ラウンド={round} 維持費={maintenance}",
+                    "session", session.sessionId(),
+                    "money", session.sharedBalance(),
+                    "round", maintenanceRound,
+                    "maintenance", nextMaintenance);
             return true;
         }
 
         if (args.length != 3 || (!"set".equalsIgnoreCase(args[0]) && !"add".equalsIgnoreCase(args[0]))) {
-            info(sender, "Usage: /azirouge money [set|add] <sessionId> <amount>");
+            tell(sender, "commands.usage.money", "&e使い方: /azirouge money [set|add] <sessionId> <amount>");
             return true;
         }
 
         GameSession session = plugin.gameSessionManager().sessionById(args[1]).orElse(null);
         if (session == null) {
-            error(sender, "Session not found: " + args[1]);
+            tell(sender, "session.error.not-found", "&cセッションが見つかりません: {session}", "session", args[1]);
             return true;
         }
         Long amount = parseNonNegativeLong(args[2]);
         if (amount == null) {
-            error(sender, "Amount must be a non-negative integer.");
+            tell(sender, "commands.amount-invalid", "&c金額は0以上の整数にしてください。");
             return true;
         }
 
         if ("set".equalsIgnoreCase(args[0])) {
             session.setSharedBalance(amount);
-            success(sender, "Set session " + session.sessionId() + " money to " + session.sharedBalance() + ".");
+            tell(sender, "commands.money-set", "&aセッション {session} の資金を {money} に設定しました。",
+                    "session", session.sessionId(),
+                    "money", session.sharedBalance());
         } else {
             session.addSharedBalance(amount);
-            success(sender, "Added " + amount + " to session " + session.sessionId()
-                    + ". money=" + session.sharedBalance() + ".");
+            tell(sender, "commands.money-add", "&aセッション {session} に {amount} を加算しました。資金={money}",
+                    "session", session.sessionId(),
+                    "amount", amount,
+                    "money", session.sharedBalance());
         }
         return true;
     }
 
     private boolean handleDungeon(CommandSender sender, String[] args) {
         if (args.length == 0) {
-            info(sender, "Usage: /azirouge dungeon select <preset> [maxDepth]");
+            tell(sender, "commands.usage.dungeon", "&e使い方: /azirouge dungeon select <preset> [maxDepth]");
             return true;
         }
         if (!"select".equalsIgnoreCase(args[0])) {
-            error(sender, "Unknown dungeon subcommand: " + args[0]);
+            tell(sender, "commands.unknown.dungeon", "&c不明なダンジョンサブコマンドです: {subcommand}", "subcommand", args[0]);
             return true;
         }
         return handleDungeonSelect(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -569,25 +587,25 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleStats(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.stats")) {
-            error(sender, "You do not have permission to view AziRouge statistics.");
+            tell(sender, "commands.permission.stats", "&cAziRougeの統計を見る権限がありません。");
             return true;
         }
         if (args.length > 1) {
-            info(sender, "Usage: /azirouge stats [onlinePlayer]");
+            tell(sender, "commands.usage.stats", "&e使い方: /azirouge stats [onlinePlayer]");
             return true;
         }
         String targetName;
         java.util.concurrent.CompletableFuture<java.util.Optional<PlayerStatistics>> statisticsFuture;
         if (args.length == 0) {
             if (!(sender instanceof Player player)) {
-                info(sender, "Usage: /azirouge stats <player>");
+                tell(sender, "commands.usage.stats-console", "&e使い方: /azirouge stats <player>");
                 return true;
             }
             targetName = player.getName();
             statisticsFuture = plugin.statisticsService().playerStatistics(player.getUniqueId());
         } else {
             if (!sender.hasPermission("azirouge.stats.others")) {
-                error(sender, "You do not have permission to view another player's statistics.");
+                tell(sender, "commands.permission.stats-others", "&c他プレイヤーの統計を見る権限がありません。");
                 return true;
             }
             Player onlineTarget = Bukkit.getPlayerExact(args[0]);
@@ -597,18 +615,18 @@ public final class AziRougeCommand implements TabExecutor {
                     : plugin.statisticsService().playerStatistics(onlineTarget.getUniqueId());
         }
 
-        info(sender, "Loading statistics for " + targetName + "...");
+        tell(sender, "commands.stats-loading", "&e{player} の統計を読み込んでいます...", "player", targetName);
         statisticsFuture.whenComplete((statistics, throwable) -> {
             if (!plugin.isEnabled()) {
                 return;
             }
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (throwable != null || !plugin.statisticsService().isAvailable()) {
-                    error(sender, "The statistics database is currently unavailable.");
+                    tell(sender, "commands.stats-unavailable", "&c統計データベースを利用できません。");
                     return;
                 }
                 if (statistics.isEmpty()) {
-                    info(sender, "No AziRouge statistics have been recorded for " + targetName + ".");
+                    tell(sender, "commands.stats-none", "&e{player} のAziRouge統計はまだありません。", "player", targetName);
                     return;
                 }
                 sendStatistics(sender, statistics.get());
@@ -618,21 +636,26 @@ public final class AziRougeCommand implements TabExecutor {
     }
 
     private void sendStatistics(CommandSender sender, PlayerStatistics statistics) {
-        info(sender, "Statistics: " + statistics.playerName());
-        info(sender, "Max round=" + statistics.maxRound()
-                + " / total rounds=" + statistics.totalRoundsReached()
-                + " / sessions=" + statistics.sessionsJoined());
-        info(sender, "Deaths=" + statistics.deaths()
-                + " / game overs=" + statistics.gameOvers()
-                + " / max depth=" + statistics.maxDepth());
-        info(sender, "Play time=" + formatDuration(statistics.totalPlaySeconds())
-                + " / longest=" + formatDuration(statistics.longestPlaySeconds()));
-        info(sender, "Mob kills=" + statistics.mobKills()
-                + " / chests=" + statistics.chestsOpened()
-                + " / treasures=" + statistics.treasuresCollected());
-        info(sender, "Total sales=" + statistics.totalSales()
-                + " / early leaves=" + statistics.earlyLeaves()
-                + " / disconnects=" + statistics.disconnects());
+        tell(sender, "commands.stats-header", "&e統計: {player}", "player", statistics.playerName());
+        tell(sender, "commands.stats-rounds", "&e最高ラウンド={maxRound} / 到達合計={totalRounds} / セッション={sessions}",
+                "maxRound", statistics.maxRound(),
+                "totalRounds", statistics.totalRoundsReached(),
+                "sessions", statistics.sessionsJoined());
+        tell(sender, "commands.stats-deaths", "&e死亡={deaths} / ゲームオーバー={gameOvers} / 最大深さ={maxDepth}",
+                "deaths", statistics.deaths(),
+                "gameOvers", statistics.gameOvers(),
+                "maxDepth", statistics.maxDepth());
+        tell(sender, "commands.stats-playtime", "&eプレイ時間={playTime} / 最長={longest}",
+                "playTime", formatDuration(statistics.totalPlaySeconds()),
+                "longest", formatDuration(statistics.longestPlaySeconds()));
+        tell(sender, "commands.stats-kills", "&eMob撃破={kills} / 宝箱={chests} / 宝={treasures}",
+                "kills", statistics.mobKills(),
+                "chests", statistics.chestsOpened(),
+                "treasures", statistics.treasuresCollected());
+        tell(sender, "commands.stats-sales", "&e売却合計={sales} / 途中退出={earlyLeaves} / 切断={disconnects}",
+                "sales", statistics.totalSales(),
+                "earlyLeaves", statistics.earlyLeaves(),
+                "disconnects", statistics.disconnects());
     }
 
     private String formatDuration(long totalSeconds) {
@@ -645,26 +668,26 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleDungeonSelect(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.session")) {
-            error(sender, "You do not have permission to select AziRouge dungeons.");
+            tell(sender, "commands.permission.dungeon", "&cAziRougeのダンジョンを選ぶ権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length < 1 || args.length > 2) {
-            info(sender, "Usage: /azirouge dungeon select <preset> [maxDepth]");
+            tell(sender, "commands.usage.dungeon", "&e使い方: /azirouge dungeon select <preset> [maxDepth]");
             return true;
         }
 
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session == null) {
-            error(sender, "You are not in an active session.");
+            tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
             return true;
         }
         Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
         if (maxDepth == null) {
-            error(sender, "maxDepth must be a positive integer.");
+            tell(sender, "round.error.max-depth", "&c深さは1以上の整数にしてください。");
             return true;
         }
         try {
@@ -675,11 +698,12 @@ public final class AziRougeCommand implements TabExecutor {
                     null
             );
             plugin.gameSessionManager().selectDungeon(session, templateSelection.presetName(), maxDepth);
-            success(sender, "Selected dungeon preset=" + templateSelection.presetName()
-                    + " maxDepth=" + maxDepth
-                    + " for session " + session.sessionId() + ".");
+            tell(sender, "commands.dungeon-selected", "&aダンジョンプリセット {preset} / 深さ {depth} をセッション {session} に設定しました。",
+                    "preset", templateSelection.presetName(),
+                    "depth", maxDepth,
+                    "session", session.sessionId());
         } catch (IllegalArgumentException | IllegalStateException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
         }
         return true;
     }
@@ -687,27 +711,27 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleEnd(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.end")) {
-            error(sender, "You do not have permission to end an AziRouge session.");
+            tell(sender, "commands.permission.end", "&cAziRougeセッションを終了する権限がありません。");
             return true;
         }
         if (args.length != 0) {
-            info(sender, "Usage: /azirouge end");
+            tell(sender, "commands.usage.end", "&e使い方: /azirouge end");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "This command can only be run by a player.");
+            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
 
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session == null) {
-            error(sender, "You are not in an active session.");
+            tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
             return true;
         }
         if (plugin.gameSessionManager().endSession(session)) {
-            success(sender, "Ended session world " + session.world().getName() + ".");
+            tell(sender, "commands.ended-world", "&aセッションワールド {world} を終了しました。", "world", session.world().getName());
         } else {
-            error(sender, "Failed to fully end session world " + session.world().getName() + ". Check server logs.");
+            tell(sender, "commands.end-world-failed", "&cセッションワールド {world} を完全に終了できませんでした。サーバーログを確認してください。", "world", session.world().getName());
         }
         return true;
     }
@@ -715,7 +739,7 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleGenerate(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.command.generate")) {
-            error(sender, "You do not have permission to generate dungeons.");
+            tell(sender, "commands.permission.generate", "&cダンジョンを生成する権限がありません。");
             return true;
         }
         GenerationSettings defaults = plugin.settings().generation();
@@ -735,14 +759,14 @@ public final class AziRougeCommand implements TabExecutor {
                     options.get("start")
             );
         } catch (IllegalArgumentException ex) {
-            error(sender, ex.getMessage());
+            tellRaw(sender, ex.getMessage());
             return true;
         }
 
         String worldName = options.getOrDefault("world", defaults.worldName());
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            error(sender, "World not found: " + worldName);
+            tell(sender, "commands.world-not-found", "&cワールドが見つかりません: {world}", "world", worldName);
             return true;
         }
 
@@ -776,14 +800,16 @@ public final class AziRougeCommand implements TabExecutor {
                     ),
                     plugin.settings()
             );
-            success(sender, "Generated dungeon seed=" + result.seed()
-                    + " pieces=" + result.placedPieceCount() + "/" + result.targetPieceCount()
-                    + " connections=" + result.connectionCount()
-                    + " enemyReservations=" + result.enemyReservations().size()
-                    + " depth=" + (depthOverride == null ? defaults.maxDepth() : depthOverride)
-                    + " preset=" + templateSelection.presetName());
+            tell(sender, "commands.generated", "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 敵予約={enemies} 深さ={depth} プリセット={preset}",
+                    "seed", result.seed(),
+                    "pieces", result.placedPieceCount(),
+                    "target", result.targetPieceCount(),
+                    "connections", result.connectionCount(),
+                    "enemies", result.enemyReservations().size(),
+                    "depth", depthOverride == null ? defaults.maxDepth() : depthOverride,
+                    "preset", templateSelection.presetName());
         } catch (TemplateLoadException | SchematicPlacementException ex) {
-            error(sender, "Generation failed: " + ex.getMessage());
+            tell(sender, "commands.generate-failed", "&c生成に失敗しました: {reason}", "reason", ex.getMessage());
             plugin.getLogger().warning("Generation failed: " + ex.getMessage());
         }
         return true;
@@ -792,21 +818,21 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleReload(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.command.reload")) {
-            error(sender, "You do not have permission to reload AziRouge.");
+            tell(sender, "commands.permission.reload", "&cAziRougeをリロードする権限がありません。");
             return true;
         }
         if (args.length != 0) {
-            info(sender, "Usage: /azirouge reload");
+            tell(sender, "commands.usage.reload", "&e使い方: /azirouge reload");
             return true;
         }
         plugin.reloadPluginState();
-        success(sender, "AziRouge configuration reloaded.");
+        tell(sender, "commands.reloaded", "&aAziRougeの設定をリロードしました。");
         return true;
     }
 
     private boolean handleDebug(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.command.debug")) {
-            error(sender, "You do not have permission to toggle debug logging.");
+            tell(sender, "commands.permission.debug", "&cデバッグログを切り替える権限がありません。");
             return true;
         }
         boolean enabled;
@@ -820,21 +846,22 @@ public final class AziRougeCommand implements TabExecutor {
             };
         }
         plugin.setDebugEnabled(enabled);
-        success(sender, "AziRouge debug logging is now " + (enabled ? "enabled" : "disabled") + ".");
+        tell(sender, enabled ? "commands.debug-enabled" : "commands.debug-disabled",
+                enabled ? "&aAziRougeのデバッグログを有効にしました。" : "&aAziRougeのデバッグログを無効にしました。");
         return true;
     }
 
     private boolean handleAuthor(CommandSender sender, String[] args) {
         if (!sender.hasPermission("azirouge.command.author")) {
-            error(sender, "You do not have permission to edit templates in-game.");
+            tell(sender, "commands.permission.author", "&cゲーム内でテンプレートを編集する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
-            error(sender, "Authoring commands can only be run by a player.");
+            tell(sender, "commands.author-player-only", "&cオーサリングコマンドはプレイヤーだけが実行できます。");
             return true;
         }
         if (args.length == 0) {
-            info(sender, "Usage: /azirouge author <piece|entrance> ...");
+            tell(sender, "commands.usage.author", "&e使い方: /azirouge author <piece|entrance> ...");
             return true;
         }
 
@@ -842,7 +869,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "piece" -> handleAuthorPiece(player, Arrays.copyOfRange(args, 1, args.length));
             case "entrance" -> handleAuthorEntrance(player, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                error(sender, "Unknown author target: " + args[0]);
+                tell(sender, "commands.unknown.author", "&c不明なオーサリング対象です: {target}", "target", args[0]);
                 yield true;
             }
         };
@@ -850,8 +877,8 @@ public final class AziRougeCommand implements TabExecutor {
 
     private boolean handleAuthorPiece(Player player, String[] args) {
         if (args.length < 4 || !"upsert".equalsIgnoreCase(args[0])) {
-            info(player, "Usage: /azirouge author piece upsert <templateFile> <pieceId> <schematicPath> [weight]");
-            info(player, "Select the whole piece with WorldEdit. The schematic origin will be fixed to the selection's minimum corner.");
+            tell(player, "commands.usage.author-piece", "&e使い方: /azirouge author piece upsert <templateFile> <pieceId> <schematicPath> [weight]");
+            tell(player, "commands.usage.author-piece-hint", "&eWorldEditでピース全体を選択してください。schematic origin は選択範囲の最小cornerに固定されます。");
             return true;
         }
 
@@ -862,33 +889,34 @@ public final class AziRougeCommand implements TabExecutor {
 
         try {
             PieceAuthoringResult result = plugin.templateAuthoringService().upsertPiece(player, templateFile, pieceId, schematicPath, weight);
-            success(player, "Piece saved: " + pieceId
-                    + " template=" + result.templateFile()
-                    + " origin=" + format(result.origin())
-                    + " bounds=" + format(result.bounds()));
+            tell(player, "commands.piece-saved", "&aピースを保存しました: {piece} テンプレート={template} origin={origin} bounds={bounds}",
+                    "piece", pieceId,
+                    "template", result.templateFile(),
+                    "origin", format(result.origin()),
+                    "bounds", format(result.bounds()));
         } catch (TemplateAuthoringException | SelectionLookupException ex) {
-            error(player, "Piece authoring failed: " + ex.getMessage());
+            tell(player, "commands.piece-failed", "&cピースの保存に失敗しました: {reason}", "reason", ex.getMessage());
         }
         return true;
     }
 
     private boolean handleAuthorEntrance(Player player, String[] args) {
         if (args.length == 0) {
-            info(player, "Usage: /azirouge author entrance <upsert|remove> ...");
+            tell(player, "commands.usage.author-entrance", "&e使い方: /azirouge author entrance <upsert|remove> ...");
             return true;
         }
 
         if ("upsert".equalsIgnoreCase(args[0])) {
             if (args.length < 5) {
-                info(player, "Usage: /azirouge author entrance upsert <templateFile> <pieceId> <entranceId> <facing>");
-                info(player, "Select the entrance plane with WorldEdit. The piece minimum corner saved by `piece upsert` will be reused automatically.");
+                tell(player, "commands.usage.author-entrance-upsert", "&e使い方: /azirouge author entrance upsert <templateFile> <pieceId> <entranceId> <facing>");
+                tell(player, "commands.usage.author-entrance-hint", "&eWorldEditで入口面を選択してください。piece upsert で保存した最小cornerを自動で使います。");
                 return true;
             }
             Direction facing;
             try {
                 facing = Direction.valueOf(args[4].toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException ex) {
-                error(player, "Facing must be one of: NORTH, EAST, SOUTH, WEST");
+                tell(player, "commands.facing-invalid", "&c向きは NORTH, EAST, SOUTH, WEST のいずれかです。");
                 return true;
             }
 
@@ -900,31 +928,32 @@ public final class AziRougeCommand implements TabExecutor {
                         args[3],
                         facing
                 );
-                success(player, "Entrance saved: " + args[3]
-                        + " facing=" + result.facing()
-                        + " origin=" + format(result.origin())
-                        + " plane=" + format(result.plane()));
+                tell(player, "commands.entrance-saved", "&a入口を保存しました: {entrance} 向き={facing} origin={origin} plane={plane}",
+                        "entrance", args[3],
+                        "facing", result.facing(),
+                        "origin", format(result.origin()),
+                        "plane", format(result.plane()));
             } catch (TemplateAuthoringException | SelectionLookupException ex) {
-                error(player, "Entrance authoring failed: " + ex.getMessage());
+                tell(player, "commands.entrance-failed", "&c入口の保存に失敗しました: {reason}", "reason", ex.getMessage());
             }
             return true;
         }
 
         if ("remove".equalsIgnoreCase(args[0])) {
             if (args.length < 4) {
-                info(player, "Usage: /azirouge author entrance remove <templateFile> <pieceId> <entranceId>");
+                tell(player, "commands.usage.author-entrance-remove", "&e使い方: /azirouge author entrance remove <templateFile> <pieceId> <entranceId>");
                 return true;
             }
             try {
                 plugin.templateAuthoringService().removeEntrance(args[1], args[2], args[3]);
-                success(player, "Entrance removed: " + args[3]);
+                tell(player, "commands.entrance-removed", "&a入口を削除しました: {entrance}", "entrance", args[3]);
             } catch (TemplateAuthoringException ex) {
-                error(player, "Entrance removal failed: " + ex.getMessage());
+                tell(player, "commands.entrance-remove-failed", "&c入口の削除に失敗しました: {reason}", "reason", ex.getMessage());
             }
             return true;
         }
 
-        error(player, "Unknown entrance action: " + args[0]);
+        tell(player, "commands.unknown.entrance-action", "&c不明な入口操作です: {action}", "action", args[0]);
         return true;
     }
 
@@ -1003,31 +1032,27 @@ public final class AziRougeCommand implements TabExecutor {
         }
     }
 
-    private void info(CommandSender sender, String message) {
-        sender.sendMessage(PREFIX + ChatColor.YELLOW + message);
+    private void tell(CommandSender sender, String key, String fallback, Object... replacements) {
+        sender.sendMessage(plugin.messages().prefixed(key, fallback, replacements));
     }
 
-    private void success(CommandSender sender, String message) {
-        sender.sendMessage(PREFIX + ChatColor.GREEN + message);
-    }
-
-    private void error(CommandSender sender, String message) {
-        sender.sendMessage(PREFIX + ChatColor.RED + message);
+    private void tellRaw(CommandSender sender, String message) {
+        sender.sendMessage(plugin.messages().prefix() + message);
     }
 
     private void sendCopyableSessionId(CommandSender sender, GameSession session) {
         sender.sendMessage(Component.text("[Azirouge] ", NamedTextColor.GOLD)
-                .append(Component.text("Session ID: ", NamedTextColor.YELLOW))
+                .append(Component.text(plugin.messages().text("session.id-label", "セッションID: "), NamedTextColor.YELLOW))
                 .append(Component.text(session.sessionId(), NamedTextColor.AQUA)
                         .clickEvent(ClickEvent.copyToClipboard(session.sessionId())))
-                .append(Component.text(" (click to copy)", NamedTextColor.GRAY)));
+                .append(Component.text(plugin.messages().text("session.click-to-copy", " (クリックでコピー)"), NamedTextColor.GRAY)));
     }
 
-    private void reportSessionCreationFailure(CommandSender sender, String prefix, Throwable throwable) {
+    private void reportSessionCreationFailure(CommandSender sender, String key, String fallback, Throwable throwable) {
         Throwable cause = unwrapCompletionException(throwable);
-        String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        error(sender, prefix + ": " + message);
-        plugin.getLogger().warning(prefix + ": " + message);
+        String reason = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+        tell(sender, key, fallback, "reason", reason);
+        plugin.getLogger().warning(plugin.messages().format(key, fallback, "reason", reason));
     }
 
     private Throwable unwrapCompletionException(Throwable throwable) {
@@ -1053,8 +1078,12 @@ public final class AziRougeCommand implements TabExecutor {
         if (!"default".equals(normalizedPreset)) {
             TemplatePreset preset = TEMPLATE_PRESETS.get(normalizedPreset);
             if (preset == null) {
-                throw new IllegalArgumentException("Unknown template preset: " + presetName
-                        + ". Available presets: " + String.join(", ", templatePresetNames()));
+                throw new IllegalArgumentException(plugin.messages().format(
+                        "commands.unknown-preset",
+                        "&c不明なテンプレートプリセットです: {preset}。利用可能: {presets}",
+                        "preset", presetName,
+                        "presets", String.join(", ", templatePresetNames())
+                ));
             }
             patterns = preset.templatePatterns();
             startPieceId = preset.startPieceId();

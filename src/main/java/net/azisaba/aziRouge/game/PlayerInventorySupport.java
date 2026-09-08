@@ -11,24 +11,16 @@ public final class PlayerInventorySupport {
     }
 
     static boolean canFit(PlayerInventory inventory, ItemStack candidate) {
-        int remaining = candidate.getAmount();
-        for (ItemStack item : inventory.getStorageContents()) {
-            if (item == null || item.getType().isAir()) {
-                return true;
-            }
-            if (item.isSimilar(candidate)) {
-                remaining -= Math.max(0, item.getMaxStackSize() - item.getAmount());
-                if (remaining <= 0) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return canFit(inventory, candidate, 0, inventory.getStorageContents().length);
     }
 
     public static boolean canFitHotbar(PlayerInventory inventory, ItemStack candidate) {
+        return canFit(inventory, candidate, 0, 9);
+    }
+
+    private static boolean canFit(PlayerInventory inventory, ItemStack candidate, int fromInclusive, int toExclusive) {
         int remaining = candidate.getAmount();
-        for (int slot = 0; slot <= 8; slot++) {
+        for (int slot = fromInclusive; slot < toExclusive; slot++) {
             ItemStack item = inventory.getItem(slot);
             if (item == null || item.getType().isAir()) {
                 return true;

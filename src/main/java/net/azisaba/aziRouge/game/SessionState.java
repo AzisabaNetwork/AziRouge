@@ -7,13 +7,13 @@ public enum SessionState {
     GAME_OVER,
     CLOSING;
 
-    public String getDisplayName() {
+    public String displayKey() {
         return switch (this) {
-            case LOBBY -> "Lobby";
-            case BETWEEN_ROUNDS -> "Between Rounds";
-            case IN_ROUND -> "In Round";
-            case GAME_OVER -> "Game Over";
-            case CLOSING -> "Closing";
+            case LOBBY -> "lobby";
+            case BETWEEN_ROUNDS -> "between-rounds";
+            case IN_ROUND -> "in-round";
+            case GAME_OVER -> "game-over";
+            case CLOSING -> "closing";
         };
     }
 }

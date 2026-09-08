@@ -8,7 +8,6 @@ import net.azisaba.aziRouge.math.IntVector3;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -20,8 +19,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class PortalService implements Listener {
-    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
-
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<String, RoundPortals> roundPortalsBySessionId = new HashMap<>();
@@ -150,7 +147,7 @@ public final class PortalService implements Listener {
         target.setPitch(player.getLocation().getPitch());
         if (player.teleport(target)) {
             player.sendTitle(title, "", 5, 35, 10);
-            player.sendMessage(PREFIX + message);
+            player.sendMessage(plugin.messages().prefix() + message);
             if (enteredDungeon) {
                 scheduleDungeonReminder(player, session);
             }

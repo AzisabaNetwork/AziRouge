@@ -30,7 +30,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Random;
@@ -61,10 +60,6 @@ public final class MiningService implements Listener {
 
     public void clearAll() {
         triggers.clear();
-    }
-
-    public void populate(World world, List<PlacedPiece> pieces, Random random, ChestPopulator chestPopulator) {
-        populate(world, pieces, random, chestPopulator, List.of());
     }
 
     public void populate(
@@ -167,7 +162,7 @@ public final class MiningService implements Listener {
                 ));
                 continue;
             }
-            TriggerGimmick gimmick = preparedGimmick.orElseGet(() -> createDynamicGimmick(target, random, chestPopulator));
+            TriggerGimmick gimmick = preparedGimmick.orElseGet(() -> createGimmick(target, random, chestPopulator));
             if (gimmick == null) {
                 placement.block().setType(settings.backingMaterial(), false);
                 plugin.debugLogger().log("mining", "trigger_skipped_no_weighted_gimmick", Map.of(
@@ -223,10 +218,6 @@ public final class MiningService implements Listener {
     @EventHandler
     public void onWorldUnload(WorldUnloadEvent event) {
         clearWorld(event.getWorld());
-    }
-
-    private SurfacePlacement placeSurfaceBlock(World world, BlockBox bounds, Material material, Material backingMaterial, Random random) {
-        return placeSurfaceBlock(world, bounds, material, backingMaterial, random, Set.of());
     }
 
     private SurfacePlacement placeSurfaceBlock(
@@ -406,10 +397,6 @@ public final class MiningService implements Listener {
             return null;
         }
         return new TriggerGimmick(type, target.location(), target.path(), List.of(), target.piece(), chestPopulator, List.of());
-    }
-
-    private TriggerGimmick createDynamicGimmick(TriggerTarget target, Random random, ChestPopulator chestPopulator) {
-        return createGimmick(target, random, chestPopulator);
     }
 
     private Optional<TriggerGimmick> selectPreparedGimmick(
@@ -1430,24 +1417,6 @@ public final class MiningService implements Listener {
 
         private BlockKey relative(BlockFace face) {
             return new BlockKey(worldName, x + face.getModX(), y + face.getModY(), z + face.getModZ());
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof BlockKey key
-                    && x == key.x
-                    && y == key.y
-                    && z == key.z
-                    && Objects.equals(worldName, key.worldName);
-        }
-
-        @Override
-        public int hashCode() {
-            int result = worldName.hashCode();
-            result = 31 * result + x;
-            result = 31 * result + y;
-            result = 31 * result + z;
-            return result;
         }
     }
 }

@@ -1,7 +1,6 @@
 package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
-import net.azisaba.aziRouge.config.GenerationSettings;
 import net.azisaba.aziRouge.dungeon.DungeonGenerationResult;
 import net.azisaba.aziRouge.dungeon.GenerationExecutionRequest;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
@@ -47,7 +46,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class GameSessionManager {
-    private static final String PREFIX = ChatColor.GOLD + "[Azirouge] " + ChatColor.RESET;
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
@@ -114,18 +112,18 @@ public final class GameSessionManager {
             return;
         }
         if (!sessionsById.containsKey(session.sessionId())) {
-            throw new IllegalStateException("The session is no longer active.");
+            throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
         if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            throw new IllegalStateException("Boss battles can only be started between rounds.");
+            throw fail("boss.error.between-rounds-only", "&cボス戦はラウンド間だけ挑戦できます。");
         }
         if (session.isBossBattleActive()) {
-            throw new IllegalStateException("A boss battle is already active.");
+            throw fail("boss.error.already-active", "&cボス戦はすでに進行中です。");
         }
 
         Set<UUID> activeParticipants = new HashSet<>(participants);
         if (activeParticipants.isEmpty()) {
-            throw new IllegalStateException("There are no online members who can challenge the boss.");
+            throw fail("boss.error.no-online-members", "&cオンラインのセッションメンバーがいません。");
         }
 
         session.setActiveParticipants(activeParticipants);
@@ -142,8 +140,8 @@ public final class GameSessionManager {
             initializeSessionPlayerState(player);
             player.teleport(destination);
         }
-        broadcastTitle(session, ChatColor.DARK_PURPLE + "Boss Battle", ChatColor.YELLOW + bossBattleId, 10, 60, 15);
-        broadcastSessionMessage(session, ChatColor.LIGHT_PURPLE + "Challenging boss battle: " + bossBattleId);
+        broadcastTitle(session, m("boss.title.start", "&5ボス戦"), ChatColor.YELLOW + bossBattleId, 10, 60, 15);
+        broadcastSessionMessage(session, m("boss.challenging", "&dボス戦に挑戦します: {boss}", "boss", bossBattleId));
         updateRoundAfterAliveChange(session);
     }
 
@@ -162,7 +160,7 @@ public final class GameSessionManager {
         if (maxHealth != null && !player.isDead()) {
             player.setHealth(Math.max(1.0D, maxHealth.getValue() / 2.0D));
         }
-        broadcastSessionMessage(session, ChatColor.GREEN + player.getName() + " was revived. Alive: " + session.alivePlayers().size());
+        broadcastSessionMessage(session, m("boss.member-revived", "&a{player} が蘇生されました。生存: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
         return true;
     }
 
@@ -190,27 +188,12 @@ public final class GameSessionManager {
         session.clearBossBattle();
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.BETWEEN_ROUNDS);
-        broadcastTitle(session, ChatColor.GOLD + "Boss Defeated", ChatColor.YELLOW + "Returned home", 10, 70, 20);
-        broadcastSessionMessage(session, ChatColor.GREEN + "Boss battle cleared. Prepare for the next round when ready.");
+        broadcastTitle(session, m("boss.title.defeated", "&6ボス撃破"), m("round.subtitle.returned-home", "&eホームに戻りました"), 10, 70, 20);
+        broadcastSessionMessage(session, m("boss.cleared", "&aボス戦をクリアしました。準備ができたら次のラウンドを開始してください。"));
     }
 
     public void cleanupLeftoverWorldFoldersOnStartup() {
         sessionWorldService.cleanupLeftoverWorldFoldersOnStartup();
-    }
-
-    public GameSession startSession(Player player) throws TemplateLoadException, SchematicPlacementException {
-        GenerationSettings generation = plugin.settings().generation();
-        return startSession(player, generation.templatePatterns(), generation.startPieceId());
-    }
-
-    public CompletableFuture<GameSession> startSessionAsync(Player player) {
-        GenerationSettings generation = plugin.settings().generation();
-        return startSessionAsync(player, generation.templatePatterns(), generation.startPieceId());
-    }
-
-    public GameSession startSession(Player player, List<String> templatePatterns, String startPieceId)
-            throws TemplateLoadException, SchematicPlacementException {
-        return startSession(player, templatePatterns, startPieceId, plugin.settings().sessions().defaultMaxPlayers());
     }
 
     public CompletableFuture<GameSession> startSessionAsync(Player player, List<String> templatePatterns, String startPieceId) {
@@ -267,49 +250,13 @@ public final class GameSessionManager {
         return future;
     }
 
-    public GameSession startSession(Player player, List<String> templatePatterns, String startPieceId, int requestedMaxPlayers)
-            throws TemplateLoadException, SchematicPlacementException {
-        if (!Bukkit.isPrimaryThread()) {
-            try {
-                return Bukkit.getScheduler().callSyncMethod(
-                        plugin,
-                        () -> startSession(player, templatePatterns, startPieceId, requestedMaxPlayers)
-                ).get();
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while starting session.", ex);
-            } catch (ExecutionException ex) {
-                Throwable cause = ex.getCause();
-                if (cause instanceof TemplateLoadException templateLoadException) {
-                    throw templateLoadException;
-                }
-                if (cause instanceof SchematicPlacementException schematicPlacementException) {
-                    throw schematicPlacementException;
-                }
-                if (cause instanceof RuntimeException runtimeException) {
-                    throw runtimeException;
-                }
-                throw new IllegalStateException("Failed to start session.", cause);
-            }
-        }
-
-        SessionCreationPlan plan = prepareSessionCreation(player, requestedMaxPlayers);
-        try {
-            sessionWorldService.copyTemplateWorld(plan.templateWorldFolder(), plan.worldFolder(), plan.worldName());
-            return createSessionAfterTemplateCopy(player, plan);
-        } catch (RuntimeException ex) {
-            pendingSessionCreations.remove(plan.playerId());
-            throw ex;
-        }
-    }
-
     private SessionCreationPlan prepareSessionCreation(Player player, int requestedMaxPlayers) {
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
-            throw new IllegalStateException("You are already in another session. Leave it first.");
+            throw fail("session.error.already-in-other", "&c別のセッションに参加中です。先に退出してください。");
         }
         int maxPlayers = validateMaxPlayers(requestedMaxPlayers);
         if (!pendingSessionCreations.add(player.getUniqueId())) {
-            throw new IllegalStateException("A session is already being created for you.");
+            throw fail("session.error.already-creating", "&cセッションを作成中です。");
         }
 
         String sessionId = allocateSessionId();
@@ -323,17 +270,17 @@ public final class GameSessionManager {
         try {
             if (!player.isOnline()) {
                 sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
-                throw new IllegalStateException("Player went offline while creating the session.");
+                throw fail("session.error.player-offline", "&cセッション作成中にオフラインになりました。");
             }
             if (sessionForPlayer(player.getUniqueId()).isPresent()) {
                 sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
-                throw new IllegalStateException("You are already in another session. Leave it first.");
+                throw fail("session.error.already-in-other", "&c別のセッションに参加中です。先に退出してください。");
             }
 
             World world = Bukkit.createWorld(new WorldCreator(plan.worldName()));
             if (world == null) {
                 sessionWorldService.deleteWorldFolder(plan.worldFolder(), plan.worldName());
-                throw new IllegalStateException("Failed to create session world: " + plan.worldName());
+                throw fail("session.error.world-create-failed", "&cセッションワールド {world} を作成できませんでした。", "world", plan.worldName());
             }
             world.setAutoSave(false);
 
@@ -358,11 +305,11 @@ public final class GameSessionManager {
                     unregisterSession(session);
                     restorePlayerAttributes(player);
                     restorePlayerVitals(player);
-                    throw new IllegalStateException("Failed to teleport to the session world.");
+                    throw fail("session.error.teleport-failed", "&cセッションワールドへテレポートできませんでした。");
                 }
 
                 preparePlayerForSessionEntry(player);
-                sendTitle(player, ChatColor.GOLD + "AziRouge", m("session.subtitle.created", "&eSession {session} created", "session", session.sessionId()), 10, 50, 10);
+                sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.created", "&eセッション {session} を作成しました", "session", session.sessionId()), 10, 50, 10);
                 sendMessage(player, m("session.created", "&aCreated session {session}. Invite players with /azirouge session join {session}.", "session", session.sessionId()));
                 sendCopyableSessionId(player, session);
                 sendMessage(player, m("session.prepare-start-round", "&ePrepare at home, then start a round with /azirouge round start."));
@@ -387,15 +334,15 @@ public final class GameSessionManager {
 
     public GameSession joinSession(Player player, String sessionId) {
         GameSession session = sessionById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+                .orElseThrow(() -> new IllegalArgumentException(m("session.error.not-found", "&cセッションが見つかりません: {session}", "session", sessionId)));
         if (!canJoinSession(session)) {
-            throw new IllegalStateException("Cannot join session " + session.sessionId() + " in its current state: " + session.state());
+            throw fail("session.error.join-state", "&cセッション {session} には、いまの状態では参加できません。", "session", session.sessionId());
         }
         if (sessionForPlayer(player.getUniqueId()).isPresent()) {
-            throw new IllegalStateException("You are already in another session. Leave it first.");
+            throw fail("session.error.already-in-other", "&c別のセッションに参加中です。先に退出してください。");
         }
         if (!session.hasRoomFor(player.getUniqueId())) {
-            throw new IllegalStateException("Session " + session.sessionId() + " is full.");
+            throw fail("session.error.full", "&cセッション {session} は満員です。", "session", session.sessionId());
         }
 
         Location returnLocation = player.getLocation();
@@ -406,7 +353,7 @@ public final class GameSessionManager {
             restorePlayerAttributes(player);
             restorePlayerVitals(player);
             scheduleIdleTimeoutIfNeeded(session);
-            throw new IllegalStateException("Failed to teleport to session " + session.sessionId() + ".");
+            throw fail("session.error.join-teleport-failed", "&cセッション {session} へテレポートできませんでした。", "session", session.sessionId());
         }
         preparePlayerForSessionEntry(player);
         if (session.state() == SessionState.IN_ROUND) {
@@ -415,7 +362,7 @@ public final class GameSessionManager {
         } else {
             restoreGameMode(player);
         }
-        sendTitle(player, ChatColor.GOLD + "AziRouge", m("session.subtitle.joined", "&eJoined session {session}", "session", session.sessionId()), 10, 50, 10);
+        sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.joined", "&eセッション {session} に参加しました", "session", session.sessionId()), 10, 50, 10);
         sendMessage(player, m("session.joined", "&aJoined session {session}.", "session", session.sessionId()));
         if (session.state() == SessionState.IN_ROUND) {
             sendMessage(player, m("session.joined-in-round", "&eA round is in progress, so you will spectate this round. You can play from the next round."));
@@ -429,9 +376,9 @@ public final class GameSessionManager {
 
     public GameSession leaveSession(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
-                .orElseThrow(() -> new IllegalStateException("You are not in a session."));
+                .orElseThrow(() -> fail("session.error.not-in-session", "&cセッションに参加していません。"));
         if (session.state() == SessionState.CLOSING) {
-            throw new IllegalStateException("Cannot leave session " + session.sessionId() + " in its current state: " + session.state());
+            throw fail("session.error.leave-state", "&cセッション {session} からは、いまの状態では退出できません。", "session", session.sessionId());
         }
 
         boolean wasAlive = session.alivePlayers().contains(player.getUniqueId());
@@ -440,7 +387,7 @@ public final class GameSessionManager {
             Location returnLocation = resolveReturnLocation(session, player.getUniqueId());
             boolean teleported = returnLocation != null && player.teleport(returnLocation);
             if (!teleported) {
-                throw new IllegalStateException("Failed to teleport out of session " + session.sessionId() + ".");
+                throw fail("session.error.leave-teleport-failed", "&cセッション {session} からテレポートできませんでした。", "session", session.sessionId());
             }
         }
 
@@ -481,7 +428,7 @@ public final class GameSessionManager {
                 ).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while starting round.", ex);
+                throw fail("round.error.interrupted", "&cラウンド開始が中断されました。");
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause();
                 if (cause instanceof TemplateLoadException templateLoadException) {
@@ -493,22 +440,22 @@ public final class GameSessionManager {
                 if (cause instanceof RuntimeException runtimeException) {
                     throw runtimeException;
                 }
-                throw new IllegalStateException("Failed to start round.", cause);
+                throw fail("round.error.failed", "&cラウンド開始に失敗しました。");
             }
         }
 
         if (!sessionsById.containsKey(session.sessionId())) {
-            throw new IllegalStateException("The session is no longer active.");
+            throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
         if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            throw new IllegalStateException("Rounds can only be started in the lobby or between rounds.");
+            throw fail("round.error.not-lobby-or-between", "&cラウンドはロビーまたはラウンド間だけ開始できます。");
         }
 
         List<UUID> participants = session.onlineMembers().stream()
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            throw new IllegalStateException("There are no online members who can start the round.");
+            throw fail("round.error.no-online-members", "&cラウンドを開始できるオンラインメンバーがいません。");
         }
 
         restoreRoundInactivePlayersForNextRound(session);
@@ -583,15 +530,15 @@ public final class GameSessionManager {
 
     public RoundEndResult endRound(Player player) {
         GameSession session = sessionForPlayer(player.getUniqueId())
-                .orElseThrow(() -> new IllegalStateException("You are not in a session."));
+                .orElseThrow(() -> fail("session.error.not-in-session", "&cセッションに参加していません。"));
         if (session.state() != SessionState.IN_ROUND) {
-            throw new IllegalStateException("No round is currently active in this session.");
+            throw fail("round.error.none-active", "&cこのセッションに進行中のラウンドはありません。");
         }
         if (session.isBossBattleActive()) {
-            throw new IllegalStateException("Boss battles cannot be ended with the round end command.");
+            throw fail("round.error.boss-not-end-command", "&cボス戦はラウンド終了コマンドでは終了できません。");
         }
         if (!isInHomeArea(session, player.getLocation())) {
-            throw new IllegalStateException("Rounds can only be ended inside the home area.");
+            throw fail("round.error.home-area-only", "&cラウンド終了はホームエリア内だけで実行できます。");
         }
 
         session.setRoundState(RoundState.ENDING);
@@ -647,7 +594,7 @@ public final class GameSessionManager {
 
     public void selectDungeon(GameSession session, String preset, int maxDepth) {
         if (session.state() == SessionState.CLOSING) {
-            throw new IllegalStateException("Cannot select a dungeon while the session is closing.");
+            throw fail("round.error.dungeon-while-closing", "&c終了処理中のセッションではダンジョンを選べません。");
         }
         session.setSelectedPreset(preset);
         session.setMaxDepth(maxDepth);
@@ -782,7 +729,7 @@ public final class GameSessionManager {
             if (fallback != null) {
                 player.teleport(fallback);
             } else {
-                player.kickPlayer(PREFIX + ChatColor.RED + "You cannot enter this session world.");
+                player.kickPlayer(plugin.messages().prefix() + m("session.kick-not-member", "&cこのセッションワールドには入れません。"));
             }
             return;
         }
@@ -814,7 +761,7 @@ public final class GameSessionManager {
         restorePlayerVitals(player);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
-            broadcastSessionMessage(session, ChatColor.RED + player.getName() + " disconnected during the round and is out for this round.");
+            broadcastSessionMessage(session, m("session.member-disconnected", "&c{player} がラウンド中に切断したため、このラウンドは脱落になります。", "player", player.getName()));
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
@@ -991,7 +938,7 @@ public final class GameSessionManager {
     private int validateMaxPlayers(int requestedMaxPlayers) {
         int maxAllowed = plugin.settings().sessions().maxMaxPlayers();
         if (requestedMaxPlayers > maxAllowed) {
-            throw new IllegalArgumentException("maxPlayers must be " + maxAllowed + " or less.");
+            throw new IllegalArgumentException(m("session.error.max-players", "&c最大人数は {max} 以下にしてください。", "max", maxAllowed));
         }
         return Math.max(1, requestedMaxPlayers);
     }
@@ -1322,8 +1269,12 @@ public final class GameSessionManager {
         return plugin.messages().format(key, fallback, replacements);
     }
 
+    private IllegalStateException fail(String key, String fallback, Object... replacements) {
+        return new IllegalStateException(m(key, fallback, replacements));
+    }
+
     private void sendMessage(Player player, String message) {
-        player.sendMessage(PREFIX + message);
+        player.sendMessage(plugin.messages().prefix() + message);
     }
 
     private UUID stableEventId(GameSession session, String eventType, UUID playerId) {
@@ -1336,10 +1287,10 @@ public final class GameSessionManager {
     }
 
     private void sendCopyableSessionId(Player player, GameSession session) {
-        sendMessage(player, Component.text("Session ID: ", NamedTextColor.YELLOW)
+        sendMessage(player, Component.text(m("session.id-label", "セッションID: "), NamedTextColor.YELLOW)
                 .append(Component.text(session.sessionId(), NamedTextColor.AQUA)
                         .clickEvent(ClickEvent.copyToClipboard(session.sessionId())))
-                .append(Component.text(" (click to copy)", NamedTextColor.GRAY)));
+                .append(Component.text(m("session.click-to-copy", " (クリックでコピー)"), NamedTextColor.GRAY)));
     }
 
     private Player selectSpectatorTarget(GameSession session, Player spectator, boolean advance) {
@@ -1414,7 +1365,7 @@ public final class GameSessionManager {
                 return id;
             }
         }
-        throw new IllegalStateException("Failed to allocate a unique session id.");
+        throw fail("session.error.allocate-id", "&c一意のセッションIDを割り当てできませんでした。");
     }
 
     private String normalizeSessionId(String sessionId) {
@@ -1455,7 +1406,7 @@ public final class GameSessionManager {
             restoreGameMode(player);
             restorePlayerVitals(player);
             if (!teleported) {
-                player.kickPlayer(PREFIX + ChatColor.RED + "The session world is closing.");
+                player.kickPlayer(plugin.messages().prefix() + m("session.kick-closing", "&cセッションワールドを閉じています。"));
             }
         }
     }
