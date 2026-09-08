@@ -84,7 +84,8 @@ public final class ShopService implements Listener {
 
     private void handlePurchase(Player player, ShopHolder holder, ShopTradeSettings trade, Inventory inventory) {
         GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
-        if (session == null || !canUseShop(player, session)) {
+        if (session == null || !canUseShop(player, session) || session.state() != holder.state
+                || session.currentRound() != holder.round || !session.runId().equals(holder.runId)) {
             player.closeInventory();
             player.sendMessage(plugin.messages().prefix() + m("shop.unavailable", "&cショップは現在利用できません。"));
             return;
@@ -123,7 +124,7 @@ public final class ShopService implements Listener {
         }
 
         int size = inventorySizeFor(trades.size());
-        ShopHolder holder = new ShopHolder(session.sessionId(), trades, size);
+        ShopHolder holder = new ShopHolder(session, trades, size);
         Inventory inventory = Bukkit.createInventory(
                 holder,
                 size,
@@ -177,7 +178,7 @@ public final class ShopService implements Listener {
         if (session.state() == SessionState.IN_ROUND) {
             return plugin.settings().shop().inRoundTrades();
         }
-        if (session.state() == SessionState.BETWEEN_ROUNDS) {
+        if (session.state() == SessionState.BETWEEN_ROUNDS || session.state() == SessionState.LOBBY) {
             return plugin.settings().shop().betweenRoundTrades();
         }
         return List.of();
@@ -188,7 +189,7 @@ public final class ShopService implements Listener {
             return false;
         }
         return switch (session.state()) {
-            case BETWEEN_ROUNDS -> true;
+            case LOBBY, BETWEEN_ROUNDS -> session.roundState() != RoundState.PREPARING;
             case IN_ROUND -> session.alivePlayers().contains(player.getUniqueId())
                     && player.getGameMode() != GameMode.SPECTATOR;
             default -> false;
@@ -210,11 +211,17 @@ public final class ShopService implements Listener {
 
     private static final class ShopHolder implements InventoryHolder {
         private final String sessionId;
+        private final java.util.UUID runId;
+        private final SessionState state;
+        private final int round;
         private final List<ShopTradeSettings> trades;
         private Inventory inventory;
 
-        private ShopHolder(String sessionId, List<ShopTradeSettings> trades, int size) {
-            this.sessionId = sessionId;
+        private ShopHolder(GameSession session, List<ShopTradeSettings> trades, int size) {
+            this.sessionId = session.sessionId();
+            this.runId = session.runId();
+            this.state = session.state();
+            this.round = session.currentRound();
             this.trades = new ArrayList<>(trades.subList(0, Math.min(size, trades.size())));
         }
 

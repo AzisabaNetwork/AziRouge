@@ -460,17 +460,8 @@ public final class AziRougeCommand implements TabExecutor {
                     templateSelection.presetName(),
                     maxDepth
             );
-            tell(sender, "round.started-detail",
-                    "&aラウンド {round} を開始しました。セッション {session} / プリセット {preset} / 深さ {depth} / 終了時維持費 {maintenance} / 残高 {balance} / ピース {pieces}/{target} / 原点 {origin}",
-                    "round", session.currentRound(),
-                    "session", session.sessionId(),
-                    "preset", templateSelection.presetName(),
-                    "depth", maxDepth,
-                    "maintenance", plugin.economyService().maintenanceCostForRound(session.currentRound()),
-                    "balance", session.sharedBalance(),
-                    "pieces", result.placedPieceCount(),
-                    "target", result.targetPieceCount(),
-                    "origin", format(session.currentDungeonOrigin()));
+            tell(sender, "journey.started", "&7探索の支度が整いました。ラウンド {round} / 深さ {depth}",
+                    "round", session.currentRound(), "depth", maxDepth);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             tell(sender, "round.error.start-failed", "&cラウンド開始に失敗しました: {reason}", "reason", ex.getMessage());
             plugin.getLogger().warning("Round start failed: " + ex.getMessage());

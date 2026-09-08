@@ -114,7 +114,7 @@ public final class GameSessionManager {
         if (!sessionsById.containsKey(session.sessionId())) {
             throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
-        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
+        if (!DepartureGuard.canPrepare(session.state(), session.roundState())) {
             throw fail("boss.error.between-rounds-only", "&cボス戦はラウンド間だけ挑戦できます。");
         }
         if (session.isBossBattleActive()) {
@@ -312,7 +312,7 @@ public final class GameSessionManager {
                 sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.created", "&eセッション {session} を作成しました", "session", session.sessionId()), 10, 50, 10);
                 sendMessage(player, m("session.created", "&aCreated session {session}. Invite players with /azirouge session join {session}.", "session", session.sessionId()));
                 sendCopyableSessionId(player, session);
-                sendMessage(player, m("session.prepare-start-round", "&ePrepare at home, then start a round with /azirouge round start."));
+                JourneyDisplayService.hintOnce(plugin, player, "home", "旅支度ができたら、出発の目印へ。");
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
                 plugin.statisticsService().recordSessionJoin(session.runId(), player);
@@ -369,6 +369,7 @@ public final class GameSessionManager {
         } else {
             broadcastSessionMessage(session, m("session.member-joined", "&e{player} joined the session. Players: {players}/{max}",
                     "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
+            JourneyDisplayService.hintOnce(plugin, player, "home", "旅支度ができたら、出発の目印へ。");
         }
         plugin.statisticsService().recordSessionJoin(session.runId(), player);
         return session;
@@ -447,7 +448,7 @@ public final class GameSessionManager {
         if (!sessionsById.containsKey(session.sessionId())) {
             throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
-        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
+        if (!DepartureGuard.canPrepare(session.state(), session.roundState())) {
             throw fail("round.error.not-lobby-or-between", "&cラウンドはロビーまたはラウンド間だけ開始できます。");
         }
 
@@ -624,6 +625,7 @@ public final class GameSessionManager {
 
         cancelMobTask(session);
         cancelIdleTimeout(session);
+        plugin.journeyDisplayService().clearSession(session.sessionId());
         plugin.portalService().clearRoundPortals(session);
         plugin.bossBattleService().clearBossBattle(session);
         evacuatePlayers(session);
@@ -1149,17 +1151,14 @@ public final class GameSessionManager {
     }
 
     private void announceRoundStart(GameSession session) {
-        long maintenance = plugin.economyService().maintenanceCostForRound(session.currentRound());
         broadcastTitle(
                 session,
                 m("round.title.start", "&6Round {round}", "round", session.currentRound()),
-                m("round.subtitle.portal-open", "&eThe portal is open"),
+                m("journey.ready", "&eさあ、探索へ"),
                 10,
                 60,
                 15
         );
-        broadcastSessionMessage(session, m("round.started", "&aRound {round} has started. Enter the dungeon through the home portal.", "round", session.currentRound()));
-        broadcastSessionMessage(session, m("round.maintenance-due", "&eMaintenance due at round end: {maintenance} / Shared balance: {balance}", "maintenance", maintenance, "balance", session.sharedBalance()));
     }
 
     private void announceRoundEnd(GameSession session, RoundEndResult result) {

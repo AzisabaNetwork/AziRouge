@@ -76,10 +76,10 @@ scoreboard:
     game-over: "記録を確認"
     closing: "終了処理中"
   next-actions:
-    lobby: "ラウンドを開始"
-    between-rounds: "買い物・次ラウンド"
-    in-round-home: "ポータルから探索へ"
-    in-round-dungeon: "帰還ポータルを探す"
+    lobby: "旅支度をして出発"
+    between-rounds: "旅支度をして出発"
+    in-round-home: "出入口から探索へ"
+    in-round-dungeon: "帰り道を忘れずに"
     game-over: "セッションを退出"
     closing: "終了を待つ"
 
@@ -116,6 +116,30 @@ boss:
     min-round: "&cこのボスはラウンド {min} 以上で挑戦できます。現在: {round}"
     already-active: "&cボス戦はすでに進行中です。"
     no-online-members: "&cオンラインのセッションメンバーがいません。"
+
+journey:
+  ready: "&eさあ、探索へ"
+  started: "&7探索の支度が整いました。ラウンド {round} / 深さ {depth}"
+  depart: "出発！"
+  depart-title: "&6出発！"
+  return: "&a帰還！"
+  preparing: "出発の準備中…"
+  depart-description: "どこまで踏み込む？\n深さを選んで出発しよう。\n帰還後の維持費: {cost} / 共有資金: {balance}"
+  end-description: "戦利品を精算し、維持費を支払います。\nホーム外の仲間: {away}人\n探索中の仲間は探索を打ち切られ、死亡扱いになります。"
+  changed: "&7状況が変わりました。出入口からもう一度お試しください。"
+  teleport-failed: "道が塞がれています。少し待って、もう一度。"
+  help: "旅の手引き"
+  help-body: "旅支度：商人を右クリック。資金は仲間と共有です。\n出発：出入口で深さを選び、探索へ。\n探索：宝を集め、帰還の目印へ。\n精算：仲間が帰ったら、ラウンドメニューから終了。戦利品を売却し、維持費を支払います。"
+  landmark:
+    depart: "&6出発！"
+    return: "&a帰還！"
+    preparing: "&7出発の準備中…"
+    shop: "&e旅支度"
+  hint:
+    home: "旅支度ができたら、出発の目印へ。"
+    shop: "旅の備えに。右クリックで買い物できます。資金は仲間と共有です。"
+    explore: "宝を探そう。帰り道も忘れずに。"
+    return: "おかえり。仲間が揃ったら戦利品を精算しよう。"
 
 portal:
   title:

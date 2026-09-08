@@ -54,6 +54,7 @@ public final class AziRouge extends JavaPlugin {
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
     private PortalService portalService;
+    private net.azisaba.aziRouge.game.JourneyDisplayService journeyDisplayService;
     private BossBattleService bossBattleService;
     private EconomyService economyService;
     private ShopService shopService;
@@ -79,6 +80,7 @@ public final class AziRouge extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (journeyDisplayService != null) journeyDisplayService.shutdown();
         if (gameSessionManager != null) {
             gameSessionManager.shutdown();
         }
@@ -204,6 +206,10 @@ public final class AziRouge extends JavaPlugin {
         sessionScoreboardService.start();
         sessionGameplayService.start();
         bossBattleService.start();
+        portalService.reload();
+        if (journeyDisplayService == null) journeyDisplayService = new net.azisaba.aziRouge.game.JourneyDisplayService(this);
+        journeyDisplayService.reload();
+        gameMenuService.invalidateDepartures();
     }
 
     public PluginSettings settings() {
@@ -232,6 +238,10 @@ public final class AziRouge extends JavaPlugin {
 
     public PortalService portalService() {
         return portalService;
+    }
+
+    public net.azisaba.aziRouge.game.JourneyDisplayService journeyDisplayService() {
+        return journeyDisplayService;
     }
 
     public BossBattleService bossBattleService() {

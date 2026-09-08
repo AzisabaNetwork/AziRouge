@@ -37,6 +37,21 @@ public final class GameMenuService implements Listener {
     private static final String TAG_MENU = "menu";
 
     private final AziRouge plugin;
+    private final java.util.Map<java.util.UUID, java.util.UUID> departureOffers = new java.util.HashMap<>();
+
+    public void invalidateDepartures() {
+        departureOffers.clear();
+    }
+
+    @EventHandler
+    public void onQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        departureOffers.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onDeath(org.bukkit.event.entity.PlayerDeathEvent event) {
+        departureOffers.remove(event.getEntity().getUniqueId());
+    }
 
     public GameMenuService(AziRouge plugin) {
         this.plugin = plugin;
@@ -134,25 +149,86 @@ public final class GameMenuService implements Listener {
         );
     }
 
-    private void showStartRoundDialog(Player player) {
+    public void showStartRoundDialog(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || !DepartureGuard.canPrepare(session.state(), session.roundState())) {
+            return;
+        }
+        int round = session.currentRound();
+        java.util.UUID offer = java.util.UUID.randomUUID();
+        departureOffers.put(player.getUniqueId(), offer);
+        ActionButton depart = ActionButton.create(message("journey.depart", "出発！"), null, 160,
+                DialogAction.customClick((view, audience) -> {
+                    Float depth = view.getFloat("depth");
+                    if (audience instanceof Player current && current.getUniqueId().equals(player.getUniqueId())
+                            && DepartureGuard.validDepth(depth, plugin.settings().gui().maxDepth())) {
+                        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (offer.equals(departureOffers.get(current.getUniqueId()))) depart(current, session, round, depth.intValue(), offer);
+                        });
+                    }
+                }, ClickCallback.Options.builder().uses(1).build()));
         showDialog(
                 player,
-                message("menu.start-round", "Start Round"),
-                message("menu.start-round-description", "Choose a depth and start the round."),
+                message("journey.depart", "出発！"),
+                text(plugin.messages().format("journey.depart-description", "どこまで踏み込む？\n深さを選んで出発しよう。\n帰還後の維持費: {cost} / 共有資金: {balance}",
+                        "cost", plugin.economyService().maintenanceCostForRound(round + 1), "balance", session.sharedBalance())),
                 List.of(depthInput()),
-                List.of(action(label("menu.start-round", "Start"), label("menu.tooltip.start-round", "Start the round with the selected depth."), "/azirouge round start test $(depth) --confirm")),
+                List.of(depart),
                 1
         );
     }
 
+    private void depart(Player player, GameSession expected, int round, int depth, java.util.UUID offer) {
+        GameSession current = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (!player.isOnline() || current != expected || current.currentRound() != round
+                || !DepartureGuard.canPrepare(current.state(), current.roundState())
+                || !player.getWorld().equals(current.world()) || player.isDead()
+                || !current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())) {
+            player.sendMessage(plugin.messages().prefixed("journey.changed", "&7状況が変わりました。出入口からもう一度お試しください。"));
+            return;
+        }
+        player.sendActionBar(message("journey.preparing", "出発の準備中…"));
+        // Give the client a tick to display the transition before synchronous world generation.
+        org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline() || plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null) != expected
+                    || current.currentRound() != round || !DepartureGuard.canPrepare(current.state(), current.roundState())
+                    || !player.getWorld().equals(current.world()) || player.isDead()
+                    || !current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())
+                    || !departureOffers.remove(player.getUniqueId(), offer)) return;
+            player.performCommand("azirouge round start " + current.selectedPreset() + " " + depth + " --confirm");
+            if (current.state() == SessionState.IN_ROUND && current.currentRound() == round + 1) {
+                plugin.portalService().enterDungeon(player, current);
+            }
+        }, 2L);
+    }
+
     private void showEndRoundConfirmation(Player player) {
+        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session == null || session.state() != SessionState.IN_ROUND) return;
+        int round = session.currentRound();
+        Set<java.util.UUID> away = awayPlayers(session);
         showConfirmationDialog(
                 player,
                 message("menu.end-round", "End Round"),
-                message("menu.end-round-description", "End the current round? Loot will be sold and maintenance will be charged."),
-                action(label("menu.end-round", "End Round"), label("menu.tooltip.end-round", "End the current round."), "/azirouge round end --confirm"),
+                text(plugin.messages().format("journey.end-description", "戦利品を精算し、維持費を支払います。\nホーム外の仲間: {away}人\n探索中の仲間は探索を打ち切られ、死亡扱いになります。", "away", away.size())),
+                menuAction(label("menu.end-round", "End Round"), label("menu.tooltip.end-round", "End the current round."), current -> {
+                    GameSession actual = plugin.gameSessionManager().sessionForPlayer(current.getUniqueId()).orElse(null);
+                    if (actual != session || actual.currentRound() != round || actual.state() != SessionState.IN_ROUND) return;
+                    if (!away.equals(awayPlayers(actual))) {
+                        showEndRoundConfirmation(current);
+                        return;
+                    }
+                    current.performCommand("azirouge round end --confirm");
+                }),
                 closeAction()
         );
+    }
+
+    private Set<java.util.UUID> awayPlayers(GameSession session) {
+        return session.alivePlayers().stream().map(org.bukkit.Bukkit::getPlayer)
+                .filter(java.util.Objects::nonNull).filter(member -> !member.getWorld().equals(session.world())
+                        || !session.homeArea().contains(member.getLocation().getBlockX(), member.getLocation().getBlockY(), member.getLocation().getBlockZ()))
+                .map(Player::getUniqueId).collect(java.util.stream.Collectors.toSet());
     }
 
     private void showMenuDialog(Player player) {
@@ -166,10 +242,17 @@ public final class GameMenuService implements Listener {
                         menuAction(label("menu.session-title", "Session"), label("menu.tooltip.session", "Open session actions."), this::showSessionMenuDialog),
                         menuAction(label("menu.round-title", "Round"), label("menu.tooltip.round", "Open round actions."), this::showRoundDialog),
                         action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions", "Show active sessions in chat."), "/azirouge session list"),
+                        menuAction(label("journey.help", "旅の手引き"), label("journey.help", "旅の手引き"), this::showJourneyHelp),
                         closeAction()
                 ),
                 2
         );
+    }
+
+    private void showJourneyHelp(Player player) {
+        showDialog(player, message("journey.help", "旅の手引き"),
+                message("journey.help-body", "旅支度：商人を右クリック。資金は仲間と共有です。\n出発：出入口で深さを選び、探索へ。\n探索：宝を集め、帰還の目印へ。\n精算：仲間が帰ったら、ラウンドメニューから終了。戦利品を売却し、維持費を支払います。"),
+                List.of(), List.of(menuAction(label("menu.back", "戻る"), "", this::showMenuDialog)), 1);
     }
 
     private void showSessionMenuDialog(Player player) {
@@ -276,7 +359,9 @@ public final class GameMenuService implements Listener {
                 DialogAction.customClick(
                         (view, audience) -> {
                             if (audience instanceof Player player) {
-                                callback.accept(player);
+                                org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
+                                    if (player.isOnline()) callback.accept(player);
+                                });
                             }
                         },
                         ClickCallback.Options.builder()

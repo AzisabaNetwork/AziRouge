@@ -102,6 +102,11 @@ dungeon:
   base-distance-from-home: 512
   round-spacing: 512
   default-max-depth: 8
+journey:
+  enabled: true
+  # Height above the top of each entrance area; adjust to the home template.
+  entrance-height: 1.2
+  view-distance: 24
 portals:
   home-to-dungeon:
     area:

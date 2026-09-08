@@ -5,9 +5,10 @@ import net.azisaba.aziRouge.config.PortalSettings;
 import net.azisaba.aziRouge.dungeon.PlacedPiece;
 import net.azisaba.aziRouge.math.BlockBox;
 import net.azisaba.aziRouge.math.IntVector3;
-import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Sound;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -80,6 +81,13 @@ public final class PortalService implements Listener {
         cooldownUntilMillis.clear();
     }
 
+    public void reload() {
+        shutdown();
+        for (GameSession session : sessionManager.sessions()) {
+            if (session.state() == SessionState.IN_ROUND && !session.isBossBattleActive()) installRoundPortals(session);
+        }
+    }
+
     @EventHandler(ignoreCancelled = true)
     public void onPlayerMove(PlayerMoveEvent event) {
         Location to = event.getTo();
@@ -89,35 +97,33 @@ public final class PortalService implements Listener {
 
         Player player = event.getPlayer();
         GameSession session = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
-        if (session == null || !canUsePortal(session, player)) {
+        if (session == null || !player.getWorld().equals(session.world()) || player.isDead()) {
             return;
         }
 
+        if (DepartureGuard.canPrepare(session.state(), session.roundState())) {
+            BlockBox entrance = plugin.settings().portals().homeToDungeon().area();
+            if (contains(entrance, to) && !contains(entrance, event.getFrom())) {
+                plugin.gameMenuService().showStartRoundDialog(player);
+            }
+            return;
+        }
+        if (!canUsePortal(session, player)) return;
         RoundPortals roundPortals = roundPortalsBySessionId.get(session.sessionId());
         if (roundPortals == null) {
             return;
         }
 
         if (contains(roundPortals.homeToDungeonArea(), to)) {
-            teleportWithCooldown(
-                    player,
-                    session,
-                    roundPortals.dungeonDestination(),
-                    roundPortals.dungeonYawOffset(),
-                    plugin.messages().text("portal.title.enter-dungeon", "&5Entering Dungeon"),
-                    plugin.messages().text("portal.message.enter-dungeon", "&7Collect loot, then return through the portal inside the dungeon."),
-                    true
-            );
+            enterDungeon(player, session);
             return;
         }
         if (contains(roundPortals.dungeonToHomeArea(), to)) {
             teleportWithCooldown(
                     player,
-                    session,
                     roundPortals.homeDestination(),
                     roundPortals.homeYawOffset(),
-                    plugin.messages().text("portal.title.return-home", "&aReturned Home"),
-                    plugin.messages().text("portal.message.return-home", "&eEnd the round in the home area when everyone is ready."),
+                    plugin.messages().text("journey.return", "&a帰還！"),
                     false
             );
         }
@@ -125,54 +131,52 @@ public final class PortalService implements Listener {
 
     private boolean canUsePortal(GameSession session, Player player) {
         return session.state() == SessionState.IN_ROUND
+                && session.roundState() == RoundState.ACTIVE && !session.isBossBattleActive() && !player.isDead()
                 && player.getWorld().getUID().equals(session.world().getUID())
                 && session.isMember(player.getUniqueId())
                 && session.alivePlayers().contains(player.getUniqueId())
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
-    private void teleportWithCooldown(Player player, GameSession session, Location destination, float yawOffset, String title, String message, boolean enteredDungeon) {
+    private void teleportWithCooldown(Player player, Location destination, float yawOffset, String title, boolean enteredDungeon) {
         long now = System.currentTimeMillis();
         long cooldownUntil = cooldownUntilMillis.getOrDefault(player.getUniqueId(), 0L);
         if (cooldownUntil > now) {
             return;
         }
 
-        cooldownUntilMillis.put(
-                player.getUniqueId(),
-                now + plugin.settings().portals().cooldownSeconds() * 1000L
-        );
         Location target = destination.clone();
         target.setYaw(normalizeYaw(player.getLocation().getYaw() + yawOffset));
         target.setPitch(player.getLocation().getPitch());
         if (player.teleport(target)) {
             player.sendTitle(title, "", 5, 35, 10);
-            player.sendMessage(plugin.messages().prefix() + message);
-            if (enteredDungeon) {
-                scheduleDungeonReminder(player, session);
-            }
+            cooldownUntilMillis.put(player.getUniqueId(), now + plugin.settings().portals().cooldownSeconds() * 1000L);
+            player.playSound(player.getLocation(), enteredDungeon ? Sound.BLOCK_AMETHYST_BLOCK_CHIME : Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.35F, 1.2F);
+            JourneyDisplayService.hintOnce(plugin, player, enteredDungeon ? "explore" : "return",
+                    enteredDungeon ? "宝を探そう。帰り道も忘れずに。" : "おかえり。仲間が揃ったら戦利品を精算しよう。");
+
+        } else {
+            cooldownUntilMillis.put(player.getUniqueId(), now + 1000L);
+            player.sendActionBar(net.kyori.adventure.text.Component.text(plugin.messages().text("journey.teleport-failed", "道が塞がれています。少し待って、もう一度。")));
         }
     }
 
-    private void scheduleDungeonReminder(Player player, GameSession session) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            GameSession current = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
-            if (current == null
-                    || !player.isOnline()
-                    || !current.sessionId().equals(session.sessionId())
-                    || current.state() != SessionState.IN_ROUND
-                    || !current.alivePlayers().contains(player.getUniqueId())
-                    || !player.getWorld().getUID().equals(current.world().getUID())
-                    || current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())) {
-                return;
-            }
-            player.sendMessage(plugin.messages().prefixed(
-                    "guidance.dungeon-reminder",
-                    "&eIf you have enough loot, start looking for the return portal."
-            ));
-        }, 20L * 120L);
+    public void enterDungeon(Player player, GameSession session) {
+        RoundPortals portals = roundPortalsBySessionId.get(session.sessionId());
+        if (portals == null || !canUsePortal(session, player)) return;
+        teleportWithCooldown(player, portals.dungeonDestination(), portals.dungeonYawOffset(),
+                plugin.messages().text("journey.depart-title", "&6出発！"), true);
     }
 
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        cooldownUntilMillis.remove(event.getPlayer().getUniqueId());
+    }
+
+    public BlockBox returnArea(GameSession session) {
+        RoundPortals portals = roundPortalsBySessionId.get(session.sessionId());
+        return portals == null ? null : portals.dungeonToHomeArea();
+    }
     private Location dungeonDestination(GameSession session, PortalSettings settings) {
         IntVector3 offset = settings.homeToDungeon().destinationOffset();
         IntVector3 destination = session.currentDungeonOrigin().add(offset);
