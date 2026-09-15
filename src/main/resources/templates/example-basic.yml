@@ -23,10 +23,6 @@ pieces:
         facing: EAST
         point1: [8, 1, 3]
         point2: [8, 2, 3]
-    enemy-sockets:
-      - id: center
-        position: [4, 1, 4]
-        tag: common
   corridor_ns:
     schematic: schematics/example/corridor_ns.schem
     weight: 3.0

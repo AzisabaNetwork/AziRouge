@@ -339,7 +339,7 @@ commands:
   ended-world: "&aセッションワールド {world} を終了しました。"
   end-world-failed: "&cセッションワールド {world} を完全に終了できませんでした。サーバーログを確認してください。"
   world-not-found: "&cワールドが見つかりません: {world}"
-  generated: "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 敵予約={enemies} 深さ={depth}"
+  generated: "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 深さ={depth}"
   generate-failed: "&c生成に失敗しました: {reason}"
   reloaded: "&aAziRougeの設定をリロードしました。"
   debug-enabled: "&aAziRougeのデバッグログを有効にしました。"

@@ -52,7 +52,6 @@ public final class DungeonGenerator {
     private final DebugLogger debugLogger;
     private final TemplateManager templateManager;
     private final SchematicAdapter schematicAdapter;
-    private final EnemyPlacementService enemyPlacementService;
     private final ChestPopulator chestPopulator;
     private final TreasurePopulator treasurePopulator;
     private final TrapPopulator trapPopulator;
@@ -63,7 +62,6 @@ public final class DungeonGenerator {
             DebugLogger debugLogger,
             TemplateManager templateManager,
             SchematicAdapter schematicAdapter,
-            EnemyPlacementService enemyPlacementService,
             ChestPopulator chestPopulator,
             TreasurePopulator treasurePopulator,
             TrapPopulator trapPopulator,
@@ -73,7 +71,6 @@ public final class DungeonGenerator {
         this.debugLogger = debugLogger;
         this.templateManager = templateManager;
         this.schematicAdapter = schematicAdapter;
-        this.enemyPlacementService = enemyPlacementService;
         this.chestPopulator = chestPopulator;
         this.treasurePopulator = treasurePopulator;
         this.trapPopulator = trapPopulator;
@@ -182,7 +179,6 @@ public final class DungeonGenerator {
             miningService.populate(request.world(), pieces, random, chestPopulator, preparedConnectionGimmicks.targets());
         }
 
-        List<EnemySpawnReservation> reservations = enemyPlacementService.plan(pieces, settings.enemies());
         Location spawnLocation = resolveSpawnLocation(request.world(), startPiece);
         debugLogger.log("generation", "complete", Map.of(
                 "connections", allConnections.size(),
@@ -199,7 +195,6 @@ public final class DungeonGenerator {
                 targetPieceCount,
                 pieces.size(),
                 allConnections.size(),
-                reservations,
                 List.copyOf(pieces),
                 spawnLocation
         );

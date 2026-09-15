@@ -191,18 +191,12 @@ public final class TemplateAuthoringService {
             throw new TemplateAuthoringException(ex.getMessage(), ex);
         }
         BlockBox opening = entrance.planeBox().extend(entrance.facing().opposite(), entrance.width() - 1);
-        if (!contains(bounds, entrance.planeBox())) {
+        if (!bounds.contains(entrance.planeBox())) {
             throw new TemplateAuthoringException("Entrance plane is outside piece bounds");
         }
-        if (!contains(bounds, opening)) {
+        if (!bounds.contains(opening)) {
             throw new TemplateAuthoringException("Entrance opening depth exceeds piece bounds");
         }
-    }
-
-    private boolean contains(BlockBox outer, BlockBox inner) {
-        return outer.minX() <= inner.minX() && outer.maxX() >= inner.maxX()
-                && outer.minY() <= inner.minY() && outer.maxY() >= inner.maxY()
-                && outer.minZ() <= inner.minZ() && outer.maxZ() >= inner.maxZ();
     }
 
     private IntVector3 readVector(List<?> raw, String field, String pieceId) throws TemplateAuthoringException {

@@ -126,7 +126,6 @@ public final class TemplateManager {
             throw new TemplateLoadException("Piece " + pieceId + " in " + templateFile + " has no entrances");
         }
         validateEntrancesWithinBounds(pieceId, bounds, entrances);
-        List<EnemySocketTemplate> enemySockets = parseEnemySockets(section);
         List<String> deniedAdjacentPieces = parseDeniedAdjacentPieces(pieceId, section);
         int minGenerations = Math.max(0, section.getInt("min-generations", 0));
         int maxGenerations = section.contains("max-generations")
@@ -144,7 +143,6 @@ public final class TemplateManager {
                 minEntranceConnections,
                 bounds,
                 List.copyOf(entrances),
-                List.copyOf(enemySockets),
                 List.copyOf(deniedAdjacentPieces)
         );
     }
@@ -185,18 +183,6 @@ public final class TemplateManager {
         return entrances;
     }
 
-    private List<EnemySocketTemplate> parseEnemySockets(ConfigurationSection section) throws TemplateLoadException {
-        List<Map<?, ?>> maps = section.getMapList("enemy-sockets");
-        List<EnemySocketTemplate> sockets = new ArrayList<>();
-        for (Map<?, ?> map : maps) {
-            String id = map.containsKey("id") ? String.valueOf(map.get("id")) : "socket";
-            IntVector3 position = parseVector(map.get("position"), "position", id);
-            String tag = map.containsKey("tag") ? String.valueOf(map.get("tag")) : "default";
-            sockets.add(new EnemySocketTemplate(id, position, tag));
-        }
-        return sockets;
-    }
-
     private List<String> parseDeniedAdjacentPieces(String pieceId, ConfigurationSection section) throws TemplateLoadException {
         if (section.contains("allowed-adjacent-pieces")) {
             throw new TemplateLoadException("Piece " + pieceId + " uses deprecated allowed-adjacent-pieces. Replace it with denied-adjacent-pieces.");
@@ -215,19 +201,13 @@ public final class TemplateManager {
         for (EntranceTemplate entrance : entrances) {
             BlockBox plane = entrance.planeBox();
             BlockBox opening = plane.extend(entrance.facing().opposite(), entrance.width() - 1);
-            if (!contains(bounds, plane)) {
+            if (!bounds.contains(plane)) {
                 throw new TemplateLoadException("Piece " + pieceId + " entrance " + entrance.id() + " is outside bounds");
             }
-            if (!contains(bounds, opening)) {
+            if (!bounds.contains(opening)) {
                 throw new TemplateLoadException("Piece " + pieceId + " entrance " + entrance.id() + " opening depth exceeds bounds");
             }
         }
-    }
-
-    private boolean contains(BlockBox outer, BlockBox inner) {
-        return outer.minX() <= inner.minX() && outer.maxX() >= inner.maxX()
-                && outer.minY() <= inner.minY() && outer.maxY() >= inner.maxY()
-                && outer.minZ() <= inner.minZ() && outer.maxZ() >= inner.maxZ();
     }
 
     private BlockBox parseBox(ConfigurationSection section, String label) throws TemplateLoadException {

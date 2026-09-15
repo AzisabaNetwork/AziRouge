@@ -71,7 +71,7 @@ public final class SettingsLoader {
                         clamp(config.getDouble("door.chance", 0.35D), 0.0D, 1.0D),
                         doorMaterial
                 ),
-                new DebugSettings(config.getBoolean("debug.enabled", false)),
+                config.getBoolean("debug.enabled", false),
                 loadDatabaseSettings(config),
                 loadLeaderboardSettings(plugin, config),
                 loadSessionSettings(plugin, config),
@@ -84,10 +84,6 @@ public final class SettingsLoader {
                 loadGuiSettings(config),
                 loadPlayerSettings(config),
                 loadBossSettings(plugin, config),
-                new EnemySettings(
-                        config.getBoolean("enemies.enabled", false),
-                        requireText(config.getString("enemies.mode"), "reserved")
-                ),
                 new AziRougeSettings(
                         loadMobSpawnSettings(config),
                         loadChestSettings(plugin, config),
@@ -95,9 +91,7 @@ public final class SettingsLoader {
                         loadTrapSettings(config),
                         loadMiningSettings(plugin, config)
                 ),
-                new JoinSettings(
-                        config.getBoolean("join.isbeta", false)
-                )
+                config.getBoolean("join.isbeta", false)
         );
     }
 
@@ -296,7 +290,7 @@ public final class SettingsLoader {
             }
 
             String id = normalizeOptionalText(stringValue(values.get("id")));
-            String materialName = normalizeRequiredText(stringValue(values.get("material")));
+            String materialName = normalizeOptionalText(stringValue(values.get("material")));
             Material material = materialName == null ? null : Material.matchMaterial(materialName);
             long price = longValue(values.get("price"), -1L);
             if (id == null || material == null || !material.isItem() || material.isAir() || price < 0L) {
@@ -633,7 +627,6 @@ public final class SettingsLoader {
         }
         return new MobAiSettings(
                 section.getBoolean("enabled", defaults.enabled()),
-                Math.max(1L, section.getLong("tick-interval-ticks", defaults.tickIntervalTicks())),
                 loadTorchBreakSettings(section.getConfigurationSection("torch-break"), defaults.torchBreak())
         );
     }
@@ -675,7 +668,7 @@ public final class SettingsLoader {
             return null;
         }
 
-        String material = normalizeRequiredText(stringValue(values.get("material")));
+        String material = normalizeOptionalText(stringValue(values.get("material")));
         if (material == null || Material.matchMaterial(material) == null) {
             return null;
         }
@@ -788,7 +781,7 @@ public final class SettingsLoader {
         }
 
         String key = normalizeOptionalText(stringValue(values.get("key")));
-        String material = normalizeRequiredText(stringValue(values.get("display-material")));
+        String material = normalizeOptionalText(stringValue(values.get("display-material")));
         if (key == null || material == null) {
             return null;
         }
@@ -853,7 +846,7 @@ public final class SettingsLoader {
             return null;
         }
 
-        String material = normalizeRequiredText(stringValue(values.get("material")));
+        String material = normalizeOptionalText(stringValue(values.get("material")));
         if (material == null) {
             plugin.getLogger().warning("Ignoring chest loot entry without material in " + tierName);
             return null;
@@ -938,13 +931,6 @@ public final class SettingsLoader {
             return section.getValues(false);
         }
         return null;
-    }
-
-    private static String normalizeRequiredText(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim().toUpperCase(Locale.ROOT);
     }
 
     private static String normalizeOptionalText(String value) {

@@ -9,7 +9,6 @@ public record DungeonGenerationResult(
         int targetPieceCount,
         int placedPieceCount,
         int connectionCount,
-        List<EnemySpawnReservation> enemyReservations,
         List<PlacedPiece> placedPieces,
         Location spawnLocation
 ) {

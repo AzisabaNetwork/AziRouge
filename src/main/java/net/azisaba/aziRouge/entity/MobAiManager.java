@@ -2,7 +2,6 @@ package net.azisaba.aziRouge.entity;
 
 import com.destroystokyo.paper.event.entity.EntityPathfindEvent;
 import net.azisaba.aziRouge.AziRouge;
-import net.azisaba.aziRouge.config.MobAiSettings;
 import net.azisaba.aziRouge.config.MobProfileSettings;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
@@ -20,21 +19,20 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 public final class MobAiManager implements Listener {
     private final AziRouge plugin;
-    private final Map<MobProfile, MobAiHandler> handlers;
+    private final CopperGolemAiHandler copperGolem = new CopperGolemAiHandler();
     private final Map<UUID, MobProfile> trackedMobs = new HashMap<>();
     private final BukkitTask tickTask;
-    private long tickCounter;
 
     public MobAiManager(AziRouge plugin) {
         this.plugin = plugin;
-        this.handlers = Map.of(MobProfile.COPPER_GOLEM, new CopperGolemAiHandler());
         this.tickTask = new BukkitRunnable() {
             @Override
             public void run() {
-                tickTrackedMobs();
+                cleanupTrackedMobs();
             }
         }.runTaskTimer(plugin, 1L, 1L);
     }
@@ -55,17 +53,7 @@ public final class MobAiManager implements Listener {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
             return;
         }
-
-        MobProfile profile = resolveProfile(livingEntity);
-        if (profile == null) {
-            return;
-        }
-
-        MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(profile);
-        if (!settings.ai().enabled()) {
-            return;
-        }
-        handler(profile).onTarget(livingEntity, event, new MobAiContext(plugin, profile, settings));
+        dispatchCopper(livingEntity, (handler, context) -> handler.onTarget(livingEntity, event, context));
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -73,9 +61,7 @@ public final class MobAiManager implements Listener {
         if (!(event.getEntity() instanceof LivingEntity targetMob)) {
             return;
         }
-
-        MobProfile targetProfile = resolveProfile(targetMob);
-        if (targetProfile != MobProfile.COPPER_GOLEM) {
+        if (resolveProfile(targetMob) != MobProfile.COPPER_GOLEM) {
             return;
         }
         event.setCancelled(true);
@@ -85,23 +71,10 @@ public final class MobAiManager implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onEntityDamage(EntityDamageByEntityEvent event) {
         if (event.getEntity() instanceof LivingEntity targetMob) {
-            MobProfile targetProfile = resolveProfile(targetMob);
-            if (targetProfile != null) {
-                MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(targetProfile);
-                if (settings.ai().enabled()) {
-                    handler(targetProfile).onDamaged(targetMob, event, new MobAiContext(plugin, targetProfile, settings));
-                }
-            }
+            dispatchCopper(targetMob, (handler, context) -> handler.onDamaged(targetMob, event, context));
         }
-
         if (event.getDamager() instanceof LivingEntity attackingMob) {
-            MobProfile attackerProfile = resolveProfile(attackingMob);
-            if (attackerProfile != null) {
-                MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(attackerProfile);
-                if (settings.ai().enabled()) {
-                    handler(attackerProfile).onAttack(attackingMob, event, new MobAiContext(plugin, attackerProfile, settings));
-                }
-            }
+            dispatchCopper(attackingMob, (handler, context) -> handler.onAttack(attackingMob, event, context));
         }
     }
 
@@ -110,17 +83,7 @@ public final class MobAiManager implements Listener {
         if (!(event.getEntity() instanceof LivingEntity livingEntity)) {
             return;
         }
-
-        MobProfile profile = resolveProfile(livingEntity);
-        if (profile == null) {
-            return;
-        }
-
-        MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(profile);
-        if (!settings.ai().enabled()) {
-            return;
-        }
-        handler(profile).onPathFound(livingEntity, event, new MobAiContext(plugin, profile, settings));
+        dispatchCopper(livingEntity, (handler, context) -> handler.onPathFound(livingEntity, event, context));
     }
 
     @EventHandler
@@ -130,42 +93,42 @@ public final class MobAiManager implements Listener {
     }
 
     private void runSpawnHook(LivingEntity mob, MobProfile profile) {
-        MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(profile);
-        if (!settings.ai().enabled()) {
-            return;
-        }
-        handler(profile).onSpawn(mob, new MobAiContext(plugin, profile, settings));
+        dispatchCopper(mob, profile, (handler, context) -> handler.onSpawn(mob, context));
     }
 
-    private void tickTrackedMobs() {
-        tickCounter++;
+    private void cleanupTrackedMobs() {
         Iterator<Map.Entry<UUID, MobProfile>> iterator = trackedMobs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<UUID, MobProfile> entry = iterator.next();
             Entity entity = Bukkit.getEntity(entry.getKey());
-            if (!(entity instanceof LivingEntity livingEntity) || !entity.isValid() || entity.isDead()) {
+            if (!(entity instanceof LivingEntity) || !entity.isValid() || entity.isDead()
+                    || !entity.getScoreboardTags().contains(MobProfile.MOB_TAG)) {
                 PathfindTargetRegistry.clear(entry.getKey());
                 iterator.remove();
-                continue;
             }
-            if (!livingEntity.getScoreboardTags().contains(MobProfile.MOB_TAG)) {
-                PathfindTargetRegistry.clear(entry.getKey());
-                iterator.remove();
-                continue;
-            }
-
-            MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(entry.getValue());
-            MobAiSettings aiSettings = settings.ai();
-            if (!aiSettings.enabled()) {
-                continue;
-            }
-
-            long interval = Math.max(1L, aiSettings.tickIntervalTicks());
-            if (tickCounter % interval != 0L) {
-                continue;
-            }
-            handler(entry.getValue()).onTick(livingEntity, new MobAiContext(plugin, entry.getValue(), settings));
         }
+    }
+
+    private void dispatchCopper(
+            LivingEntity mob,
+            BiConsumer<CopperGolemAiHandler, MobAiContext> action
+    ) {
+        dispatchCopper(mob, resolveProfile(mob), action);
+    }
+
+    private void dispatchCopper(
+            LivingEntity mob,
+            MobProfile profile,
+            BiConsumer<CopperGolemAiHandler, MobAiContext> action
+    ) {
+        if (profile != MobProfile.COPPER_GOLEM) {
+            return;
+        }
+        MobProfileSettings settings = plugin.settings().azirouge().mobSpawn().profile(profile);
+        if (!settings.ai().enabled()) {
+            return;
+        }
+        action.accept(copperGolem, new MobAiContext(plugin, profile, settings));
     }
 
     private MobProfile resolveProfile(LivingEntity livingEntity) {
@@ -181,10 +144,5 @@ public final class MobAiManager implements Listener {
             trackedMobs.put(livingEntity.getUniqueId(), profile);
         }
         return profile;
-    }
-
-    private MobAiHandler handler(MobProfile profile) {
-        return handlers.getOrDefault(profile, new MobAiHandler() {
-        });
     }
 }

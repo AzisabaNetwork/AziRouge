@@ -10,7 +10,6 @@ import net.azisaba.aziRouge.debug.DebugLogger;
 import net.azisaba.aziRouge.dungeon.ChestPopulator;
 import net.azisaba.aziRouge.dungeon.ChestLootListener;
 import net.azisaba.aziRouge.dungeon.DungeonGenerator;
-import net.azisaba.aziRouge.dungeon.EnemyPlacementService;
 import net.azisaba.aziRouge.dungeon.MiningService;
 import net.azisaba.aziRouge.dungeon.TreasurePickupListener;
 import net.azisaba.aziRouge.dungeon.TreasurePopulator;
@@ -22,6 +21,7 @@ import net.azisaba.aziRouge.game.GameSessionManager;
 import net.azisaba.aziRouge.entity.MobAiManager;
 import net.azisaba.aziRouge.entity.MobDropListener;
 import net.azisaba.aziRouge.entity.MobSpawnManager;
+import net.azisaba.aziRouge.game.JourneyDisplayService;
 import net.azisaba.aziRouge.game.BossBattleService;
 import net.azisaba.aziRouge.game.SessionGameplayService;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
@@ -55,7 +55,7 @@ public final class AziRouge extends JavaPlugin {
     private MobSpawnManager mobSpawnManager;
     private GameSessionManager gameSessionManager;
     private PortalService portalService;
-    private net.azisaba.aziRouge.game.JourneyDisplayService journeyDisplayService;
+    private JourneyDisplayService journeyDisplayService;
     private BossBattleService bossBattleService;
     private EconomyService economyService;
     private ShopService shopService;
@@ -120,7 +120,7 @@ public final class AziRouge extends JavaPlugin {
         reloadConfig();
         this.messageService = new MessageService(this);
         this.settings = SettingsLoader.load(this);
-        this.debugLogger = new DebugLogger(this, settings.debug().enabled());
+        this.debugLogger = new DebugLogger(this, settings.debugEnabled());
         this.templateManager = new TemplateManager(this, debugLogger);
         this.schematicAdapter = createSchematicAdapter();
         this.selectionProvider = createSelectionProvider();
@@ -141,7 +141,6 @@ public final class AziRouge extends JavaPlugin {
                 debugLogger,
                 templateManager,
                 schematicAdapter,
-                new EnemyPlacementService(debugLogger),
                 chestPopulator,
                 treasurePopulator,
                 trapPopulator,
@@ -150,13 +149,10 @@ public final class AziRouge extends JavaPlugin {
     }
 
     private void ensureRuntimeServices() {
-        java.util.concurrent.CompletableFuture<Void> statisticsReady;
         if (statisticsService == null) {
             this.statisticsService = new StatisticsService(this);
-            statisticsReady = statisticsService.reload();
-        } else {
-            statisticsReady = statisticsService.reload();
         }
+        java.util.concurrent.CompletableFuture<Void> statisticsReady = statisticsService.reload();
         if (mobAiManager == null) {
             this.mobAiManager = new MobAiManager(this);
         }
@@ -214,7 +210,9 @@ public final class AziRouge extends JavaPlugin {
         roundTimeService.start();
         bossBattleService.start();
         portalService.reload();
-        if (journeyDisplayService == null) journeyDisplayService = new net.azisaba.aziRouge.game.JourneyDisplayService(this);
+        if (journeyDisplayService == null) {
+            journeyDisplayService = new JourneyDisplayService(this);
+        }
         journeyDisplayService.reload();
         gameMenuService.invalidateDepartures();
     }
@@ -247,7 +245,7 @@ public final class AziRouge extends JavaPlugin {
         return portalService;
     }
 
-    public net.azisaba.aziRouge.game.JourneyDisplayService journeyDisplayService() {
+    public JourneyDisplayService journeyDisplayService() {
         return journeyDisplayService;
     }
 

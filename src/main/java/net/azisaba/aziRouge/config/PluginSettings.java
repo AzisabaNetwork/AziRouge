@@ -3,7 +3,7 @@ package net.azisaba.aziRouge.config;
 public record PluginSettings(
         GenerationSettings generation,
         DoorSettings door,
-        DebugSettings debug,
+        boolean debugEnabled,
         DatabaseSettings database,
         LeaderboardSettings leaderboard,
         SessionSettings sessions,
@@ -16,8 +16,7 @@ public record PluginSettings(
         GuiSettings gui,
         PlayerSettings player,
         BossSettings boss,
-        EnemySettings enemies,
         AziRougeSettings azirouge,
-        JoinSettings joinSettings
+        boolean joinIsBeta
 ) {
 }

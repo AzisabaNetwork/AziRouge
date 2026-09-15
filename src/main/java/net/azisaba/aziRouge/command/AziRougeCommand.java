@@ -643,12 +643,11 @@ public final class AziRougeCommand implements TabExecutor {
                     ),
                     plugin.settings()
             );
-            tell(sender, "commands.generated", "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 敵予約={enemies} 深さ={depth}",
+            tell(sender, "commands.generated", "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 深さ={depth}",
                     "seed", result.seed(),
                     "pieces", result.placedPieceCount(),
                     "target", result.targetPieceCount(),
                     "connections", result.connectionCount(),
-                    "enemies", result.enemyReservations().size(),
                     "depth", depthOverride == null ? defaults.maxDepth() : depthOverride);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             tell(sender, "commands.generate-failed", "&c生成に失敗しました: {reason}", "reason", ex.getMessage());

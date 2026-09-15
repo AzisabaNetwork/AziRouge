@@ -13,8 +13,7 @@ import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-public final class CopperGolemAiHandler implements MobAiHandler {
-    @Override
+public final class CopperGolemAiHandler {
     public void onSpawn(LivingEntity mob, MobAiContext context) {
         mob.setInvulnerable(true);
         mob.setPersistent(true);
@@ -37,7 +36,6 @@ public final class CopperGolemAiHandler implements MobAiHandler {
         }
     }
 
-    @Override
     public void onTarget(LivingEntity mob, EntityTargetLivingEntityEvent event, MobAiContext context) {
         event.setCancelled(true);
         if (mob instanceof Mob controlledMob) {
@@ -45,13 +43,11 @@ public final class CopperGolemAiHandler implements MobAiHandler {
         }
     }
 
-    @Override
     public void onDamaged(LivingEntity mob, EntityDamageByEntityEvent event, MobAiContext context) {
         event.setCancelled(true);
         mob.setInvulnerable(true);
     }
 
-    @Override
     public void onAttack(LivingEntity mob, EntityDamageByEntityEvent event, MobAiContext context) {
         event.setCancelled(true);
         if (mob instanceof Mob controlledMob) {
@@ -59,7 +55,6 @@ public final class CopperGolemAiHandler implements MobAiHandler {
         }
     }
 
-    @Override
     public void onPathFound(LivingEntity mob, EntityPathfindEvent event, MobAiContext context) {
         if (!PathfindTargetRegistry.isAllowed(mob, event.getLoc())) {
             event.setCancelled(true);

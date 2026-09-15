@@ -30,7 +30,7 @@ public class GlobalJoinQuitListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent e) {
-        if (plugin.settings().joinSettings().isBeta() && !e.getPlayer().hasPermission("azirouge.beta.join")) {
+        if (plugin.settings().joinIsBeta() && !e.getPlayer().hasPermission("azirouge.beta.join")) {
             e.getPlayer().kick(Component.text(plugin.messages().text("join.beta-denied", "This server is currently in closed beta. You do not have permission to join.")));
         }
     }

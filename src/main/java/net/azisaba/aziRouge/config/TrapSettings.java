@@ -11,7 +11,7 @@ public record TrapSettings(
         List<TrapDefinitionSettings> definitions
 ) {
     public double spawnChance(int depth) {
-        return clamp(baseSpawnChance + Math.max(0, depth) * depthMultiplier, 0.0D, maxSpawnChance);
+        return Math.clamp(baseSpawnChance + Math.max(0, depth) * depthMultiplier, 0.0D, maxSpawnChance);
     }
 
     public TrapDefinitionSettings selectRandomDefinition(Random random, int depth) {
@@ -46,9 +46,5 @@ public record TrapSettings(
             }
         }
         return null;
-    }
-
-    private double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
     }
 }

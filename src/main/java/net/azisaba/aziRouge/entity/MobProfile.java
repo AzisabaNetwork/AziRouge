@@ -60,7 +60,7 @@ public enum MobProfile {
                 movementSpeed,
                 attackDamage,
                 maxAliveCount,
-                new MobAiSettings(true, 20L),
+                new MobAiSettings(true),
                 defaultDropsFor(key)
         );
     }
@@ -75,10 +75,6 @@ public enum MobProfile {
 
     public EntityType entityType() {
         return entityType;
-    }
-
-    public void apply(LivingEntity mob) {
-        apply(mob, defaultSettings);
     }
 
     public void apply(LivingEntity mob, MobProfileSettings settings) {
@@ -116,10 +112,6 @@ public enum MobProfile {
             }
             Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m));
         }
-    }
-
-    public List<ItemStack> createDrops(Random random, int depth) {
-        return createDrops(random, depth, defaultSettings);
     }
 
     public List<ItemStack> createDrops(Random random, int depth, MobProfileSettings settings) {
@@ -216,11 +208,6 @@ public enum MobProfile {
                     new MobDropEntrySettings("ARROW", 1.0D, 0.0D, 2, 6, 0, Integer.MAX_VALUE, null, Map.of()),
                     new MobDropEntrySettings("BOW", 0.10D, 0.02D, 1, 1, 0, Integer.MAX_VALUE, null, Map.of()),
                     new MobDropEntrySettings("EXPERIENCE_BOTTLE", 0.10D, 0.0D, 1, 1, 5, Integer.MAX_VALUE, null, Map.of())
-            );
-            case "spider_stalker" -> List.of(
-                    new MobDropEntrySettings("STRING", 1.0D, 0.0D, 1, 4, 0, Integer.MAX_VALUE, null, Map.of()),
-                    new MobDropEntrySettings("SPIDER_EYE", 0.40D, 0.0D, 1, 1, 0, Integer.MAX_VALUE, null, Map.of()),
-                    new MobDropEntrySettings("FERMENTED_SPIDER_EYE", 0.10D, 0.02D, 1, 1, 3, Integer.MAX_VALUE, null, Map.of())
             );
             default -> List.of();
         };

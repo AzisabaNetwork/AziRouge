@@ -12,7 +12,6 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
 
@@ -24,29 +23,14 @@ import java.util.Random;
 
 public final class LootTable {
     public List<ItemStack> roll(int depth, ChestSettings chestSettings, Random random) {
-        ChestLootTierSettings tier = chestSettings.tierForDepth(depth);
-        if (tier.entries().isEmpty()) {
-            return List.of();
-        }
-
-        int rolls = randomRollCount(tier, random);
-        List<ItemStack> results = new ArrayList<>(rolls);
-        for (int index = 0; index < rolls; index++) {
-            ItemStack itemStack = createItem(select(tier.entries(), random), random);
-            if (itemStack != null && itemStack.getType() != Material.AIR) {
-                results.add(itemStack);
-            }
-        }
-        return results;
-    }
-
-    public ItemStack rollSingle(int depth, TreasureSettings treasureSettings, Random random) {
-        List<ItemStack> items = roll(depth, treasureSettings, random);
-        return items.isEmpty() ? null : items.get(0);
+        return roll(chestSettings.tierForDepth(depth), random);
     }
 
     public List<ItemStack> roll(int depth, TreasureSettings treasureSettings, Random random) {
-        ChestLootTierSettings tier = treasureSettings.tierForDepth(depth);
+        return roll(treasureSettings.tierForDepth(depth), random);
+    }
+
+    private List<ItemStack> roll(ChestLootTierSettings tier, Random random) {
         if (tier.entries().isEmpty()) {
             return List.of();
         }

@@ -21,7 +21,6 @@ AziRouge は、ローグライク向けにダンジョンピースをランダ�
 - piece ごとの隣接ピース denylist
 - `1x1x2` 接続部へのランダムドア配置
 - seed 再現
-- 将来拡張用の敵配置ソケット予約
 - AI 解析しやすい `key=value` 形式のデバッグログ
 
 ## コマンド
@@ -107,9 +106,6 @@ door:
   material: SPRUCE_DOOR
 debug:
   enabled: false
-enemies:
-  enabled: false
-  mode: reserved
 ```
 
 ### 主要パラメータ
@@ -152,10 +148,6 @@ pieces:
         facing: EAST
         point1: [8, 1, 3]
         point2: [8, 2, 3]
-    enemy-sockets:
-      - id: center
-        position: [4, 1, 4]
-        tag: common
 ```
 
 `denied-adjacent-pieces` は任意です。  
@@ -196,8 +188,7 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 
 ## 敵配置について
 
-現状は準備工事段階です。  
-`enemy-sockets` はワールド座標へ変換され、生成結果に予約情報として残りますが、実際の Mob スポーン処理はまだ実装していません。
+Mob は `azirouge.mobs` の重みとスポーン間隔でダンジョン内に出現します。テンプレート YAML の `enemy-sockets` は読みません。
 
 ## 開発メモ
 
