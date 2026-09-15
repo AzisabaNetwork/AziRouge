@@ -6,7 +6,7 @@ import java.util.Map;
 
 public record EconomySettings(
         long initialBalance,
-        EconomyMaintenanceSettings maintenance,
+        EconomyQuotaSettings quota,
         Map<Material, Long> sellPrices
 ) {
 }

@@ -42,9 +42,9 @@ public final class GameSession {
     private int currentRound;
     private IntVector3 currentDungeonOrigin;
     private BlockBox currentDungeonBounds;
-    private String selectedPreset = "default";
     private int maxDepth;
     private long sharedBalance;
+    private int consecutiveQuotaMisses;
     private BukkitTask mobSpawnTask;
     private BukkitTask idleTimeoutTask;
     private String activeBossBattleId;
@@ -155,14 +155,6 @@ public final class GameSession {
         this.currentDungeonBounds = currentDungeonBounds;
     }
 
-    public String selectedPreset() {
-        return selectedPreset;
-    }
-
-    public void setSelectedPreset(String selectedPreset) {
-        this.selectedPreset = selectedPreset;
-    }
-
     public int getMaxDepth() {
         return maxDepth;
     }
@@ -177,6 +169,14 @@ public final class GameSession {
 
     public void setSharedBalance(long sharedBalance) {
         this.sharedBalance = Math.max(0L, sharedBalance);
+    }
+
+    public int consecutiveQuotaMisses() {
+        return consecutiveQuotaMisses;
+    }
+
+    public void setConsecutiveQuotaMisses(int consecutiveQuotaMisses) {
+        this.consecutiveQuotaMisses = Math.max(0, consecutiveQuotaMisses);
     }
 
     public void addSharedBalance(long amount) {

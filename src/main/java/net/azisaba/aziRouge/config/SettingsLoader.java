@@ -78,6 +78,7 @@ public final class SettingsLoader {
                 loadHomeSettings(config),
                 loadDungeonSettings(config),
                 loadPortalSettings(config),
+                loadRoundTimingSettings(config),
                 loadEconomySettings(plugin, config),
                 loadShopSettings(plugin, config),
                 loadGuiSettings(config),
@@ -406,14 +407,36 @@ public final class SettingsLoader {
             }
         }
 
+        int maxConsecutiveMisses = Math.max(1, config.getInt("economy.quota.max-consecutive-misses", 3));
         return new EconomySettings(
                 Math.max(0L, config.getLong("economy.initial-balance", 0L)),
-                new EconomyMaintenanceSettings(
-                        Math.max(0L, config.getLong("economy.maintenance.base", 0L)),
-                        Math.max(0L, config.getLong("economy.maintenance.per-round", 0L)),
-                        Math.max(0.0D, config.getDouble("economy.maintenance.multiplier", 1.0D))
+                new EconomyQuotaSettings(
+                        Math.max(0L, config.getLong("economy.quota.base", 0L)),
+                        Math.max(0L, config.getLong("economy.quota.per-round", 0L)),
+                        Math.max(0.0D, config.getDouble("economy.quota.multiplier", 1.0D)),
+                        maxConsecutiveMisses,
+                        clampInt(config.getInt("economy.quota.warning-remaining", 1), 0, maxConsecutiveMisses),
+                        new IntVector3(
+                                config.getInt("economy.quota.delivery-chest.x", 2),
+                                config.getInt("economy.quota.delivery-chest.y", 64),
+                                config.getInt("economy.quota.delivery-chest.z", -4)
+                        )
                 ),
                 Map.copyOf(sellPrices)
+        );
+    }
+
+    private static RoundTimingSettings loadRoundTimingSettings(FileConfiguration config) {
+        long startTime = Math.floorMod(config.getLong("round-timing.start-time-ticks", 0L), 24_000L);
+        long deadline = Math.floorMod(config.getLong("round-timing.deadline-time-ticks", 18_000L), 24_000L);
+        if (deadline == startTime) {
+            deadline = Math.floorMod(startTime + 18_000L, 24_000L);
+        }
+        return new RoundTimingSettings(
+                startTime,
+                deadline,
+                clampInt(config.getInt("round-timing.sleep.minimum-percentage", 50), 1, 100),
+                Math.max(0, config.getInt("round-timing.sleep.wait-seconds", 5))
         );
     }
 

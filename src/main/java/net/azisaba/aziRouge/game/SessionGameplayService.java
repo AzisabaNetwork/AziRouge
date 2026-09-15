@@ -7,13 +7,18 @@ import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.block.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
@@ -66,7 +71,12 @@ public final class SessionGameplayService implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (!isSessionPlayer(event.getPlayer())) {
+        GameSession session = sessionManager.sessionForPlayer(event.getPlayer().getUniqueId()).orElse(null);
+        if (!isSessionPlayer(event.getPlayer()) || session == null) {
+            return;
+        }
+        if (plugin.economyService().isDeliveryChest(session, event.getBlock())) {
+            event.setCancelled(true);
             return;
         }
         if (!sessionManager.isActivePlaying(event.getPlayer())) {
@@ -81,7 +91,46 @@ public final class SessionGameplayService implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
+        GameSession session = sessionManager.sessionForPlayer(event.getPlayer().getUniqueId()).orElse(null);
+        if (session != null && plugin.economyService().isDeliveryChest(session, event.getBlock())) {
+            event.setCancelled(true);
+            return;
+        }
         if (isSessionPlayer(event.getPlayer()) && !sessionManager.isActivePlaying(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        GameSession session = sessionManager.sessionForWorld(event.getBlock().getWorld()).orElse(null);
+        if (session != null) {
+            event.blockList().removeIf(block -> plugin.economyService().isDeliveryChest(session, block));
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        GameSession session = sessionManager.sessionForWorld(event.getLocation().getWorld()).orElse(null);
+        if (session != null) {
+            event.blockList().removeIf(block -> plugin.economyService().isDeliveryChest(session, block));
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        GameSession session = sessionManager.sessionForWorld(event.getBlock().getWorld()).orElse(null);
+        if (session != null && event.getBlocks().stream()
+                .anyMatch(block -> plugin.economyService().isDeliveryChest(session, block))) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        GameSession session = sessionManager.sessionForWorld(event.getBlock().getWorld()).orElse(null);
+        if (session != null && event.getBlocks().stream()
+                .anyMatch(block -> plugin.economyService().isDeliveryChest(session, block))) {
             event.setCancelled(true);
         }
     }
@@ -115,8 +164,19 @@ public final class SessionGameplayService implements Listener {
             return;
         }
         ItemStack current = event.getCurrentItem();
-        if (isBlocker(current) || event.isShiftClick()) {
+        if (isBlocker(current)) {
             event.setCancelled(true);
+            return;
+        }
+        if (event.isShiftClick()) {
+            GameSession session = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
+            boolean depositing = session != null
+                    && event.getClickedInventory() instanceof PlayerInventory
+                    && event.getView().getTopInventory().getHolder() instanceof Chest chest
+                    && plugin.economyService().isDeliveryChest(session, chest.getBlock());
+            if (!depositing) {
+                event.setCancelled(true);
+            }
             return;
         }
         if (event.getClickedInventory() instanceof PlayerInventory && event.getSlot() >= 9 && event.getSlot() <= 35) {

@@ -10,6 +10,7 @@ public record PluginSettings(
         HomeSettings home,
         DungeonSettings dungeon,
         PortalSettings portals,
+        RoundTimingSettings roundTiming,
         EconomySettings economy,
         ShopSettings shop,
         GuiSettings gui,

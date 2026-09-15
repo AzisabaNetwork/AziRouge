@@ -196,19 +196,14 @@ public final class GameSessionManager {
         sessionWorldService.cleanupLeftoverWorldFoldersOnStartup();
     }
 
-    public CompletableFuture<GameSession> startSessionAsync(Player player, List<String> templatePatterns, String startPieceId) {
-        return startSessionAsync(player, templatePatterns, startPieceId, plugin.settings().sessions().defaultMaxPlayers());
+    public CompletableFuture<GameSession> startSessionAsync(Player player) {
+        return startSessionAsync(player, plugin.settings().sessions().defaultMaxPlayers());
     }
 
-    public CompletableFuture<GameSession> startSessionAsync(
-            Player player,
-            List<String> templatePatterns,
-            String startPieceId,
-            int requestedMaxPlayers
-    ) {
+    public CompletableFuture<GameSession> startSessionAsync(Player player, int requestedMaxPlayers) {
         CompletableFuture<GameSession> future = new CompletableFuture<>();
         if (!Bukkit.isPrimaryThread()) {
-            Bukkit.getScheduler().runTask(plugin, () -> startSessionAsync(player, templatePatterns, startPieceId, requestedMaxPlayers)
+            Bukkit.getScheduler().runTask(plugin, () -> startSessionAsync(player, requestedMaxPlayers)
                     .whenComplete((session, ex) -> {
                         if (ex != null) {
                             future.completeExceptionally(ex);
@@ -297,7 +292,7 @@ public final class GameSessionManager {
                         plugin.settings().economy().initialBalance()
                 );
                 session.setMaxDepth(plugin.settings().dungeon().defaultMaxDepth());
-                session.setSelectedPreset("default");
+                plugin.economyService().prepareDeliveryChest(session);
                 registerSession(session);
                 addPlayerToSession(session, player, player.getLocation());
 
@@ -414,18 +409,13 @@ public final class GameSessionManager {
         return session;
     }
 
-    public DungeonGenerationResult startRound(
-            GameSession session,
-            List<String> templatePatterns,
-            String startPieceId,
-            String preset,
-            int maxDepth
-    ) throws TemplateLoadException, SchematicPlacementException {
+    public DungeonGenerationResult startRound(GameSession session, int maxDepth)
+            throws TemplateLoadException, SchematicPlacementException {
         if (!Bukkit.isPrimaryThread()) {
             try {
                 return Bukkit.getScheduler().callSyncMethod(
                         plugin,
-                        () -> startRound(session, templatePatterns, startPieceId, preset, maxDepth)
+                        () -> startRound(session, maxDepth)
                 ).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
@@ -476,8 +466,8 @@ public final class GameSessionManager {
         try {
             DungeonGenerationResult result = plugin.dungeonGenerator().generate(
                     new GenerationExecutionRequest(
-                            List.copyOf(templatePatterns),
-                            startPieceId,
+                            plugin.settings().generation().templatePatterns(),
+                            plugin.settings().generation().startPieceId(),
                             session.world(),
                             origin,
                             ThreadLocalRandom.current().nextLong(),
@@ -488,12 +478,12 @@ public final class GameSessionManager {
 
             session.setPlacedPieces(result.placedPieces());
             session.setCurrentDungeonBounds(resolveDungeonBounds(result.placedPieces(), origin));
-            session.setSelectedPreset(preset);
             session.setMaxDepth(maxDepth);
             session.setActiveParticipants(new java.util.HashSet<>(participants));
             session.setRoundState(RoundState.ACTIVE);
             session.setState(SessionState.IN_ROUND);
             plugin.portalService().installRoundPortals(session);
+            plugin.roundTimeService().beginRound(session);
             announceRoundStart(session);
 
             for (UUID playerId : participants) {
@@ -538,43 +528,71 @@ public final class GameSessionManager {
         if (session.isBossBattleActive()) {
             throw fail("round.error.boss-not-end-command", "&cボス戦はラウンド終了コマンドでは終了できません。");
         }
-        if (!isInHomeArea(session, player.getLocation())) {
-            throw fail("round.error.home-area-only", "&cラウンド終了はホームエリア内だけで実行できます。");
+        throw fail("round.error.sleep-required", "&cラウンドを終えるにはホームへ帰還し、ベッドで休んでください。");
+    }
+
+    public RoundEndResult finishTimedRound(GameSession session, boolean midnight, Set<UUID> sleepingPlayers) {
+        if (!sessionsById.containsKey(session.sessionId())
+                || session.state() != SessionState.IN_ROUND
+                || session.roundState() != RoundState.ACTIVE
+                || session.isBossBattleActive()) {
+            return null;
         }
 
         session.setRoundState(RoundState.ENDING);
+        Set<UUID> sleepers = Set.copyOf(sleepingPlayers);
         for (UUID playerId : List.copyOf(session.alivePlayers())) {
             Player alivePlayer = Bukkit.getPlayer(playerId);
-            if (alivePlayer != null && session.currentDungeonBounds() != null
-                    && session.currentDungeonBounds().contains(
-                    alivePlayer.getLocation().getBlockX(),
-                    alivePlayer.getLocation().getBlockY(),
-                    alivePlayer.getLocation().getBlockZ())) {
+            boolean atHome = alivePlayer != null && isInHomeArea(session, alivePlayer.getLocation());
+            boolean missedReturn = !atHome;
+            boolean awakeAtMidnight = midnight && !sleepers.contains(playerId);
+            if (missedReturn || awakeAtMidnight) {
                 session.markDead(playerId);
+                session.markPendingNextRound(playerId);
+                if (alivePlayer != null) {
+                    sendMessage(alivePlayer, m(
+                            awakeAtMidnight ? "round.midnight-out" : "round.away-out",
+                            awakeAtMidnight
+                                    ? "&c深夜までに眠れなかったため、このラウンドは死亡扱いです。"
+                                    : "&c帰還できなかったため、このラウンドは死亡扱いです。"
+                    ));
+                }
             }
         }
-        EconomyService.SellResult sellResult = plugin.economyService().sellInventoryLoot(session);
+        boolean allPlayersOut = session.alivePlayers().isEmpty();
+
+        closeOnlineMemberInventories(session);
+        EconomyService.SellResult delivery = plugin.economyService().sellDeliveryChestLoot(session);
+        EconomyService.QuotaResult quota = plugin.economyService().evaluateQuota(session, session.currentRound(), delivery);
+        RoundEndResult result = new RoundEndResult(delivery, quota);
+
         moveOnlineMembersHome(session);
         session.clearAlivePlayers();
-        EconomyService.MaintenancePaymentResult maintenanceResult =
-                plugin.economyService().chargeMaintenanceForRound(session, session.currentRound());
-        if (maintenanceResult.paid()) {
-            session.setRoundState(RoundState.ENDED);
-            session.setState(SessionState.BETWEEN_ROUNDS);
-        }
         plugin.portalService().clearRoundPortals(session);
-        RoundEndResult result = new RoundEndResult(sellResult, maintenanceResult);
+        plugin.roundTimeService().endRound(session);
+
+        boolean gameOver = allPlayersOut || quota.progress().gameOver();
+        session.setRoundState(RoundState.ENDED);
+        session.setState(gameOver ? SessionState.GAME_OVER : SessionState.BETWEEN_ROUNDS);
         announceRoundEnd(session, result);
-        if (!maintenanceResult.paid()) {
+
+        if (gameOver) {
             clearOnlineMemberInventories(session);
-            announceGameOver(session, m("game-over.reason.maintenance", "The session could not pay maintenance."));
+            String reason = allPlayersOut
+                    ? m("game-over.reason.all-out", "全員が脱落しました。")
+                    : m("game-over.reason.quota", "ノルマ未達が連続しました。");
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (sessionsById.containsKey(session.sessionId()) && session.state() == SessionState.GAME_OVER) {
+                    announceGameOver(session, reason);
+                }
+            }, 60L);
         }
         return result;
     }
 
     public record RoundEndResult(
             EconomyService.SellResult sellResult,
-            EconomyService.MaintenancePaymentResult maintenanceResult
+            EconomyService.QuotaResult quotaResult
     ) {
         public long totalAmount() {
             return sellResult.totalAmount();
@@ -584,21 +602,17 @@ public final class GameSessionManager {
             return sellResult.itemCount();
         }
 
-        public long maintenanceCost() {
-            return maintenanceResult.cost();
+        public long quota() {
+            return quotaResult.quota();
         }
 
-        public boolean maintenancePaid() {
-            return maintenanceResult.paid();
+        public boolean quotaAchieved() {
+            return quotaResult.achieved();
         }
-    }
 
-    public void selectDungeon(GameSession session, String preset, int maxDepth) {
-        if (session.state() == SessionState.CLOSING) {
-            throw fail("round.error.dungeon-while-closing", "&c終了処理中のセッションではダンジョンを選べません。");
+        public int remainingMisses() {
+            return quotaResult.progress().remainingMisses();
         }
-        session.setSelectedPreset(preset);
-        session.setMaxDepth(maxDepth);
     }
 
     public boolean endSession(GameSession session) {
@@ -625,6 +639,7 @@ public final class GameSessionManager {
 
         cancelMobTask(session);
         cancelIdleTimeout(session);
+        plugin.roundTimeService().endRound(session);
         plugin.journeyDisplayService().clearSession(session.sessionId());
         plugin.portalService().clearRoundPortals(session);
         plugin.bossBattleService().clearBossBattle(session);
@@ -989,6 +1004,9 @@ public final class GameSessionManager {
             if (player == null) {
                 continue;
             }
+            if (player.isSleeping()) {
+                player.wakeup(false);
+            }
             setRoundSurvival(player);
             if (player.isDead()) {
                 continue;
@@ -1006,6 +1024,7 @@ public final class GameSessionManager {
         moveOnlineMembersHome(session);
         clearOnlineMemberInventories(session);
         plugin.portalService().clearRoundPortals(session);
+        plugin.roundTimeService().endRound(session);
         if (session.isBossBattleActive()) {
             plugin.bossBattleService().clearBossBattle(session);
         }
@@ -1144,6 +1163,15 @@ public final class GameSessionManager {
         }
     }
 
+    private void closeOnlineMemberInventories(GameSession session) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                player.closeInventory();
+            }
+        }
+    }
+
     private void clearPlayerRuntimeSnapshots(UUID playerId) {
         playerAttributeSnapshots.remove(playerId);
         playerGameModeSnapshots.remove(playerId);
@@ -1159,22 +1187,55 @@ public final class GameSessionManager {
                 60,
                 15
         );
+        broadcastSessionMessage(session, m(
+                "round.quota-due",
+                "&e今回のノルマ: {quota} / 未達猶予: 残り {remaining}回",
+                "quota", plugin.economyService().quotaForRound(session.currentRound()),
+                "remaining", Math.max(0, plugin.settings().economy().quota().maxConsecutiveMisses()
+                        - session.consecutiveQuotaMisses())
+        ));
     }
 
     private void announceRoundEnd(GameSession session, RoundEndResult result) {
-        String title = result.maintenancePaid()
-                ? m("round.title.complete", "&aRound Complete")
-                : m("round.title.ended", "&cRound Ended");
-        String subtitle = m("round.subtitle.result", "&eSold {items} items / +{amount} / Maintenance {maintenance}",
-                "items", result.itemCount(), "amount", result.totalAmount(), "maintenance", result.maintenanceCost());
+        String title = result.quotaAchieved()
+                ? m("round.title.quota-achieved", "&aノルマ達成！")
+                : m("round.title.quota-missed", "&cノルマ到達ならず...");
+        String subtitle = m("round.subtitle.result", "&e納品 {items}個 / {amount} / ノルマ {quota}",
+                "items", result.itemCount(), "amount", result.totalAmount(), "quota", result.quota());
         broadcastTitle(session, title, subtitle, 10, 70, 20);
-        broadcastSessionMessage(session, m("round.ended-summary", "&aRound {round} ended. Sold items: {items} / Earned: {amount}",
-                "round", session.currentRound(), "items", result.itemCount(), "amount", result.totalAmount()));
-        if (result.maintenancePaid()) {
-            broadcastSessionMessage(session, m("round.maintenance-paid", "&ePaid maintenance {maintenance}. Shared balance: {balance}", "maintenance", result.maintenanceCost(), "balance", session.sharedBalance()));
-            broadcastSessionMessage(session, m("round.prepare-next", "&ePrepare at home, then start the next round when ready."));
+        broadcastSessionMessage(session, m(
+                "round.ended-summary",
+                "&eラウンド {round} 終了。納品 {items}個 / 価格 {amount} / ノルマ {quota} / 共有資金 {balance}",
+                "round", session.currentRound(),
+                "items", result.itemCount(),
+                "amount", result.totalAmount(),
+                "quota", result.quota(),
+                "balance", session.sharedBalance()
+        ));
+        if (result.quotaAchieved()) {
+            broadcastSessionMessage(session, m("round.quota-achieved", "&aノルマ達成！ 未達の連続回数はリセットされました。"));
         } else {
-            broadcastSessionMessage(session, m("round.maintenance-unpaid", "&cCould not pay maintenance {maintenance}. Shared balance: {balance}", "maintenance", result.maintenanceCost(), "balance", session.sharedBalance()));
+            broadcastSessionMessage(session, m(
+                    "round.quota-missed",
+                    "&cノルマ到達ならず... ゲームオーバーまで残り {remaining}回です。",
+                    "remaining", result.remainingMisses()
+            ));
+            int warningAt = plugin.settings().economy().quota().warningRemaining();
+            if (result.remainingMisses() > 0 && result.remainingMisses() <= warningAt) {
+                broadcastSessionMessage(session, m(
+                        "round.quota-warning",
+                        "&4警告: 次もノルマ未達ならゲームオーバーです！"
+                ));
+                for (UUID playerId : session.onlineMembers()) {
+                    Player player = Bukkit.getPlayer(playerId);
+                    if (player != null) {
+                        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_WITHER_SPAWN, 0.35F, 1.4F);
+                    }
+                }
+            }
+        }
+        if (session.state() == SessionState.BETWEEN_ROUNDS) {
+            broadcastSessionMessage(session, m("round.prepare-next", "&e翌朝です。出入口で次のラウンドの深さを選んでください。"));
         }
     }
 

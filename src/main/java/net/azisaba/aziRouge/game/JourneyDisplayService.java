@@ -2,6 +2,7 @@ package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.math.BlockBox;
+import net.azisaba.aziRouge.math.IntVector3;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
@@ -65,6 +66,21 @@ public final class JourneyDisplayService {
             BlockBox returnArea = plugin.portalService().returnArea(session);
             if (returnArea != null && session.state() == SessionState.IN_ROUND) {
                 mark(wanted, session.sessionId() + ":back", center(session, returnArea), Material.LANTERN, "return", "&a帰還！");
+            }
+            IntVector3 deliveryChest = plugin.economyService().deliveryChestPosition();
+            Location deliveryLocation = new Location(
+                    session.world(),
+                    deliveryChest.x() + 0.5D,
+                    deliveryChest.y() + 1.2D,
+                    deliveryChest.z() + 0.5D
+            );
+            mark(wanted, session.sessionId() + ":delivery", deliveryLocation,
+                    Material.CHEST, "delivery", "&6納品箱");
+            for (Player player : session.world().getPlayers()) {
+                if (session.isMember(player.getUniqueId())
+                        && player.getLocation().distanceSquared(deliveryLocation) < 16.0D) {
+                    showDeliveryHint(player);
+                }
             }
             for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
                 Location at = villager.getLocation();
@@ -133,11 +149,23 @@ public final class JourneyDisplayService {
         display.setViewRange((float) Math.clamp(plugin.getConfig().getDouble("journey.view-distance", 24), 4, 64) / 64F);
     }
 
-    public static void hintOnce(AziRouge plugin, Player player, String stage, String fallback) {
+    public static void hintOnce(AziRouge plugin, Player player, String stage, String fallback, Object... replacements) {
         NamespacedKey key = new NamespacedKey(plugin, "journey_" + stage);
         if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
-        player.sendActionBar(Component.text(plugin.messages().text("journey.hint." + stage, fallback)));
+        player.sendActionBar(Component.text(plugin.messages().format("journey.hint." + stage, fallback, replacements)));
         player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+    }
+
+    public void showDeliveryHint(Player player) {
+        hintOnce(plugin, player, "delivery",
+                "宝はインベントリに持っているだけでは納品されません。納品箱へ入れてください。");
+    }
+
+    public void showBedHint(Player player) {
+        hintOnce(plugin, player, "bed",
+                "生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。",
+                "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
+                "seconds", plugin.settings().roundTiming().sleepDelaySeconds());
     }
 
     private record Landmark(ItemDisplay icon, TextDisplay text) {

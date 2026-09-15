@@ -107,6 +107,14 @@ journey:
   # Height above the top of each entrance area; adjust to the home template.
   entrance-height: 1.2
   view-distance: 24
+round-timing:
+  # A Minecraft day is 24000 ticks. Rounds start at sunrise and end at midnight.
+  start-time-ticks: 0
+  deadline-time-ticks: 18000
+  sleep:
+    # Skip immediately at 100%; otherwise this percentage must sleep for wait-seconds.
+    minimum-percentage: 50
+    wait-seconds: 5
 portals:
   home-to-dungeon:
     area:
@@ -137,10 +145,18 @@ portals:
   cooldown-seconds: 3
 economy:
   initial-balance: 100
-  maintenance:
+  quota:
     base: 10
     per-round: 5
     multiplier: 1.0
+    # N: the game ends after this many consecutive quota misses.
+    max-consecutive-misses: 3
+    warning-remaining: 1
+    # A delivery chest is created here in every session world.
+    delivery-chest:
+      x: 2
+      y: 64
+      z: -4
   sell-prices:
     IRON_INGOT: 5
     GOLD_NUGGET: 1

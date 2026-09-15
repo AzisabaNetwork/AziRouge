@@ -30,16 +30,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 public final class AziRougeCommand implements TabExecutor {
     private static final String CONFIRM_FLAG = "--confirm";
-    private static final Map<String, TemplatePreset> TEMPLATE_PRESETS = Map.of(
-            "test", new TemplatePreset(List.of("templates/test.yml"), "root")
-    );
-
     private final AziRouge plugin;
 
     public AziRougeCommand(AziRouge plugin) {
@@ -53,7 +48,7 @@ public final class AziRougeCommand implements TabExecutor {
                 plugin.gameMenuService().openMenu(player);
                 return true;
             }
-            tell(sender, "commands.usage.root", "&e使い方: /{label} <start|end|session|round|dungeon|money|stats|generate|reload|debug|author>", "label", label);
+            tell(sender, "commands.usage.root", "&e使い方: /{label} <start|end|session|round|money|stats|generate|reload|debug|author>", "label", label);
             return true;
         }
 
@@ -63,7 +58,6 @@ public final class AziRougeCommand implements TabExecutor {
             case "menu" -> handleMenu(sender);
             case "session" -> handleSession(sender, Arrays.copyOfRange(args, 1, args.length));
             case "round" -> handleRound(sender, Arrays.copyOfRange(args, 1, args.length));
-            case "dungeon" -> handleDungeon(sender, Arrays.copyOfRange(args, 1, args.length));
             case "money" -> handleMoney(sender, Arrays.copyOfRange(args, 1, args.length));
             case "stats" -> handleStats(sender, Arrays.copyOfRange(args, 1, args.length));
             case "generate" -> handleGenerate(sender, Arrays.copyOfRange(args, 1, args.length));
@@ -80,24 +74,12 @@ public final class AziRougeCommand implements TabExecutor {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            return List.of("start", "end", "session", "round", "dungeon", "money", "stats", "generate", "reload", "debug", "author").stream()
+            return List.of("start", "end", "session", "round", "money", "stats", "generate", "reload", "debug", "author").stream()
                     .filter(option -> option.startsWith(args[0].toLowerCase(Locale.ROOT)))
                     .toList();
         }
-        if (args.length == 2 && "start".equalsIgnoreCase(args[0])) {
-            return templatePresetNames().stream()
-                    .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
         if (args.length >= 2 && "generate".equalsIgnoreCase(args[0])) {
-            if (args[args.length - 1].startsWith("--preset=")) {
-                String prefix = args[args.length - 1].substring("--preset=".length()).toLowerCase(Locale.ROOT);
-                return templatePresetNames().stream()
-                        .map(name -> "--preset=" + name)
-                        .filter(option -> option.substring("--preset=".length()).startsWith(prefix))
-                        .toList();
-            }
-            List<String> options = List.of("--preset=", "--patterns=", "--start=", "--world=", "--x=", "--y=", "--z=", "--seed=", "--depth=");
+            List<String> options = List.of("--patterns=", "--start=", "--world=", "--x=", "--y=", "--z=", "--seed=", "--depth=");
             return options.stream().filter(option -> option.startsWith(args[args.length - 1])).toList();
         }
         if (args.length == 2 && "debug".equalsIgnoreCase(args[0])) {
@@ -110,16 +92,6 @@ public final class AziRougeCommand implements TabExecutor {
         }
         if (args.length == 2 && "round".equalsIgnoreCase(args[0])) {
             return List.of("start", "end").stream()
-                    .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
-        if (args.length == 3 && "round".equalsIgnoreCase(args[0]) && "start".equalsIgnoreCase(args[1])) {
-            return templatePresetNames().stream()
-                    .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
-        if (args.length == 2 && "dungeon".equalsIgnoreCase(args[0])) {
-            return List.of("select").stream()
                     .filter(option -> option.startsWith(args[1].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -139,11 +111,6 @@ public final class AziRougeCommand implements TabExecutor {
                 && ("set".equalsIgnoreCase(args[1]) || "add".equalsIgnoreCase(args[1]))) {
             return plugin.gameSessionManager().sessions().stream()
                     .map(GameSession::sessionId)
-                    .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
-                    .toList();
-        }
-        if (args.length == 3 && "dungeon".equalsIgnoreCase(args[0]) && "select".equalsIgnoreCase(args[1])) {
-            return templatePresetNames().stream()
                     .filter(option -> option.startsWith(args[2].toLowerCase(Locale.ROOT)))
                     .toList();
         }
@@ -191,42 +158,24 @@ public final class AziRougeCommand implements TabExecutor {
             tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
-        if (args.length > 1) {
-            tell(sender, "commands.usage.start", "&e使い方: /azirouge start [template-preset]");
-            tell(sender, "commands.presets", "&e利用可能なプリセット: {presets}", "presets", String.join(", ", templatePresetNames()));
+        if (args.length != 0) {
+            tell(sender, "commands.usage.start", "&e使い方: /azirouge start");
             return true;
         }
         if (plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).isPresent()) {
             tell(sender, "commands.already-in-session", "&cすでにセッションに参加しています。先に /azirouge end を実行してください。");
             return true;
         }
-        TemplateSelection templateSelection;
-        try {
-            templateSelection = resolveTemplateSelection(
-                    plugin.settings().generation(),
-                    args.length == 0 ? null : args[0],
-                    null,
-                    null
-            );
-        } catch (IllegalArgumentException ex) {
-            tellRaw(sender, ex.getMessage());
-            return true;
-        }
         tell(sender, "session.creating", "&eセッションを作成しています...");
-        plugin.gameSessionManager().startSessionAsync(
-                player,
-                templateSelection.templatePatterns(),
-                templateSelection.startPieceId()
-        ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
+        plugin.gameSessionManager().startSessionAsync(player).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ex != null) {
                 reportSessionCreationFailure(sender, "commands.start-failed", "&cセッション開始に失敗しました: {reason}", ex);
                 return;
             }
-            tell(sender, "session.started-detail", "&aセッションを開始しました。ワールド {world} / ID {session} / 資金 {money} / プリセット {preset}",
+            tell(sender, "session.started-detail", "&aセッションを開始しました。ワールド {world} / ID {session} / 資金 {money}",
                     "world", session.world().getName(),
                     "session", session.sessionId(),
-                    "money", session.sharedBalance(),
-                    "preset", templateSelection.presetName());
+                    "money", session.sharedBalance());
             sendCopyableSessionId(sender, session);
         }));
         return true;
@@ -270,11 +219,8 @@ public final class AziRougeCommand implements TabExecutor {
                 ? plugin.settings().sessions().defaultMaxPlayers()
                 : parseInt(args[0], plugin.settings().sessions().defaultMaxPlayers());
         tell(sender, "session.creating", "&eセッションを作成しています...");
-        plugin.gameSessionManager().startSessionAsync(player,
-                plugin.settings().generation().templatePatterns(),
-                plugin.settings().generation().startPieceId(),
-                maxPlayers
-        ).whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
+        plugin.gameSessionManager().startSessionAsync(player, maxPlayers)
+                .whenComplete((session, ex) -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ex != null) {
                 reportSessionCreationFailure(sender, "commands.create-failed", "&cセッション作成に失敗しました: {reason}", ex);
                 return;
@@ -358,7 +304,7 @@ public final class AziRougeCommand implements TabExecutor {
         tell(sender, "commands.active-sessions", "&e稼働中のセッション:");
         for (GameSession session : sessions) {
             tell(sender, "commands.session-line",
-                    "&e{session} 状態={state} ラウンド状態={roundState} 資金={money} 人数={online}/{members}/{max} ラウンド={round} 生存={alive} 脱落={dead} 待機={pending} プリセット={preset} 深さ={maxDepth} ワールド={world} 作成者={owner}",
+                    "&e{session} 状態={state} ラウンド状態={roundState} 資金={money} 人数={online}/{members}/{max} ラウンド={round} 生存={alive} 脱落={dead} 待機={pending} 深さ={maxDepth} ワールド={world} 作成者={owner}",
                     "session", session.sessionId(),
                     "state", plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name()),
                     "roundState", session.roundState(),
@@ -370,7 +316,6 @@ public final class AziRougeCommand implements TabExecutor {
                     "alive", session.alivePlayers().size(),
                     "dead", session.deadPlayers().size(),
                     "pending", session.pendingPlayersNextRound().size(),
-                    "preset", session.selectedPreset(),
                     "maxDepth", session.getMaxDepth(),
                     "world", session.world().getName(),
                     "owner", session.owner());
@@ -427,8 +372,8 @@ public final class AziRougeCommand implements TabExecutor {
             tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
             return true;
         }
-        if (args.length > 2) {
-            tell(sender, "commands.usage.round-start", "&e使い方: /azirouge round start [preset] [maxDepth]");
+        if (args.length > 1) {
+            tell(sender, "commands.usage.round-start", "&e使い方: /azirouge round start [maxDepth]");
             return true;
         }
 
@@ -438,28 +383,13 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
 
-        Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
+        Integer maxDepth = parsePositiveInt(args.length == 1 ? args[0] : null, plugin.settings().gui().defaultDepth());
         if (maxDepth == null) {
             tell(sender, "round.error.max-depth", "&c深さは1以上の整数にしてください。");
             return true;
         }
-        String presetName = args.length >= 1 && !args[0].isBlank()
-                ? args[0].toLowerCase(Locale.ROOT)
-                : session.selectedPreset();
         try {
-            TemplateSelection templateSelection = resolveTemplateSelection(
-                    plugin.settings().generation(),
-                    presetName,
-                    null,
-                    null
-            );
-            DungeonGenerationResult result = plugin.gameSessionManager().startRound(
-                    session,
-                    templateSelection.templatePatterns(),
-                    templateSelection.startPieceId(),
-                    templateSelection.presetName(),
-                    maxDepth
-            );
+            DungeonGenerationResult result = plugin.gameSessionManager().startRound(session, maxDepth);
             tell(sender, "journey.started", "&7探索の支度が整いました。ラウンド {round} / 深さ {depth}",
                     "round", session.currentRound(), "depth", maxDepth);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
@@ -482,23 +412,7 @@ public final class AziRougeCommand implements TabExecutor {
             return true;
         }
         try {
-            var sellResult = plugin.gameSessionManager().endRound(player);
-            GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-            if (session == null) {
-                tell(sender, "round.ended-summary", "&aラウンド {round} 終了。売却数: {items} / 獲得: {amount}",
-                        "round", "",
-                        "items", sellResult.itemCount(),
-                        "amount", sellResult.totalAmount());
-            } else {
-                tell(sender, "round.ended-detail",
-                        "&aラウンド {round} を終了しました。売却 {items}個 / 獲得 {amount} / 維持費 {maintenance} / 支払い {paid} / 残高 {balance}",
-                        "round", session.currentRound(),
-                        "items", sellResult.itemCount(),
-                        "amount", sellResult.totalAmount(),
-                        "maintenance", sellResult.maintenanceCost(),
-                        "paid", sellResult.maintenancePaid(),
-                        "balance", session.sharedBalance());
-            }
+            plugin.gameSessionManager().endRound(player);
         } catch (IllegalStateException ex) {
             tellRaw(sender, ex.getMessage());
         }
@@ -521,15 +435,15 @@ public final class AziRougeCommand implements TabExecutor {
                 tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
                 return true;
             }
-            int maintenanceRound = session.state() == net.azisaba.aziRouge.game.SessionState.IN_ROUND
+            int quotaRound = session.state() == net.azisaba.aziRouge.game.SessionState.IN_ROUND
                     ? session.currentRound()
                     : session.currentRound() + 1;
-            long nextMaintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
-            tell(sender, "commands.money-status", "&eセッション {session} 資金={money} 維持費ラウンド={round} 維持費={maintenance}",
+            long nextQuota = plugin.economyService().quotaForRound(quotaRound);
+            tell(sender, "commands.money-status", "&eセッション {session} 資金={money} ノルマラウンド={round} ノルマ={quota}",
                     "session", session.sessionId(),
                     "money", session.sharedBalance(),
-                    "round", maintenanceRound,
-                    "maintenance", nextMaintenance);
+                    "round", quotaRound,
+                    "quota", nextQuota);
             return true;
         }
 
@@ -562,18 +476,6 @@ public final class AziRougeCommand implements TabExecutor {
                     "money", session.sharedBalance());
         }
         return true;
-    }
-
-    private boolean handleDungeon(CommandSender sender, String[] args) {
-        if (args.length == 0) {
-            tell(sender, "commands.usage.dungeon", "&e使い方: /azirouge dungeon select <preset> [maxDepth]");
-            return true;
-        }
-        if (!"select".equalsIgnoreCase(args[0])) {
-            tell(sender, "commands.unknown.dungeon", "&c不明なダンジョンサブコマンドです: {subcommand}", "subcommand", args[0]);
-            return true;
-        }
-        return handleDungeonSelect(sender, Arrays.copyOfRange(args, 1, args.length));
     }
 
     private boolean handleStats(CommandSender sender, String[] args) {
@@ -657,48 +559,6 @@ public final class AziRougeCommand implements TabExecutor {
         return String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds);
     }
 
-    private boolean handleDungeonSelect(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("azirouge.session")) {
-            tell(sender, "commands.permission.dungeon", "&cAziRougeのダンジョンを選ぶ権限がありません。");
-            return true;
-        }
-        if (!(sender instanceof Player player)) {
-            tell(sender, "commands.player-only", "&cこのコマンドはプレイヤーだけが実行できます。");
-            return true;
-        }
-        if (args.length < 1 || args.length > 2) {
-            tell(sender, "commands.usage.dungeon", "&e使い方: /azirouge dungeon select <preset> [maxDepth]");
-            return true;
-        }
-
-        GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
-        if (session == null) {
-            tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
-            return true;
-        }
-        Integer maxDepth = parsePositiveInt(args.length >= 2 ? args[1] : null, session.getMaxDepth());
-        if (maxDepth == null) {
-            tell(sender, "round.error.max-depth", "&c深さは1以上の整数にしてください。");
-            return true;
-        }
-        try {
-            TemplateSelection templateSelection = resolveTemplateSelection(
-                    plugin.settings().generation(),
-                    args[0],
-                    null,
-                    null
-            );
-            plugin.gameSessionManager().selectDungeon(session, templateSelection.presetName(), maxDepth);
-            tell(sender, "commands.dungeon-selected", "&aダンジョンプリセット {preset} / 深さ {depth} をセッション {session} に設定しました。",
-                    "preset", templateSelection.presetName(),
-                    "depth", maxDepth,
-                    "session", session.sessionId());
-        } catch (IllegalArgumentException | IllegalStateException ex) {
-            tellRaw(sender, ex.getMessage());
-        }
-        return true;
-    }
-
     private boolean handleEnd(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.end")) {
@@ -741,18 +601,10 @@ public final class AziRougeCommand implements TabExecutor {
                 .filter(text -> !text.isEmpty())
                 .collect(Collectors.toCollection(ArrayList::new))
                 : null;
-        TemplateSelection templateSelection;
-        try {
-            templateSelection = resolveTemplateSelection(
-                    defaults,
-                    options.get("preset"),
-                    overriddenPatterns,
-                    options.get("start")
-            );
-        } catch (IllegalArgumentException ex) {
-            tellRaw(sender, ex.getMessage());
-            return true;
-        }
+        List<String> templatePatterns = overriddenPatterns == null || overriddenPatterns.isEmpty()
+                ? defaults.templatePatterns()
+                : List.copyOf(overriddenPatterns);
+        String startPieceId = options.getOrDefault("start", defaults.startPieceId());
 
         String worldName = options.getOrDefault("world", defaults.worldName());
         World world = Bukkit.getWorld(worldName);
@@ -782,8 +634,8 @@ public final class AziRougeCommand implements TabExecutor {
         try {
             DungeonGenerationResult result = plugin.dungeonGenerator().generate(
                     new GenerationExecutionRequest(
-                            templateSelection.templatePatterns(),
-                            templateSelection.startPieceId(),
+                            templatePatterns,
+                            startPieceId,
                             world,
                             origin,
                             seed,
@@ -791,14 +643,13 @@ public final class AziRougeCommand implements TabExecutor {
                     ),
                     plugin.settings()
             );
-            tell(sender, "commands.generated", "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 敵予約={enemies} 深さ={depth} プリセット={preset}",
+            tell(sender, "commands.generated", "&aダンジョンを生成しました。seed={seed} ピース={pieces}/{target} 接続={connections} 敵予約={enemies} 深さ={depth}",
                     "seed", result.seed(),
                     "pieces", result.placedPieceCount(),
                     "target", result.targetPieceCount(),
                     "connections", result.connectionCount(),
                     "enemies", result.enemyReservations().size(),
-                    "depth", depthOverride == null ? defaults.maxDepth() : depthOverride,
-                    "preset", templateSelection.presetName());
+                    "depth", depthOverride == null ? defaults.maxDepth() : depthOverride);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             tell(sender, "commands.generate-failed", "&c生成に失敗しました: {reason}", "reason", ex.getMessage());
             plugin.getLogger().warning("Generation failed: " + ex.getMessage());
@@ -1054,49 +905,6 @@ public final class AziRougeCommand implements TabExecutor {
         return current;
     }
 
-    private TemplateSelection resolveTemplateSelection(
-            GenerationSettings defaults,
-            String presetName,
-            List<String> overriddenPatterns,
-            String overriddenStart
-    ) {
-        String normalizedPreset = presetName == null || presetName.isBlank()
-                ? "default"
-                : presetName.toLowerCase(Locale.ROOT);
-        List<String> patterns = defaults.templatePatterns();
-        String startPieceId = defaults.startPieceId();
-
-        if (!"default".equals(normalizedPreset)) {
-            TemplatePreset preset = TEMPLATE_PRESETS.get(normalizedPreset);
-            if (preset == null) {
-                throw new IllegalArgumentException(plugin.messages().format(
-                        "commands.unknown-preset",
-                        "&c不明なテンプレートプリセットです: {preset}。利用可能: {presets}",
-                        "preset", presetName,
-                        "presets", String.join(", ", templatePresetNames())
-                ));
-            }
-            patterns = preset.templatePatterns();
-            startPieceId = preset.startPieceId();
-        }
-
-        if (overriddenPatterns != null && !overriddenPatterns.isEmpty()) {
-            patterns = List.copyOf(overriddenPatterns);
-        }
-        if (overriddenStart != null && !overriddenStart.isBlank()) {
-            startPieceId = overriddenStart;
-        }
-
-        return new TemplateSelection(List.copyOf(patterns), startPieceId, normalizedPreset);
-    }
-
-    private List<String> templatePresetNames() {
-        List<String> names = new ArrayList<>();
-        names.add("default");
-        names.addAll(TEMPLATE_PRESETS.keySet().stream().sorted().toList());
-        return names;
-    }
-
     private String format(IntVector3 vector) {
         return vector.x() + "," + vector.y() + "," + vector.z();
     }
@@ -1105,13 +913,4 @@ public final class AziRougeCommand implements TabExecutor {
         return format(box.min()) + "->" + format(box.max());
     }
 
-    private record TemplatePreset(List<String> templatePatterns, String startPieceId) {
-        private TemplatePreset {
-            Objects.requireNonNull(templatePatterns, "templatePatterns");
-            Objects.requireNonNull(startPieceId, "startPieceId");
-        }
-    }
-
-    private record TemplateSelection(List<String> templatePatterns, String startPieceId, String presetName) {
-    }
 }

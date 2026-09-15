@@ -1,13 +1,16 @@
 package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
-import net.azisaba.aziRouge.config.EconomyMaintenanceSettings;
+import net.azisaba.aziRouge.config.EconomyQuotaSettings;
+import net.azisaba.aziRouge.math.IntVector3;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
+import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.Map;
-import java.util.UUID;
-import java.nio.charset.StandardCharsets;
 
 public final class EconomyService {
     private final AziRouge plugin;
@@ -16,60 +19,120 @@ public final class EconomyService {
         this.plugin = plugin;
     }
 
-    public long maintenanceCostForRound(int roundNumber) {
-        EconomyMaintenanceSettings maintenance = plugin.settings().economy().maintenance();
-        double rawCost = (maintenance.base() + maintenance.perRound() * (double) Math.max(1, roundNumber))
-                * maintenance.multiplier();
-        if (rawCost <= 0.0D) {
+    public long quotaForRound(int roundNumber) {
+        EconomyQuotaSettings quota = plugin.settings().economy().quota();
+        double rawQuota = (quota.base() + quota.perRound() * (double) Math.max(1, roundNumber))
+                * quota.multiplier();
+        if (rawQuota <= 0.0D) {
             return 0L;
         }
-        return (long) Math.ceil(rawCost);
+        return (long) Math.ceil(rawQuota);
     }
 
-    public MaintenancePaymentResult chargeMaintenanceForRound(GameSession session, int roundNumber) {
-        long cost = maintenanceCostForRound(roundNumber);
-        if (session.withdrawSharedBalance(cost)) {
-            return new MaintenancePaymentResult(cost, true);
+    public void prepareDeliveryChest(GameSession session) {
+        ensureDeliveryChest(session, true);
+    }
+
+    private void ensureDeliveryChest(GameSession session, boolean clear) {
+        Block block = deliveryChestBlock(session);
+        if (!(block.getState() instanceof Chest)) {
+            if (!block.getType().isAir()) {
+                plugin.getLogger().warning("Replacing " + block.getType() + " at configured delivery chest location in "
+                        + session.world().getName() + ".");
+            }
+            block.setType(Material.CHEST, false);
         }
-        session.clearRoundPlayers();
-        session.setRoundState(RoundState.ENDED);
-        session.setState(SessionState.GAME_OVER);
-        plugin.getLogger().info("Session " + session.sessionId()
-                + " cannot pay round " + roundNumber
-                + " maintenance cost " + cost
-                + " (balance=" + session.sharedBalance() + "). Game over.");
-        return new MaintenancePaymentResult(cost, false);
+        Chest chest = requireDeliveryChest(session);
+        if (clear) {
+            chest.getBlockInventory().clear();
+        }
+        chest.customName(Component.text(plugin.messages().text("delivery-chest.name", "納品箱")));
+        chest.update(true, false);
     }
 
-    public SellResult sellInventoryLoot(GameSession session) {
+    public SellResult sellDeliveryChestLoot(GameSession session) {
         Map<Material, Long> prices = plugin.settings().economy().sellPrices();
         if (prices.isEmpty()) {
             return new SellResult(0L, 0);
         }
 
+        ensureDeliveryChest(session, false);
+        Inventory inventory = requireDeliveryChest(session).getBlockInventory();
+        SellResult result = pricedContents(inventory, prices, true);
+        if (result.totalAmount() > 0L) {
+            session.addSharedBalance(result.totalAmount());
+        }
+        return result;
+    }
+
+    public long deliveryValue(GameSession session) {
+        if (!(deliveryChestBlock(session).getState() instanceof Chest chest)) {
+            return 0L;
+        }
+        return pricedContents(chest.getBlockInventory(), plugin.settings().economy().sellPrices(), false).totalAmount();
+    }
+
+    public QuotaResult evaluateQuota(GameSession session, int roundNumber, SellResult delivery) {
+        long quota = quotaForRound(roundNumber);
+        boolean achieved = delivery.totalAmount() >= quota;
+        EconomyQuotaSettings settings = plugin.settings().economy().quota();
+        QuotaProgress progress = QuotaProgress.afterRound(
+                session.consecutiveQuotaMisses(),
+                achieved,
+                settings.maxConsecutiveMisses()
+        );
+        session.setConsecutiveQuotaMisses(progress.consecutiveMisses());
+        return new QuotaResult(quota, achieved, progress);
+    }
+
+    public IntVector3 deliveryChestPosition() {
+        return plugin.settings().economy().quota().deliveryChest();
+    }
+
+    public boolean isDeliveryChest(GameSession session, Block block) {
+        IntVector3 position = deliveryChestPosition();
+        return block.getWorld().getUID().equals(session.world().getUID())
+                && block.getX() == position.x()
+                && block.getY() == position.y()
+                && block.getZ() == position.z();
+    }
+
+    private Block deliveryChestBlock(GameSession session) {
+        IntVector3 position = deliveryChestPosition();
+        if (!session.homeArea().contains(position.x(), position.y(), position.z())) {
+            throw new IllegalStateException("economy.quota.delivery-chest must be inside home.area");
+        }
+        return session.world().getBlockAt(position.x(), position.y(), position.z());
+    }
+
+    private Chest requireDeliveryChest(GameSession session) {
+        if (deliveryChestBlock(session).getState() instanceof Chest chest) {
+            return chest;
+        }
+        throw new IllegalStateException("Configured delivery chest is missing in session " + session.sessionId());
+    }
+
+    private SellResult pricedContents(Inventory inventory, Map<Material, Long> prices, boolean remove) {
+        ItemStack[] contents = inventory.getStorageContents();
         long totalAmount = 0L;
         int totalItems = 0;
-        for (UUID playerId : session.onlineMembers()) {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
+        for (int index = 0; index < contents.length; index++) {
+            ItemStack item = contents[index];
+            if (item == null || item.getType().isAir()) {
                 continue;
             }
-            PlayerInventorySupport.SaleResult playerResult =
-                    PlayerInventorySupport.sellPricedStorageContents(player.getInventory(), prices);
-            if (playerResult.totalAmount() > 0L) {
-                plugin.statisticsService().recordSale(
-                        session.runId(),
-                        player,
-                        playerResult.totalAmount(),
-                        saleEventId(session, playerId)
-                );
+            Long unitPrice = prices.get(item.getType());
+            if (unitPrice == null) {
+                continue;
             }
-            totalAmount += playerResult.totalAmount();
-            totalItems += playerResult.itemCount();
+            totalAmount += unitPrice * item.getAmount();
+            totalItems += item.getAmount();
+            if (remove) {
+                contents[index] = null;
+            }
         }
-
-        if (totalAmount > 0L) {
-            session.addSharedBalance(totalAmount);
+        if (remove) {
+            inventory.setStorageContents(contents);
         }
         return new SellResult(totalAmount, totalItems);
     }
@@ -77,11 +140,6 @@ public final class EconomyService {
     public record SellResult(long totalAmount, int itemCount) {
     }
 
-    public record MaintenancePaymentResult(long cost, boolean paid) {
-    }
-
-    private UUID saleEventId(GameSession session, UUID playerId) {
-        String source = session.runId() + ":sale:" + session.currentRound() + ":" + playerId;
-        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8));
+    public record QuotaResult(long quota, boolean achieved, QuotaProgress progress) {
     }
 }

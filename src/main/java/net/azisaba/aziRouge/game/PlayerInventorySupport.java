@@ -1,10 +1,7 @@
 package net.azisaba.aziRouge.game;
 
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-
-import java.util.Map;
 
 public final class PlayerInventorySupport {
     private PlayerInventorySupport() {
@@ -59,30 +56,4 @@ public final class PlayerInventorySupport {
         }
     }
 
-    static SaleResult sellPricedStorageContents(PlayerInventory inventory, Map<Material, Long> prices) {
-        ItemStack[] contents = inventory.getStorageContents();
-        long totalAmount = 0L;
-        int totalItems = 0;
-        for (int index = 0; index < contents.length; index++) {
-            ItemStack item = contents[index];
-            if (item == null || item.getType().isAir()) {
-                continue;
-            }
-
-            Long unitPrice = prices.get(item.getType());
-            if (unitPrice == null) {
-                continue;
-            }
-
-            int amount = item.getAmount();
-            totalAmount += unitPrice * amount;
-            totalItems += amount;
-            contents[index] = null;
-        }
-        inventory.setStorageContents(contents);
-        return new SaleResult(totalAmount, totalItems);
-    }
-
-    record SaleResult(long totalAmount, int itemCount) {
-    }
 }

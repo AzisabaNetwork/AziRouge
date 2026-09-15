@@ -153,7 +153,10 @@ public final class PortalService implements Listener {
             cooldownUntilMillis.put(player.getUniqueId(), now + plugin.settings().portals().cooldownSeconds() * 1000L);
             player.playSound(player.getLocation(), enteredDungeon ? Sound.BLOCK_AMETHYST_BLOCK_CHIME : Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.35F, 1.2F);
             JourneyDisplayService.hintOnce(plugin, player, enteredDungeon ? "explore" : "return",
-                    enteredDungeon ? "宝を探そう。帰り道も忘れずに。" : "おかえり。仲間が揃ったら戦利品を精算しよう。");
+                    enteredDungeon ? "宝を探そう。帰り道も忘れずに。" : "おかえり。宝を納品箱へ入れて、ベッドで休もう。");
+            if (!enteredDungeon) {
+                plugin.journeyDisplayService().showDeliveryHint(player);
+            }
 
         } else {
             cooldownUntilMillis.put(player.getUniqueId(), now + 1000L);

@@ -170,8 +170,8 @@ public final class GameMenuService implements Listener {
         showDialog(
                 player,
                 message("journey.depart", "出発！"),
-                text(plugin.messages().format("journey.depart-description", "どこまで踏み込む？\n深さを選んで出発しよう。\n帰還後の維持費: {cost} / 共有資金: {balance}",
-                        "cost", plugin.economyService().maintenanceCostForRound(round + 1), "balance", session.sharedBalance())),
+                text(plugin.messages().format("journey.depart-description", "どこまで踏み込む？\n深さを選んで出発しよう。\n今回のノルマ: {quota} / 共有資金: {balance}",
+                        "quota", plugin.economyService().quotaForRound(round + 1), "balance", session.sharedBalance())),
                 List.of(depthInput()),
                 List.of(depart),
                 1
@@ -195,7 +195,7 @@ public final class GameMenuService implements Listener {
                     || !player.getWorld().equals(current.world()) || player.isDead()
                     || !current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())
                     || !departureOffers.remove(player.getUniqueId(), offer)) return;
-            player.performCommand("azirouge round start " + current.selectedPreset() + " " + depth + " --confirm");
+            player.performCommand("azirouge round start " + depth + " --confirm");
             if (current.state() == SessionState.IN_ROUND && current.currentRound() == round + 1) {
                 plugin.portalService().enterDungeon(player, current);
             }
@@ -205,30 +205,17 @@ public final class GameMenuService implements Listener {
     private void showEndRoundConfirmation(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session == null || session.state() != SessionState.IN_ROUND) return;
-        int round = session.currentRound();
-        Set<java.util.UUID> away = awayPlayers(session);
-        showConfirmationDialog(
+        showDialog(
                 player,
-                message("menu.end-round", "End Round"),
-                text(plugin.messages().format("journey.end-description", "戦利品を精算し、維持費を支払います。\nホーム外の仲間: {away}人\n探索中の仲間は探索を打ち切られ、死亡扱いになります。", "away", away.size())),
-                menuAction(label("menu.end-round", "End Round"), label("menu.tooltip.end-round", "End the current round."), current -> {
-                    GameSession actual = plugin.gameSessionManager().sessionForPlayer(current.getUniqueId()).orElse(null);
-                    if (actual != session || actual.currentRound() != round || actual.state() != SessionState.IN_ROUND) return;
-                    if (!away.equals(awayPlayers(actual))) {
-                        showEndRoundConfirmation(current);
-                        return;
-                    }
-                    current.performCommand("azirouge round end --confirm");
-                }),
-                closeAction()
+                message("menu.end-round", "ラウンド終了方法"),
+                text(plugin.messages().format("journey.end-description",
+                        "宝を納品箱へ入れ、ホームのベッドで休んでください。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。\n深夜までに眠れないプレイヤーは死亡扱いです。",
+                        "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
+                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
+                List.of(),
+                List.of(closeAction()),
+                1
         );
-    }
-
-    private Set<java.util.UUID> awayPlayers(GameSession session) {
-        return session.alivePlayers().stream().map(org.bukkit.Bukkit::getPlayer)
-                .filter(java.util.Objects::nonNull).filter(member -> !member.getWorld().equals(session.world())
-                        || !session.homeArea().contains(member.getLocation().getBlockX(), member.getLocation().getBlockY(), member.getLocation().getBlockZ()))
-                .map(Player::getUniqueId).collect(java.util.stream.Collectors.toSet());
     }
 
     private void showMenuDialog(Player player) {
@@ -251,7 +238,9 @@ public final class GameMenuService implements Listener {
 
     private void showJourneyHelp(Player player) {
         showDialog(player, message("journey.help", "旅の手引き"),
-                message("journey.help-body", "旅支度：商人を右クリック。資金は仲間と共有です。\n出発：出入口で深さを選び、探索へ。\n探索：宝を集め、帰還の目印へ。\n精算：仲間が帰ったら、ラウンドメニューから終了。戦利品を売却し、維持費を支払います。"),
+                text(plugin.messages().format("journey.help-body", "旅支度：商人を右クリック。資金は仲間と共有です。\n出発：ラウンドごとに出入口で深さを選び、探索へ。\n納品：宝はホームの納品箱へ。インベントリ内の宝は数えません。\n就寝：生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝です。深夜までに眠れないと死亡扱いになります。",
+                        "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
+                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
                 List.of(), List.of(menuAction(label("menu.back", "戻る"), "", this::showMenuDialog)), 1);
     }
 
@@ -284,7 +273,7 @@ public final class GameMenuService implements Listener {
             actions.add(menuAction(label("menu.start-round", "Start Round"), label("menu.tooltip.start-round-open", "Choose a depth and start the round."), this::showStartRoundDialog));
             actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
         } else if (session.state() == SessionState.IN_ROUND) {
-            actions.add(menuAction(label("menu.end-round", "End Round"), label("menu.tooltip.end-round-open", "Open the end round confirmation."), this::showEndRoundConfirmation));
+            actions.add(menuAction(label("menu.end-round", "ラウンド終了方法"), label("menu.tooltip.end-round-open", "納品と就寝の方法を確認します。"), this::showEndRoundConfirmation));
         } else if (session.state() == SessionState.GAME_OVER) {
             actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
             actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));

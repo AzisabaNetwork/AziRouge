@@ -82,18 +82,33 @@ public final class SessionScoreboardService {
 
         registerHiddenNameTagTeam(scoreboard, session);
 
-        int maintenanceRound = session.state() == SessionState.IN_ROUND
+        int quotaRound = session.state() == SessionState.IN_ROUND
                 ? session.currentRound()
                 : session.currentRound() + 1;
-        long maintenance = plugin.economyService().maintenanceCostForRound(maintenanceRound);
-        setLine(objective, ChatColor.DARK_GRAY.toString(), 8);
-        setLine(objective, label("state", "状態") + stateName(session), 7);
-        setLine(objective, label("round", "Round") + session.currentRound(), 6);
-        setLine(objective, label("money", "Money") + session.sharedBalance(), 5);
-        setLine(objective, label("maintenance", "Maintenance") + maintenance, 4);
-        setLine(objective, ChatColor.BLACK.toString(), 3);
-        setLine(objective, label("goal", "Goal") + goal(session, player), 2);
-        setLine(objective, label("next", "Next") + nextAction(session, player), 1);
+        long quota = plugin.economyService().quotaForRound(quotaRound);
+        long delivered = session.state() == SessionState.GAME_OVER || session.state() == SessionState.CLOSING
+                ? 0L
+                : plugin.economyService().deliveryValue(session);
+        int maxMisses = plugin.settings().economy().quota().maxConsecutiveMisses();
+        int remainingMisses = Math.max(0, maxMisses - session.consecutiveQuotaMisses());
+        setLine(objective, ChatColor.DARK_GRAY.toString(), 11);
+        setLine(objective, label("state", "状態") + stateName(session), 10);
+        setLine(objective, label("round", "Round") + session.currentRound(), 9);
+        setLine(objective, label("money", "Money") + session.sharedBalance(), 8);
+        setLine(objective, label("quota", "ノルマ") + delivered + " / " + quota, 7);
+        String remainingColor = remainingMisses <= plugin.settings().economy().quota().warningRemaining()
+                ? ChatColor.RED.toString()
+                : ChatColor.WHITE.toString();
+        setLine(objective, label("quota-remaining", "残回数") + remainingColor + remainingMisses + " / " + maxMisses, 6);
+        if (session.state() == SessionState.IN_ROUND && !session.isBossBattleActive()) {
+            setLine(objective, label("time-left", "残り時間") + formatTime(plugin.roundTimeService().remainingTicks(session)), 5);
+        } else {
+            setLine(objective, label("time-left", "残り時間") + "--:--", 5);
+        }
+        setLine(objective, ChatColor.BLACK.toString(), 4);
+        setLine(objective, label("goal", "Goal") + goal(session, player), 3);
+        setLine(objective, label("next", "Next") + nextAction(session, player), 2);
+        setLine(objective, ChatColor.DARK_AQUA.toString(), 1);
         setLine(objective, ChatColor.AQUA + SERVER_ADDRESS, 0);
 
         player.setScoreboard(scoreboard);
@@ -136,6 +151,11 @@ public final class SessionScoreboardService {
         return ChatColor.YELLOW + plugin.messages().text("scoreboard." + key, fallback) + ": " + ChatColor.WHITE;
     }
 
+    private String formatTime(long ticks) {
+        long totalSeconds = Math.max(0L, ticks) / 20L;
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", totalSeconds / 60L, totalSeconds % 60L);
+    }
+
     private String goal(GameSession session, Player player) {
         String suffix = objectiveSuffix(session, player);
         return plugin.messages().text("scoreboard.goals." + suffix, fallbackGoal(session, player));
@@ -169,7 +189,7 @@ public final class SessionScoreboardService {
         return switch (session.state()) {
             case LOBBY -> "Gather party";
             case BETWEEN_ROUNDS -> "Prepare";
-            case IN_ROUND -> isInHomeArea(session, player) ? "Bring loot back" : "Loot and return";
+            case IN_ROUND -> isInHomeArea(session, player) ? "Deliver and sleep" : "Loot and return";
             case GAME_OVER -> "Review result";
             case CLOSING -> "Closing";
         };
@@ -179,7 +199,7 @@ public final class SessionScoreboardService {
         return switch (session.state()) {
             case LOBBY -> "Start round";
             case BETWEEN_ROUNDS -> "Shop/start";
-            case IN_ROUND -> isInHomeArea(session, player) ? "Enter portal" : "Find portal";
+            case IN_ROUND -> isInHomeArea(session, player) ? "Chest, then bed" : "Find portal";
             case GAME_OVER -> "Leave session";
             case CLOSING -> "Wait";
         };

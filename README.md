@@ -222,9 +222,11 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 ## Home / Round
 
 - `home.spawn` が session 参加時の initial spawn、`home.return-spawn` が dungeon から帰還した時の spawn です。
-- `home.area` は round end コマンドの実行可能範囲として使います。
-- `/azirouge round start [preset] [maxDepth]` で round を開始します。難易度は `maxDepth` の整数値として扱います。round 開始時に player は dungeon へ即時 teleport されず、家側 portal から入ります。
-- `/azirouge round end` で round を終了します。家エリア内の player なら誰でも実行できます。
+- `home.area` は帰還済み判定と、就寝可能なベッドの範囲として使います。
+- `/azirouge round start [maxDepth]` で round を開始します。深さはラウンドごとに選択し、テンプレートは `generation` の設定を常に使用します。round 開始時に player は dungeon へ即時 teleport されず、家側 portal から入ります。
+- round は朝に始まり、Minecraft 時刻 18000（既定値、深夜）で強制終了します。時刻は `round-timing` で設定できます。
+- 生存者の `round-timing.sleep.minimum-percentage`% 以上が `wait-seconds` 秒眠るか、生存者全員が眠ると夜をスキップしてラウンドを終了します。昼でもホーム内のベッドで眠れます。
+- 深夜時点で眠っていない player と、ラウンド終了時にホームへ帰還していない player はそのラウンドの死亡扱いになります。
 - DungeonGenerator は変更せず、session world 内の家から離れた未使用領域に dungeon を生成します。
 - 生成位置は `dungeon.base-distance-from-home` と `dungeon.round-spacing` を使って round ごとに割り当てます。
 - default の `maxDepth` は `dungeon.default-max-depth` で設定します。
@@ -244,11 +246,13 @@ debug|scope=carve|event=applied|parentBox=100,65,100->102,67,102|childBox=100,65
 
 - 各 session は共有資金 `sharedBalance` を持ちます。
 - session 作成時に `economy.initial-balance` が付与されます。
-- `/azirouge money` で自分の session の共有資金と次 round 維持費を確認できます。
+- `/azirouge money` で自分の session の共有資金と対象 round のノルマを確認できます。
 - `/azirouge money set <sessionId> <amount>` で共有資金を設定します。
 - `/azirouge money add <sessionId> <amount>` で共有資金を加算します。
-- round end 時に online member の player inventory だけを換金します。
-- round end 時の換金後に `ceil((economy.maintenance.base + economy.maintenance.per-round * currentRound) * economy.maintenance.multiplier)` を徴収し、不足したら GAME_OVER にします。
+- `economy.quota.delivery-chest` に session ごとの納品箱を設置します。ラウンド終了時はこのチェスト内だけを換金し、player inventory 内のアイテムは納品に含めません。
+- ノルマは `ceil((economy.quota.base + economy.quota.per-round * currentRound) * economy.quota.multiplier)` です。納品価格がノルマ以上なら達成となり、連続未達回数をリセットします。
+- 未達が `economy.quota.max-consecutive-misses` 回連続すると GAME_OVER です。残回数はスコアボードに表示され、`warning-remaining` 以下では警告します。
+- 納品した宝の価格は共有資金へ加算されます。共有資金からノルマ額を差し引くことはありません。
 - 換金価格は `economy.sell-prices.<MATERIAL>` の Material name ベースです。
 
 ## Villager Shop GUI

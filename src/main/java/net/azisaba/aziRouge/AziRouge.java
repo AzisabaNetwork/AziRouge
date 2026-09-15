@@ -26,6 +26,7 @@ import net.azisaba.aziRouge.game.BossBattleService;
 import net.azisaba.aziRouge.game.SessionGameplayService;
 import net.azisaba.aziRouge.game.SessionPlayerHealthListener;
 import net.azisaba.aziRouge.game.SessionPlayerListener;
+import net.azisaba.aziRouge.game.RoundTimeService;
 import net.azisaba.aziRouge.game.SessionScoreboardService;
 import net.azisaba.aziRouge.game.PortalService;
 import net.azisaba.aziRouge.game.ShopService;
@@ -62,6 +63,7 @@ public final class AziRouge extends JavaPlugin {
     private ConfirmationService confirmationService;
     private SessionScoreboardService sessionScoreboardService;
     private SessionGameplayService sessionGameplayService;
+    private RoundTimeService roundTimeService;
     private MiningService miningService;
     private StatisticsService statisticsService;
     private LeaderboardDisplayService leaderboardDisplayService;
@@ -81,6 +83,7 @@ public final class AziRouge extends JavaPlugin {
     @Override
     public void onDisable() {
         if (journeyDisplayService != null) journeyDisplayService.shutdown();
+        if (roundTimeService != null) roundTimeService.shutdown();
         if (gameSessionManager != null) {
             gameSessionManager.shutdown();
         }
@@ -166,6 +169,9 @@ public final class AziRouge extends JavaPlugin {
         if (economyService == null) {
             this.economyService = new EconomyService(this);
         }
+        if (roundTimeService == null) {
+            this.roundTimeService = new RoundTimeService(this, gameSessionManager);
+        }
         if (portalService == null) {
             this.portalService = new PortalService(this, gameSessionManager);
         }
@@ -205,6 +211,7 @@ public final class AziRouge extends JavaPlugin {
         });
         sessionScoreboardService.start();
         sessionGameplayService.start();
+        roundTimeService.start();
         bossBattleService.start();
         portalService.reload();
         if (journeyDisplayService == null) journeyDisplayService = new net.azisaba.aziRouge.game.JourneyDisplayService(this);
@@ -252,6 +259,10 @@ public final class AziRouge extends JavaPlugin {
         return economyService;
     }
 
+    public RoundTimeService roundTimeService() {
+        return roundTimeService;
+    }
+
     public TemplateAuthoringService templateAuthoringService() {
         return templateAuthoringService;
     }
@@ -291,6 +302,7 @@ public final class AziRouge extends JavaPlugin {
         getServer().getPluginManager().registerEvents(shopService, this);
         getServer().getPluginManager().registerEvents(gameMenuService, this);
         getServer().getPluginManager().registerEvents(sessionGameplayService, this);
+        getServer().getPluginManager().registerEvents(roundTimeService, this);
         getServer().getPluginManager().registerEvents(miningService, this);
         getServer().getPluginManager().registerEvents(new GlobalJoinQuitListener(this), this);
     }
