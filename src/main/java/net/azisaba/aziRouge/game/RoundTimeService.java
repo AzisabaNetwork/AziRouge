@@ -26,6 +26,7 @@ import java.util.UUID;
 
 public final class RoundTimeService implements Listener {
     private static final long DAY_TICKS = 24_000L;
+    private static final long NIGHT_TICKS = 13_000L;
     private static final int CHECK_INTERVAL_TICKS = 10;
 
     private final AziRouge plugin;
@@ -103,11 +104,31 @@ public final class RoundTimeService implements Listener {
         }
 
         if (player.getWorld().isDayTime()) {
-            player.getWorld().setStorm(true);
-            player.getWorld().setThundering(true);
+            event.setUseBed(Event.Result.DENY);
+            Location bedLocation = event.getBed().getLocation();
+            plugin.confirmationService().request(
+                    player,
+                    plugin.messages().text("sleep.confirm-night", "時間を夜にして寝ますか？"),
+                    () -> sleepAtNight(player, session, bedLocation)
+            );
+            return;
         }
         event.setUseBed(Event.Result.ALLOW);
         plugin.journeyDisplayService().showBedHint(player);
+        scheduleSleep(player, session, event.getBed().getLocation());
+    }
+
+    private void sleepAtNight(Player player, GameSession session, Location bedLocation) {
+        if (activeSession(player) != session || !isInHomeArea(session, player.getLocation())) {
+            player.sendMessage(plugin.messages().prefixed("sleep.changed", "&7状況が変わったため、就寝をキャンセルしました。"));
+            return;
+        }
+        session.world().setTime(NIGHT_TICKS);
+        plugin.journeyDisplayService().showBedHint(player);
+        scheduleSleep(player, session, bedLocation);
+    }
+
+    private void scheduleSleep(Player player, GameSession session, Location bedLocation) {
         if (forcingSleep.contains(player.getUniqueId())) {
             return;
         }
@@ -117,7 +138,7 @@ public final class RoundTimeService implements Listener {
                 return;
             }
             try {
-                player.sleep(event.getBed().getLocation(), true);
+                player.sleep(bedLocation, true);
             } finally {
                 forcingSleep.remove(player.getUniqueId());
             }

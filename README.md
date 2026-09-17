@@ -216,7 +216,7 @@ Mob は `azirouge.mobs` の重みとスポーン間隔でダンジョン内に�
 - `home.area` は帰還済み判定と、就寝可能なベッドの範囲として使います。
 - `/azirouge round start [maxDepth]` で round を開始します。深さはラウンドごとに選択し、テンプレートは `generation` の設定を常に使用します。round 開始時に player は dungeon へ即時 teleport されず、家側 portal から入ります。
 - round は朝に始まり、Minecraft 時刻 18000（既定値、深夜）で強制終了します。時刻は `round-timing` で設定できます。
-- 生存者の `round-timing.sleep.minimum-percentage`% 以上が深い睡眠に達して `wait-seconds` 秒経つか、生存者全員が深く眠ると夜をスキップし、同じ深さ設定で次ラウンドを自動開始します。昼でもホーム内のベッドで眠れます。
+- 生存者の `round-timing.sleep.minimum-percentage`% 以上が深い睡眠に達して `wait-seconds` 秒経つか、生存者全員が深く眠ると夜をスキップし、同じ深さ設定で次ラウンドを自動開始します。昼は確認ダイアログで夜へ進めてから、ホーム内のベッドで眠れます。
 - 深夜時点で眠っていない player と、ラウンド終了時にホームへ帰還していない player はそのラウンドの死亡扱いになります。
 - DungeonGenerator は変更せず、session world 内の家から離れた未使用領域に dungeon を生成します。
 - 生成位置は `dungeon.base-distance-from-home` と `dungeon.round-spacing` を使って round ごとに割り当てます。

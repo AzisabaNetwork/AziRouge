@@ -148,6 +148,8 @@ delivery-chest:
 
 sleep:
   home-only: "&cホームへ帰還してからベッドに入ってください。"
+  confirm-night: "時間を夜にして寝ますか？"
+  changed: "&7状況が変わったため、就寝をキャンセルしました。"
   countdown: "&e就寝中 {sleeping}/{alive} - 翌朝まで {seconds}秒"
 
 portal:

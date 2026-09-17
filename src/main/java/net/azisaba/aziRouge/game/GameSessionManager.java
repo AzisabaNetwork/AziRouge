@@ -46,6 +46,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class GameSessionManager {
+    private static final long ROUND_RESULT_TITLE_TICKS = 100L;
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
@@ -586,14 +587,18 @@ public final class GameSessionManager {
                 if (sessionsById.containsKey(session.sessionId()) && session.state() == SessionState.GAME_OVER) {
                     announceGameOver(session, reason);
                 }
-            }, 60L);
+            }, ROUND_RESULT_TITLE_TICKS);
         } else {
-            startNextRound(session);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> startNextRound(session), ROUND_RESULT_TITLE_TICKS);
         }
         return result;
     }
 
     private void startNextRound(GameSession session) {
+        if (!sessionsById.containsKey(session.sessionId())
+                || !DepartureGuard.canStartRound(session.state(), session.roundState())) {
+            return;
+        }
         try {
             startRound(session, session.getMaxDepth());
         } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {

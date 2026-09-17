@@ -28,6 +28,10 @@ public final class ConfirmationService {
     }
 
     public void request(Player player, String description, Runnable onConfirm) {
+        PendingConfirmation current = confirmations.get(player.getUniqueId());
+        if (current != null && !current.isExpired()) {
+            return;
+        }
         long expiresAt = System.currentTimeMillis() + TIMEOUT_MILLIS;
         confirmations.put(player.getUniqueId(), new PendingConfirmation(onConfirm, expiresAt));
         Dialog dialog = Dialog.create(builder -> builder.empty()
