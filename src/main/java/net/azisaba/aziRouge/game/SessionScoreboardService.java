@@ -174,7 +174,6 @@ public final class SessionScoreboardService {
     private String objectiveSuffix(GameSession session, Player player) {
         return switch (session.state()) {
             case LOBBY -> "lobby";
-            case BETWEEN_ROUNDS -> "between-rounds";
             case IN_ROUND -> isInHomeArea(session, player) ? "in-round-home" : "in-round-dungeon";
             case GAME_OVER -> "game-over";
             case CLOSING -> "closing";
@@ -193,7 +192,6 @@ public final class SessionScoreboardService {
     private String fallbackGoal(GameSession session, Player player) {
         return switch (session.state()) {
             case LOBBY -> "Gather party";
-            case BETWEEN_ROUNDS -> "Prepare";
             case IN_ROUND -> isInHomeArea(session, player) ? "Deliver and sleep" : "Loot and return";
             case GAME_OVER -> "Review result";
             case CLOSING -> "Closing";
@@ -203,7 +201,6 @@ public final class SessionScoreboardService {
     private String fallbackNextAction(GameSession session, Player player) {
         return switch (session.state()) {
             case LOBBY -> "Start round";
-            case BETWEEN_ROUNDS -> "Shop/start";
             case IN_ROUND -> isInHomeArea(session, player) ? "Chest, then bed" : "Find portal";
             case GAME_OVER -> "Leave session";
             case CLOSING -> "Wait";

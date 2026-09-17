@@ -156,8 +156,8 @@ public final class BossBattleService implements Listener {
             player.sendMessage(plugin.messages().prefix() + m("boss.error.not-member", "&cYou are not a member of this session."));
             return;
         }
-        if (session.state() != SessionState.LOBBY && session.state() != SessionState.BETWEEN_ROUNDS) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.between-rounds-only", "&cBoss battles can only be challenged between rounds."));
+        if (session.state() != SessionState.LOBBY) {
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.lobby-only", "&cBoss battles can only be challenged in the lobby."));
             return;
         }
         if (session.currentRound() < battle.minRound()) {

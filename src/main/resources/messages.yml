@@ -66,20 +66,17 @@ scoreboard:
   next: "次"
   states:
     lobby: "ロビー"
-    between-rounds: "ラウンド間"
     in-round: "ラウンド中"
     game-over: "ゲームオーバー"
     closing: "終了中"
   goals:
     lobby: "仲間を集める"
-    between-rounds: "次の探索に備える"
     in-round-home: "宝を納品して眠る"
     in-round-dungeon: "宝を集めて帰還"
     game-over: "記録を確認"
     closing: "終了処理中"
   next-actions:
     lobby: "旅支度をして出発"
-    between-rounds: "旅支度をして出発"
     in-round-home: "納品箱からベッドへ"
     in-round-dungeon: "帰り道を忘れずに"
     game-over: "セッションを退出"
@@ -92,7 +89,7 @@ shop:
   not-enough-money: "&c共有資金が足りません。"
   inventory-full: "&cインベントリに空きがありません。"
   purchased: "&a{item} x{amount} を購入しました。価格 {price} / 残高 {balance}"
-  only-during-rounds: "&cショップはラウンド中またはラウンド間だけ使えます。"
+  only-in-game: "&cショップはロビーまたはラウンド中だけ使えます。"
   no-trades: "&cいまは購入できる商品がありません。"
   lore:
     price: "&e価格: {price}"
@@ -114,7 +111,7 @@ boss:
   member-revived: "&a{player} が蘇生されました。生存: {alive}"
   error:
     not-member: "&cあなたはこのセッションのメンバーではありません。"
-    between-rounds-only: "&cボス戦はラウンド間だけ挑戦できます。"
+    lobby-only: "&cボス戦はロビーでのみ挑戦できます。"
     min-round: "&cこのボスはラウンド {min} 以上で挑戦できます。現在: {round}"
     already-active: "&cボス戦はすでに進行中です。"
     no-online-members: "&cオンラインのセッションメンバーがいません。"
@@ -251,11 +248,10 @@ round:
   quota-achieved: "&aノルマ達成！ 未達の連続回数はリセットされました。"
   quota-missed: "&cノルマ到達ならず... ゲームオーバーまで残り {remaining}回です。"
   quota-warning: "&4警告: 次もノルマ未達ならゲームオーバーです！"
-  prepare-next: "&e翌朝です。出入口で次のラウンドの深さを選んでください。"
   midnight-out: "&c深夜までに眠れなかったため、このラウンドは死亡扱いです。"
   away-out: "&c帰還できなかったため、このラウンドは死亡扱いです。"
   error:
-    not-lobby-or-between: "&cラウンドはロビーまたはラウンド間だけ開始できます。"
+    not-ready: "&c現在はラウンドを開始できません。"
     no-online-members: "&cラウンドを開始できるオンラインメンバーがいません。"
     none-active: "&cこのセッションに進行中のラウンドはありません。"
     boss-not-end-command: "&cボス戦はラウンド終了コマンドでは終了できません。"
@@ -276,6 +272,7 @@ game-over:
   reason:
     quota: "ノルマ未達が連続しました。"
     all-out: "全員が脱落しました。"
+    round-start-failed: "次ラウンドの開始に失敗しました。"
 
 commands:
   player-only: "&cこのコマンドはプレイヤーだけが実行できます。"

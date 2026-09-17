@@ -269,7 +269,7 @@ public final class GameMenuService implements Listener {
         if (session == null) {
             actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
             actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
-        } else if (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS) {
+        } else if (session.state() == SessionState.LOBBY) {
             actions.add(menuAction(label("menu.start-round", "Start Round"), label("menu.tooltip.start-round-open", "Choose a depth and start the round."), this::showStartRoundDialog));
             actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
         } else if (session.state() == SessionState.IN_ROUND) {

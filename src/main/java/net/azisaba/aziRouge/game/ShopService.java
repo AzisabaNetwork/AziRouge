@@ -113,7 +113,7 @@ public final class ShopService implements Listener {
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.only-during-rounds", "&cショップはラウンド中またはラウンド間だけ使えます。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.only-in-game", "&cショップはロビーまたはラウンド中だけ使えます。"));
             return;
         }
 
@@ -178,7 +178,7 @@ public final class ShopService implements Listener {
         if (session.state() == SessionState.IN_ROUND) {
             return plugin.settings().shop().inRoundTrades();
         }
-        if (session.state() == SessionState.BETWEEN_ROUNDS || session.state() == SessionState.LOBBY) {
+        if (session.state() == SessionState.LOBBY) {
             return plugin.settings().shop().betweenRoundTrades();
         }
         return List.of();
@@ -189,7 +189,7 @@ public final class ShopService implements Listener {
             return false;
         }
         return switch (session.state()) {
-            case LOBBY, BETWEEN_ROUNDS -> session.roundState() != RoundState.PREPARING;
+            case LOBBY -> session.roundState() != RoundState.PREPARING;
             case IN_ROUND -> session.alivePlayers().contains(player.getUniqueId())
                     && player.getGameMode() != GameMode.SPECTATOR;
             default -> false;

@@ -115,7 +115,7 @@ public final class GameSessionManager {
             throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
         if (!DepartureGuard.canPrepare(session.state(), session.roundState())) {
-            throw fail("boss.error.between-rounds-only", "&cボス戦はラウンド間だけ挑戦できます。");
+            throw fail("boss.error.lobby-only", "&cボス戦はロビーでのみ挑戦できます。");
         }
         if (session.isBossBattleActive()) {
             throw fail("boss.error.already-active", "&cボス戦はすでに進行中です。");
@@ -187,7 +187,7 @@ public final class GameSessionManager {
         session.clearRoundPlayers();
         session.clearBossBattle();
         session.setRoundState(RoundState.ENDED);
-        session.setState(SessionState.BETWEEN_ROUNDS);
+        session.setState(SessionState.LOBBY);
         broadcastTitle(session, m("boss.title.defeated", "&6ボス撃破"), m("round.subtitle.returned-home", "&eホームに戻りました"), 10, 70, 20);
         broadcastSessionMessage(session, m("boss.cleared", "&aボス戦をクリアしました。準備ができたら次のラウンドを開始してください。"));
     }
@@ -278,6 +278,7 @@ public final class GameSessionManager {
                 throw fail("session.error.world-create-failed", "&cセッションワールド {world} を作成できませんでした。", "world", plan.worldName());
             }
             world.setAutoSave(false);
+            plugin.roundTimeService().prepareWorld(world);
 
             try {
                 GameSession session = new GameSession(
@@ -438,8 +439,8 @@ public final class GameSessionManager {
         if (!sessionsById.containsKey(session.sessionId())) {
             throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
-        if (!DepartureGuard.canPrepare(session.state(), session.roundState())) {
-            throw fail("round.error.not-lobby-or-between", "&cラウンドはロビーまたはラウンド間だけ開始できます。");
+        if (!DepartureGuard.canStartRound(session.state(), session.roundState())) {
+            throw fail("round.error.not-ready", "&c現在はラウンドを開始できません。");
         }
 
         List<UUID> participants = session.onlineMembers().stream()
@@ -458,7 +459,7 @@ public final class GameSessionManager {
         BlockBox previousBounds = session.currentDungeonBounds();
         List<PlacedPiece> previousPieces = session.placedPieces();
 
-        session.setState(SessionState.BETWEEN_ROUNDS);
+        session.setState(SessionState.IN_ROUND);
         session.setRoundState(RoundState.PREPARING);
         session.setCurrentRound(previousRound + 1);
         IntVector3 origin = allocateDungeonOrigin(session);
@@ -573,7 +574,7 @@ public final class GameSessionManager {
 
         boolean gameOver = allPlayersOut || quota.progress().gameOver();
         session.setRoundState(RoundState.ENDED);
-        session.setState(gameOver ? SessionState.GAME_OVER : SessionState.BETWEEN_ROUNDS);
+        session.setState(gameOver ? SessionState.GAME_OVER : SessionState.IN_ROUND);
         announceRoundEnd(session, result);
 
         if (gameOver) {
@@ -586,8 +587,21 @@ public final class GameSessionManager {
                     announceGameOver(session, reason);
                 }
             }, 60L);
+        } else {
+            startNextRound(session);
         }
         return result;
+    }
+
+    private void startNextRound(GameSession session) {
+        try {
+            startRound(session, session.getMaxDepth());
+        } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
+            session.setState(SessionState.GAME_OVER);
+            clearOnlineMemberInventories(session);
+            plugin.getLogger().severe("Automatic round start failed: " + ex.getMessage());
+            announceGameOver(session, m("game-over.reason.round-start-failed", "次ラウンドの開始に失敗しました。"));
+        }
     }
 
     public record RoundEndResult(
@@ -759,7 +773,7 @@ public final class GameSessionManager {
         if (session.state() == SessionState.IN_ROUND && !session.alivePlayers().contains(player.getUniqueId())) {
             session.markPendingNextRound(player.getUniqueId());
             makeRoundSpectatorAtHome(session, player);
-        } else if (session.state() == SessionState.LOBBY || session.state() == SessionState.BETWEEN_ROUNDS) {
+        } else if (session.state() == SessionState.LOBBY) {
             restoreGameMode(player);
         }
     }
@@ -1233,9 +1247,6 @@ public final class GameSessionManager {
                     }
                 }
             }
-        }
-        if (session.state() == SessionState.BETWEEN_ROUNDS) {
-            broadcastSessionMessage(session, m("round.prepare-next", "&e翌朝です。出入口で次のラウンドの深さを選んでください。"));
         }
     }
 

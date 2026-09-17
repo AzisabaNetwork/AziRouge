@@ -1,5 +1,6 @@
 package net.azisaba.aziRouge.game;
 
+import io.papermc.paper.event.player.PlayerDeepSleepEvent;
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.RoundTimingSettings;
 import net.kyori.adventure.text.Component;
@@ -12,6 +13,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerBedLeaveEvent;
 import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.world.TimeSkipEvent;
 import org.bukkit.scheduler.BukkitTask;
@@ -29,8 +31,8 @@ public final class RoundTimeService implements Listener {
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<String, Integer> majoritySleepingTicks = new HashMap<>();
-    private final Map<UUID, TransitionCause> requestedCauses = new HashMap<>();
     private final Set<String> scheduledTransitions = new HashSet<>();
+    private final Set<UUID> deeplySleepingPlayers = new HashSet<>();
     private final Set<UUID> forcingSleep = new HashSet<>();
     private BukkitTask task;
 
@@ -51,26 +53,32 @@ public final class RoundTimeService implements Listener {
             task = null;
         }
         majoritySleepingTicks.clear();
-        requestedCauses.clear();
         scheduledTransitions.clear();
+        deeplySleepingPlayers.clear();
         forcingSleep.clear();
     }
 
+    public void prepareWorld(World world) {
+        configureWorld(world);
+        world.setTime(plugin.settings().roundTiming().startTimeTicks());
+    }
+
     public void beginRound(GameSession session) {
-        configureWorld(session.world());
+        prepareWorld(session.world());
         majoritySleepingTicks.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
+        deeplySleepingPlayers.removeAll(session.members());
         for (Player player : session.world().getPlayers()) {
             if (player.isSleeping()) {
                 player.wakeup(false);
             }
         }
-        session.world().setTime(plugin.settings().roundTiming().startTimeTicks());
     }
 
     public void endRound(GameSession session) {
         majoritySleepingTicks.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
+        deeplySleepingPlayers.removeAll(session.members());
         forcingSleep.removeAll(session.members());
     }
 
@@ -117,6 +125,20 @@ public final class RoundTimeService implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDeepSleep(PlayerDeepSleepEvent event) {
+        Player player = event.getPlayer();
+        GameSession session = activeSession(player);
+        if (session != null && isInHomeArea(session, player.getLocation())) {
+            deeplySleepingPlayers.add(player.getUniqueId());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBedLeave(PlayerBedLeaveEvent event) {
+        deeplySleepingPlayers.remove(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTimeSkipped(TimeSkipEvent event) {
         if (event.getSkipReason() != TimeSkipEvent.SkipReason.NIGHT_SKIP) {
             return;
@@ -125,9 +147,8 @@ public final class RoundTimeService implements Listener {
         if (session == null || session.state() != SessionState.IN_ROUND || session.isBossBattleActive()) {
             return;
         }
-        TransitionCause cause = requestedCauses.getOrDefault(event.getWorld().getUID(), TransitionCause.SLEEP);
-        Set<UUID> sleepingPlayers = sleepingPlayers(session);
-        scheduleTransition(session, cause == TransitionCause.MIDNIGHT, sleepingPlayers);
+        event.getWorld().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
+        scheduleTransition(session, false, deeplySleepingPlayers(session));
     }
 
     private void tick() {
@@ -139,23 +160,24 @@ public final class RoundTimeService implements Listener {
             }
 
             if (remainingTicks(session) == 0L) {
-                requestMorning(session, TransitionCause.MIDNIGHT);
+                forceMorning(session);
                 continue;
             }
 
             int alive = session.alivePlayers().size();
-            int sleeping = sleepingPlayers(session).size();
+            int sleeping = deeplySleepingPlayers(session).size();
             if (alive <= 0 || sleeping <= 0) {
+                session.world().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
                 majoritySleepingTicks.remove(session.sessionId());
                 continue;
             }
             if (RoundSleepPolicy.allSleeping(alive, sleeping)) {
-                requestMorning(session, TransitionCause.SLEEP);
                 continue;
             }
 
             int requiredPercentage = plugin.settings().roundTiming().minimumSleepingPercentage();
             if (!RoundSleepPolicy.minimumSleeping(alive, sleeping, requiredPercentage)) {
+                session.world().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
                 majoritySleepingTicks.remove(session.sessionId());
                 continue;
             }
@@ -168,12 +190,12 @@ public final class RoundTimeService implements Listener {
             int remainingSeconds = Math.max(0, (waitTicks - elapsedTicks + 19) / 20);
             showSleepCountdown(session, sleeping, alive, remainingSeconds);
             if (elapsedTicks >= waitTicks) {
-                requestMorning(session, TransitionCause.SLEEP);
+                session.world().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, requiredPercentage);
             }
         }
     }
 
-    private void requestMorning(GameSession session, TransitionCause cause) {
+    private void forceMorning(GameSession session) {
         if (scheduledTransitions.contains(session.sessionId())) {
             return;
         }
@@ -184,20 +206,8 @@ public final class RoundTimeService implements Listener {
         if (skipAmount == 0L) {
             skipAmount = DAY_TICKS;
         }
-
-        TimeSkipEvent event = new TimeSkipEvent(world, TimeSkipEvent.SkipReason.NIGHT_SKIP, skipAmount);
-        requestedCauses.put(world.getUID(), cause);
-        try {
-            Bukkit.getPluginManager().callEvent(event);
-            if (!event.isCancelled()) {
-                world.setFullTime(world.getFullTime() + event.getSkipAmount());
-            } else if (cause == TransitionCause.MIDNIGHT) {
-                world.setTime(start);
-                scheduleTransition(session, true, sleepingPlayers(session));
-            }
-        } finally {
-            requestedCauses.remove(world.getUID());
-        }
+        world.setFullTime(world.getFullTime() + skipAmount);
+        scheduleTransition(session, true, deeplySleepingPlayers(session));
     }
 
     private void scheduleTransition(GameSession session, boolean midnight, Set<UUID> sleepingPlayers) {
@@ -226,11 +236,12 @@ public final class RoundTimeService implements Listener {
                 : null;
     }
 
-    private Set<UUID> sleepingPlayers(GameSession session) {
+    private Set<UUID> deeplySleepingPlayers(GameSession session) {
         Set<UUID> sleeping = new HashSet<>();
         for (UUID playerId : session.alivePlayers()) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isSleeping() && isInHomeArea(session, player.getLocation())) {
+            if (player != null && deeplySleepingPlayers.contains(playerId)
+                    && player.isDeeplySleeping() && isInHomeArea(session, player.getLocation())) {
                 sleeping.add(playerId);
             }
         }
@@ -264,15 +275,11 @@ public final class RoundTimeService implements Listener {
 
     private void configureWorld(World world) {
         world.setGameRule(GameRules.ADVANCE_TIME, true);
+        world.setGameRule(GameRules.ADVANCE_WEATHER, true);
         world.setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
     }
 
     private long elapsedSince(long start, long current) {
         return Math.floorMod(current - start, DAY_TICKS);
-    }
-
-    private enum TransitionCause {
-        SLEEP,
-        MIDNIGHT
     }
 }

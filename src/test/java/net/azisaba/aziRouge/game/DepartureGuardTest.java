@@ -5,9 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DepartureGuardTest {
     @Test
-    void onlyIdleHomePhasesMayStartAnotherRound() {
+    void onlyIdleLobbyMayBePreparedManually() {
         assertTrue(DepartureGuard.canPrepare(SessionState.LOBBY, RoundState.ENDED));
-        assertTrue(DepartureGuard.canPrepare(SessionState.BETWEEN_ROUNDS, RoundState.ENDED));
         for (SessionState state : SessionState.values()) {
             assertFalse(DepartureGuard.canPrepare(state, RoundState.PREPARING));
             assertFalse(DepartureGuard.canPrepare(state, RoundState.ENDING));
@@ -15,6 +14,13 @@ class DepartureGuardTest {
         for (SessionState state : new SessionState[]{SessionState.IN_ROUND, SessionState.GAME_OVER, SessionState.CLOSING}) {
             for (RoundState round : RoundState.values()) assertFalse(DepartureGuard.canPrepare(state, round));
         }
+    }
+
+    @Test
+    void anEndedRoundMayContinueAutomatically() {
+        assertTrue(DepartureGuard.canStartRound(SessionState.LOBBY, RoundState.ENDED));
+        assertTrue(DepartureGuard.canStartRound(SessionState.IN_ROUND, RoundState.ENDED));
+        assertFalse(DepartureGuard.canStartRound(SessionState.IN_ROUND, RoundState.ACTIVE));
     }
 
     @Test
