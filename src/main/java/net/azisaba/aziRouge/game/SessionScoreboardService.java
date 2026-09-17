@@ -100,11 +100,8 @@ public final class SessionScoreboardService {
                 ? ChatColor.RED.toString()
                 : ChatColor.WHITE.toString();
         setLine(objective, label("quota-remaining", "残回数") + remainingColor + remainingMisses + " / " + maxMisses, 6);
-        if (session.state() == SessionState.IN_ROUND && !session.isBossBattleActive()) {
-            setLine(objective, label("time-left", "残り時間") + formatTime(plugin.roundTimeService().remainingTicks(session)), 5);
-        } else {
-            setLine(objective, label("time-left", "残り時間") + "--:--", 5);
-        }
+        String time = allAlivePlayersInDungeon(session) ? "??:??" : RoundClock.format(session.world().getTime());
+        setLine(objective, label("time", "時刻") + time, 5);
         setLine(objective, ChatColor.BLACK.toString(), 4);
         setLine(objective, label("goal", "Goal") + goal(session, player), 3);
         setLine(objective, label("next", "Next") + nextAction(session, player), 2);
@@ -151,9 +148,17 @@ public final class SessionScoreboardService {
         return ChatColor.YELLOW + plugin.messages().text("scoreboard." + key, fallback) + ": " + ChatColor.WHITE;
     }
 
-    private String formatTime(long ticks) {
-        long totalSeconds = Math.max(0L, ticks) / 20L;
-        return String.format(java.util.Locale.ROOT, "%02d:%02d", totalSeconds / 60L, totalSeconds % 60L);
+    private boolean allAlivePlayersInDungeon(GameSession session) {
+        if (session.state() != SessionState.IN_ROUND || session.alivePlayers().isEmpty()) {
+            return false;
+        }
+        for (UUID playerId : session.alivePlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || isInHomeArea(session, player)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String goal(GameSession session, Player player) {

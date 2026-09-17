@@ -94,6 +94,10 @@ public final class RoundTimeService implements Listener {
             return;
         }
 
+        if (player.getWorld().isDayTime()) {
+            player.getWorld().setStorm(true);
+            player.getWorld().setThundering(true);
+        }
         event.setUseBed(Event.Result.ALLOW);
         plugin.journeyDisplayService().showBedHint(player);
         if (forcingSleep.contains(player.getUniqueId())) {

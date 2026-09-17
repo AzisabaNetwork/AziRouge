@@ -61,7 +61,7 @@ scoreboard:
   money: "資金"
   quota: "ノルマ"
   quota-remaining: "残回数"
-  time-left: "残り時間"
+  time: "時刻"
   goal: "目標"
   next: "次"
   states:
