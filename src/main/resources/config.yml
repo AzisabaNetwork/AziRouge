@@ -1,6 +1,6 @@
 generation:
   template-patterns:
-    - templates/*.yml
+    - templates/test.yml
   start-piece: root
   world: world
   origin:

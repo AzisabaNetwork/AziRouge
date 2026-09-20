@@ -28,6 +28,7 @@ import java.util.UUID;
 public final class RoundTimeService implements Listener {
     private static final long DAY_TICKS = 24_000L;
     private static final long NIGHT_TICKS = 13_000L;
+    private static final long SLEEP_DELAY_TICKS = 3L;
     private static final int CHECK_INTERVAL_TICKS = 10;
 
     private final AziRouge plugin;
@@ -145,7 +146,7 @@ public final class RoundTimeService implements Listener {
         if (forcingSleep.contains(player.getUniqueId())) {
             return;
         }
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (activeSession(player) != session || player.isSleeping()
                     || !forcingSleep.add(player.getUniqueId())) {
                 return;
@@ -155,7 +156,7 @@ public final class RoundTimeService implements Listener {
             } finally {
                 forcingSleep.remove(player.getUniqueId());
             }
-        });
+        }, SLEEP_DELAY_TICKS);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
