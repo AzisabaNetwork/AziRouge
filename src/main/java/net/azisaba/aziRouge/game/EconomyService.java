@@ -4,12 +4,15 @@ import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.EconomyQuotaSettings;
 import net.azisaba.aziRouge.math.IntVector3;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.List;
 import java.util.Map;
 
 public final class EconomyService {
@@ -72,6 +75,19 @@ public final class EconomyService {
         return pricedContents(chest.getBlockInventory(), plugin.settings().economy().sellPrices(), false).totalAmount();
     }
 
+    public ItemStack withValueLore(ItemStack source) {
+        ItemStack item = source.clone();
+        Long price = priceFor(plugin.settings().economy().sellPrices(), item.getType());
+        ItemMeta meta = item.getItemMeta();
+        if (price != null && meta != null) {
+            meta.lore(List.of(LegacyComponentSerializer.legacySection().deserialize(
+                    plugin.messages().format("treasure.sell-price", "&e価値: {price}", "price", price)
+            )));
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     public QuotaResult evaluateQuota(GameSession session, int roundNumber, SellResult delivery) {
         long quota = quotaForRound(roundNumber);
         boolean achieved = delivery.totalAmount() >= quota;
@@ -121,7 +137,7 @@ public final class EconomyService {
             if (item == null || item.getType().isAir()) {
                 continue;
             }
-            Long unitPrice = prices.get(item.getType());
+            Long unitPrice = priceFor(prices, item.getType());
             if (unitPrice == null) {
                 continue;
             }
@@ -135,6 +151,20 @@ public final class EconomyService {
             inventory.setStorageContents(contents);
         }
         return new SellResult(totalAmount, totalItems);
+    }
+
+    private Long priceFor(Map<Material, Long> prices, Material material) {
+        Long direct = prices.get(material);
+        if (direct != null) {
+            return direct;
+        }
+        return switch (material) {
+            case COAL, COAL_ORE -> prices.getOrDefault(Material.COAL, 1L);
+            case RAW_IRON, IRON_ORE -> prices.get(Material.IRON_INGOT);
+            case RAW_GOLD, GOLD_ORE -> prices.get(Material.GOLD_INGOT);
+            case DIAMOND_ORE -> prices.get(Material.DIAMOND);
+            default -> null;
+        };
     }
 
     public record SellResult(long totalAmount, int itemCount) {

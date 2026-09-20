@@ -161,7 +161,7 @@ public final class BossBattleService implements Listener {
             return;
         }
         if (session.currentRound() < battle.minRound()) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.min-round", "&cThis boss requires round {min} or higher. Current round: {round}", "min", battle.minRound(), "round", session.currentRound()));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.min-round", "&cこのボスは {min}日目以降に挑戦できます。現在: {round}日目", "min", battle.minRound(), "round", session.currentRound()));
             return;
         }
         if (session.isBossBattleActive()) {

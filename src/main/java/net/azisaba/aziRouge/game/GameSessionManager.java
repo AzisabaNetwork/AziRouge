@@ -16,7 +16,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
-import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -24,7 +23,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
 import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.scheduler.BukkitTask;
 import net.kyori.adventure.text.Component;
@@ -424,7 +422,7 @@ public final class GameSessionManager {
                 ).get();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
-                throw fail("round.error.interrupted", "&cラウンド開始が中断されました。");
+                throw fail("round.error.interrupted", "&c探索開始が中断されました。");
             } catch (ExecutionException ex) {
                 Throwable cause = ex.getCause();
                 if (cause instanceof TemplateLoadException templateLoadException) {
@@ -436,7 +434,7 @@ public final class GameSessionManager {
                 if (cause instanceof RuntimeException runtimeException) {
                     throw runtimeException;
                 }
-                throw fail("round.error.failed", "&cラウンド開始に失敗しました。");
+                throw fail("round.error.failed", "&c探索開始に失敗しました。");
             }
         }
 
@@ -444,14 +442,14 @@ public final class GameSessionManager {
             throw fail("session.error.inactive", "&cセッションはすでに終了しています。");
         }
         if (!DepartureGuard.canStartRound(session.state(), session.roundState())) {
-            throw fail("round.error.not-ready", "&c現在はラウンドを開始できません。");
+            throw fail("round.error.not-ready", "&c現在は探索を開始できません。");
         }
 
         List<UUID> participants = session.onlineMembers().stream()
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            throw fail("round.error.no-online-members", "&cラウンドを開始できるオンラインメンバーがいません。");
+            throw fail("round.error.no-online-members", "&c探索を開始できるオンラインメンバーがいません。");
         }
 
         restoreRoundInactivePlayersForNextRound(session);
@@ -528,12 +526,12 @@ public final class GameSessionManager {
         GameSession session = sessionForPlayer(player.getUniqueId())
                 .orElseThrow(() -> fail("session.error.not-in-session", "&cセッションに参加していません。"));
         if (session.state() != SessionState.IN_ROUND) {
-            throw fail("round.error.none-active", "&cこのセッションに進行中のラウンドはありません。");
+            throw fail("round.error.none-active", "&cこのセッションに進行中の探索はありません。");
         }
         if (session.isBossBattleActive()) {
-            throw fail("round.error.boss-not-end-command", "&cボス戦はラウンド終了コマンドでは終了できません。");
+            throw fail("round.error.boss-not-end-command", "&cボス戦は一日を終えるコマンドでは終了できません。");
         }
-        throw fail("round.error.sleep-required", "&cラウンドを終えるにはホームへ帰還し、ベッドで休んでください。");
+        throw fail("round.error.sleep-required", "&c一日を終えるにはホームへ帰還し、ベッドで休んでください。");
     }
 
     public RoundEndResult finishTimedRound(GameSession session, boolean midnight, Set<UUID> sleepingPlayers) {
@@ -608,7 +606,7 @@ public final class GameSessionManager {
             session.setState(SessionState.GAME_OVER);
             clearOnlineMemberInventories(session);
             plugin.getLogger().severe("Automatic round start failed: " + ex.getMessage());
-            announceGameOver(session, m("game-over.reason.round-start-failed", "次ラウンドの開始に失敗しました。"));
+            announceGameOver(session, m("game-over.reason.round-start-failed", "翌日の開始に失敗しました。"));
         }
     }
 
@@ -1237,11 +1235,10 @@ public final class GameSessionManager {
         ));
         if (result.quotaAchieved()) {
             broadcastVillagerMessage(session, m(
-                    "round.quota-achieved",
-                    "&a村人「よくやった！ 今日のノルマ達成だ！」"
+                    "round.quota-improved",
+                    "&a村人「よくやった！ 怒りが少し収まったぞ」"
             ), Sound.ENTITY_VILLAGER_CELEBRATE);
         } else {
-            showVillagerAnger(session);
             broadcastVillagerMessage(session, m(
                     "round.quota-missed-angry",
                     "&c村人「ノルマ未達だと！？ 次は必ず持ってこい！」 &7ゲームオーバーまで残り {remaining}回",
@@ -1259,15 +1256,6 @@ public final class GameSessionManager {
                         player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_WITHER_SPAWN, 0.35F, 1.4F);
                     }
                 }
-            }
-        }
-    }
-
-    private void showVillagerAnger(GameSession session) {
-        for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
-            Location location = villager.getLocation();
-            if (session.homeArea().contains(location.getBlockX(), location.getBlockY(), location.getBlockZ())) {
-                session.world().spawnParticle(Particle.ANGRY_VILLAGER, location.add(0.0D, 2.1D, 0.0D), 8, 0.35D, 0.2D, 0.35D, 0.0D);
             }
         }
     }

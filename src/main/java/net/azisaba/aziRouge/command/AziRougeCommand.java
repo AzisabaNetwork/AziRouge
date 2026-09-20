@@ -304,7 +304,7 @@ public final class AziRougeCommand implements TabExecutor {
         tell(sender, "commands.active-sessions", "&e稼働中のセッション:");
         for (GameSession session : sessions) {
             tell(sender, "commands.session-line",
-                    "&e{session} 状態={state} ラウンド状態={roundState} 資金={money} 人数={online}/{members}/{max} ラウンド={round} 生存={alive} 脱落={dead} 待機={pending} 深さ={maxDepth} ワールド={world} 作成者={owner}",
+                    "&e{session} 状態={state} 進行={roundState} 資金={money} 人数={online}/{members}/{max} 経過={round}日目 生存={alive} 脱落={dead} 待機={pending} 深さ={maxDepth} ワールド={world} 作成者={owner}",
                     "session", session.sessionId(),
                     "state", plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name()),
                     "roundState", session.roundState(),
@@ -356,7 +356,7 @@ public final class AziRougeCommand implements TabExecutor {
             case "start" -> handleRoundStart(sender, Arrays.copyOfRange(args, 1, args.length));
             case "end" -> handleRoundEnd(sender, Arrays.copyOfRange(args, 1, args.length));
             default -> {
-                tell(sender, "commands.unknown.round", "&c不明なラウンドサブコマンドです: {subcommand}", "subcommand", args[0]);
+                tell(sender, "commands.unknown.round", "&c不明な日程サブコマンドです: {subcommand}", "subcommand", args[0]);
                 yield true;
             }
         };
@@ -365,7 +365,7 @@ public final class AziRougeCommand implements TabExecutor {
     private boolean handleRoundStart(CommandSender sender, String[] args) {
         args = withoutConfirmFlag(args);
         if (!sender.hasPermission("azirouge.session")) {
-            tell(sender, "commands.permission.round", "&cAziRougeラウンドを操作する権限がありません。");
+            tell(sender, "commands.permission.round", "&cAziRougeの日程を操作する権限がありません。");
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -393,7 +393,7 @@ public final class AziRougeCommand implements TabExecutor {
             tell(sender, "journey.started", "&7探索の支度が整いました。{round}日目 / 深さ {depth}",
                     "round", session.currentRound(), "depth", maxDepth);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
-            tell(sender, "round.error.start-failed", "&cラウンド開始に失敗しました: {reason}", "reason", ex.getMessage());
+            tell(sender, "round.error.start-failed", "&c探索開始に失敗しました: {reason}", "reason", ex.getMessage());
             plugin.getLogger().warning("Round start failed: " + ex.getMessage());
         } catch (IllegalArgumentException | IllegalStateException ex) {
             tellRaw(sender, ex.getMessage());
@@ -439,7 +439,7 @@ public final class AziRougeCommand implements TabExecutor {
                     ? session.currentRound()
                     : session.currentRound() + 1;
             long nextQuota = plugin.economyService().quotaForRound(quotaRound);
-            tell(sender, "commands.money-status", "&eセッション {session} 資金={money} ノルマラウンド={round} ノルマ={quota}",
+            tell(sender, "commands.money-status", "&eセッション {session} 資金={money} 対象={round}日目 ノルマ={quota}",
                     "session", session.sessionId(),
                     "money", session.sharedBalance(),
                     "round", quotaRound,
@@ -530,7 +530,7 @@ public final class AziRougeCommand implements TabExecutor {
 
     private void sendStatistics(CommandSender sender, PlayerStatistics statistics) {
         tell(sender, "commands.stats-header", "&e統計: {player}", "player", statistics.playerName());
-        tell(sender, "commands.stats-rounds", "&e最高ラウンド={maxRound} / 到達合計={totalRounds} / セッション={sessions}",
+        tell(sender, "commands.stats-rounds", "&e最高到達={maxRound}日目 / 到達日数合計={totalRounds} / セッション={sessions}",
                 "maxRound", statistics.maxRound(),
                 "totalRounds", statistics.totalRoundsReached(),
                 "sessions", statistics.sessionsJoined());

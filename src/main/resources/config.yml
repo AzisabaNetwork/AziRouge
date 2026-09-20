@@ -158,6 +158,9 @@ economy:
       y: 64
       z: -4
   sell-prices:
+    COAL: 1
+    RAW_IRON: 5
+    RAW_GOLD: 12
     IRON_INGOT: 5
     GOLD_NUGGET: 1
     GOLD_INGOT: 12

@@ -169,7 +169,7 @@ public final class LeaderboardDisplayService {
             text = text.append(Component.newline())
                     .append(Component.text(position + ". ", rankColor))
                     .append(Component.text(entry.playerName(), NamedTextColor.AQUA))
-                    .append(Component.text("  Round " + entry.maxRound(), NamedTextColor.WHITE));
+                    .append(Component.text("  " + entry.maxRound() + "日目", NamedTextColor.WHITE));
             position++;
         }
         return text;

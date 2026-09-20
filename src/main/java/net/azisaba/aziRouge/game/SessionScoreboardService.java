@@ -3,7 +3,10 @@ package net.azisaba.aziRouge.game;
 import net.azisaba.aziRouge.AziRouge;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.Particle;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.DisplaySlot;
@@ -64,6 +67,26 @@ public final class SessionScoreboardService {
             show(player, session);
         }
         displayedPlayers.removeIf(playerId -> !onlinePlayers.contains(playerId));
+        sessionManager.sessions().forEach(this::showAngerParticles);
+    }
+
+    private void showAngerParticles(GameSession session) {
+        if (session.consecutiveQuotaMisses() <= 0) {
+            return;
+        }
+        for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
+            Location location = villager.getLocation();
+            if (!session.homeArea().contains(location.getBlockX(), location.getBlockY(), location.getBlockZ())) {
+                continue;
+            }
+            Location above = location.add(0.0D, 2.1D, 0.0D);
+            for (UUID playerId : session.onlineMembers()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.getWorld().getUID().equals(session.world().getUID())) {
+                    player.spawnParticle(Particle.ANGRY_VILLAGER, above, 4, 0.3D, 0.2D, 0.3D, 0.0D);
+                }
+            }
+        }
     }
 
     private void show(Player player, GameSession session) {
@@ -181,7 +204,7 @@ public final class SessionScoreboardService {
             return Guidance.NONE;
         }
         if (!session.alivePlayers().contains(player.getUniqueId())) {
-            return new Guidance("", plugin.messages().text("scoreboard.next-actions.wait-next-round", "次ラウンドを待つ"));
+            return new Guidance("", plugin.messages().text("scoreboard.next-actions.wait-next-round", "翌日を待つ"));
         }
         if (!isInHomeArea(session, player)) {
             if (plugin.roundTimeService().remainingTicks(session) <= 3_000L) {
@@ -234,7 +257,9 @@ final class AngerGauge {
         int safeMaximum = Math.max(1, maximum);
         int angry = Math.clamp(misses, 0, safeMaximum);
         int filled = (angry * LENGTH + safeMaximum - 1) / safeMaximum;
-        String color = angry * 3 <= safeMaximum ? "§a" : angry * 3 <= safeMaximum * 2 ? "§6" : "§c";
+        String color = angry > 0 && angry >= safeMaximum - 1
+                ? "§c"
+                : angry * 2 >= safeMaximum ? "§6" : "§a";
         return color + "|".repeat(filled) + "§7" + "|".repeat(LENGTH - filled);
     }
 }

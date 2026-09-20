@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPistonExtendEvent;
@@ -183,6 +184,16 @@ public final class SessionGameplayService implements Listener {
         if (event.getClickedInventory() instanceof PlayerInventory && event.getSlot() >= 9 && event.getSlot() <= 35) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockDropItem(BlockDropItemEvent event) {
+        if (!sessionManager.isActivePlaying(event.getPlayer())) {
+            return;
+        }
+        event.getItems().forEach(drop -> drop.setItemStack(
+                plugin.economyService().withValueLore(drop.getItemStack())
+        ));
     }
 
     @EventHandler(ignoreCancelled = true)

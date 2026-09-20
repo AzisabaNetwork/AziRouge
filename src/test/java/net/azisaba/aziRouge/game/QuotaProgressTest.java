@@ -22,11 +22,19 @@ class QuotaProgressTest {
     }
 
     @Test
-    void reachingTheQuotaResetsAConsecutiveMissStreak() {
+    void reachingTheQuotaReducesAngerByOneStep() {
         QuotaProgress progress = QuotaProgress.afterRound(2, true, 3);
+
+        assertEquals(1, progress.consecutiveMisses());
+        assertEquals(2, progress.remainingMisses());
+        assertFalse(progress.gameOver());
+    }
+
+    @Test
+    void reachingTheQuotaCannotReduceAngerBelowZero() {
+        QuotaProgress progress = QuotaProgress.afterRound(0, true, 3);
 
         assertEquals(0, progress.consecutiveMisses());
         assertEquals(3, progress.remainingMisses());
-        assertFalse(progress.gameOver());
     }
 }

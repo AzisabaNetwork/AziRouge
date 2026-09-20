@@ -117,7 +117,7 @@ public final class ShopService implements Listener {
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.only-in-game", "&cショップはロビーまたはラウンド中だけ使えます。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.only-in-game", "&cショップはロビーまたは探索中だけ使えます。"));
             return;
         }
 

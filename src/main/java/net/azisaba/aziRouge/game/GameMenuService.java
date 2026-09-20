@@ -207,7 +207,7 @@ public final class GameMenuService implements Listener {
         if (session == null || session.state() != SessionState.IN_ROUND) return;
         showDialog(
                 player,
-                message("menu.end-round", "ラウンド終了方法"),
+                message("menu.end-round", "一日の終え方"),
                 text(plugin.messages().format("journey.end-description",
                         "宝を納品箱へ入れ、ホームのベッドで休んでください。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。\n深夜までに眠れないプレイヤーは死亡扱いです。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
@@ -227,7 +227,7 @@ public final class GameMenuService implements Listener {
                 List.of(),
                 List.of(
                         menuAction(label("menu.session-title", "Session"), label("menu.tooltip.session", "Open session actions."), this::showSessionMenuDialog),
-                        menuAction(label("menu.round-title", "Round"), label("menu.tooltip.round", "Open round actions."), this::showRoundDialog),
+                        menuAction(label("menu.round-title", "日程"), label("menu.tooltip.round", "日程の操作を開きます。"), this::showRoundDialog),
                         action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions", "Show active sessions in chat."), "/azirouge session list"),
                         menuAction(label("journey.help", "旅の手引き"), label("journey.help", "旅の手引き"), this::showJourneyHelp),
                         closeAction()
@@ -270,10 +270,10 @@ public final class GameMenuService implements Listener {
             actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
             actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
         } else if (session.state() == SessionState.LOBBY) {
-            actions.add(menuAction(label("menu.start-round", "Start Round"), label("menu.tooltip.start-round-open", "Choose a depth and start the round."), this::showStartRoundDialog));
+            actions.add(menuAction(label("menu.start-round", "一日を始める"), label("menu.tooltip.start-round-open", "深さを選んで探索を始めます。"), this::showStartRoundDialog));
             actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
         } else if (session.state() == SessionState.IN_ROUND) {
-            actions.add(menuAction(label("menu.end-round", "ラウンド終了方法"), label("menu.tooltip.end-round-open", "納品と就寝の方法を確認します。"), this::showEndRoundConfirmation));
+            actions.add(menuAction(label("menu.end-round", "一日の終え方"), label("menu.tooltip.end-round-open", "納品と就寝の方法を確認します。"), this::showEndRoundConfirmation));
         } else if (session.state() == SessionState.GAME_OVER) {
             actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
             actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
@@ -282,7 +282,7 @@ public final class GameMenuService implements Listener {
 
         showDialog(
                 player,
-                message("menu.round-title", "Round Menu"),
+                message("menu.round-title", "日程"),
                 text(roundDescription(session)),
                 List.of(),
                 actions,
@@ -401,7 +401,7 @@ public final class GameMenuService implements Listener {
             return label("menu.description.no-session", "セッションを作成するか、既存のセッションに参加してください。");
         }
         return plugin.messages().format("menu.description.session",
-                "現在のセッション: {session}\n状態: {state}\n共有資金: {balance}\nラウンド: {round}",
+                "現在のセッション: {session}\n状態: {state}\n共有資金: {balance}\n{round}日目",
                 "session", session.sessionId(),
                 "state", stateName(session),
                 "balance", session.sharedBalance(),
@@ -410,10 +410,10 @@ public final class GameMenuService implements Listener {
 
     private String roundDescription(GameSession session) {
         if (session == null) {
-            return label("menu.description.round-no-session", "セッションに参加していません。ラウンドの前に作成または参加してください。");
+            return label("menu.description.round-no-session", "セッションに参加していません。探索の前に作成または参加してください。");
         }
         return plugin.messages().format("menu.description.round",
-                "セッション: {session}\n状態: {state}\nラウンド: {round}\n深さ: {depth}\n共有資金: {balance}",
+                "セッション: {session}\n状態: {state}\n{round}日目\n深さ: {depth}\n共有資金: {balance}",
                 "session", session.sessionId(),
                 "state", stateName(session),
                 "round", session.currentRound(),

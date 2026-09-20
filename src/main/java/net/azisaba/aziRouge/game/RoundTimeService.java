@@ -133,7 +133,7 @@ public final class RoundTimeService implements Listener {
                 || !alivePlayers.equals(session.alivePlayers())
                 || !playersAtHome.equals(alivePlayersAtHome(session))
                 || !isInHomeArea(session, player.getLocation())
-                || player.getLocation().distanceSquared(bedLocation) > 4.0D
+                || player.getLocation().distanceSquared(bedLocation) > 16.0D
                 || !(bedLocation.getBlock().getBlockData() instanceof Bed)) {
             player.sendMessage(plugin.messages().prefixed("sleep.changed", "&7状況が変わったため、就寝をキャンセルしました。"));
             return;

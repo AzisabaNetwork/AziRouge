@@ -174,7 +174,7 @@ items:
 
 treasure:
   hotbar-full: "&cホットバーがいっぱいです。空きを作ってから拾ってください。"
-  sell-price: "売却価格: {price}"
+  sell-price: "&e価値: {price}"
 
 join:
   beta-denied: "現在このサーバーはクローズドβ中です。参加権限がありません。"
@@ -252,7 +252,7 @@ round:
   started-detail: "&a{round}日目を開始しました。セッション {session} / 深さ {depth} / ノルマ {quota} / 残高 {balance} / ピース {pieces}/{target} / 原点 {origin}"
   quota-due-detail: "&e村人「今日のノルマは {quota} だ。納品箱へ入れてくれ」"
   ended-summary: "&e{round}日目終了。納品 {items}個 / 価格 {amount} / ノルマ {quota} / 共有資金 {balance}"
-  quota-achieved: "&a村人「よくやった！ 今日のノルマ達成だ！」"
+  quota-improved: "&a村人「よくやった！ 怒りが少し収まったぞ」"
   quota-missed-angry: "&c村人「ノルマ未達だと！？ 次は必ず持ってこい！」 &7ゲームオーバーまで残り {remaining}回"
   quota-warning: "&4村人「次もノルマ未達なら、もう終わりだからな！」"
   midnight-out: "&c深夜までに眠れなかったため、今日は死亡扱いです。"
@@ -311,7 +311,7 @@ commands:
   unknown:
     subcommand: "&c不明なサブコマンドです: {subcommand}"
     session: "&c不明なセッションサブコマンドです: {subcommand}"
-    round: "&c不明なラウンドサブコマンドです: {subcommand}"
+    round: "&c不明な日程サブコマンドです: {subcommand}"
     dungeon: "&c不明なダンジョンサブコマンドです: {subcommand}"
     author: "&c不明なオーサリング対象です: {target}"
     entrance-action: "&c不明な入口操作です: {action}"
@@ -320,7 +320,7 @@ commands:
     session: "&cAziRougeセッションを操作する権限がありません。"
     session-list: "&cAziRougeセッション一覧を見る権限がありません。"
     session-forceend: "&cAziRougeセッションを強制終了する権限がありません。"
-    round: "&cAziRougeラウンドを操作する権限がありません。"
+    round: "&cAziRougeの日程を操作する権限がありません。"
     money: "&cAziRougeの資金を操作する権限がありません。"
     stats: "&cAziRougeの統計を見る権限がありません。"
     stats-others: "&c他プレイヤーの統計を見る権限がありません。"
