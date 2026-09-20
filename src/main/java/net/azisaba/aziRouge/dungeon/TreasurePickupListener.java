@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.UUID;
@@ -59,7 +60,7 @@ public final class TreasurePickupListener implements Listener {
             return;
         }
 
-        ItemStack reward = display.getItemStack();
+        ItemStack reward = withoutDisplayLore(display.getItemStack());
         if (reward == null || reward.getType() == Material.AIR) {
             display.remove();
             interaction.remove();
@@ -78,5 +79,18 @@ public final class TreasurePickupListener implements Listener {
         event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8F, 1.1F);
         display.remove();
         interaction.remove();
+    }
+
+    private ItemStack withoutDisplayLore(ItemStack displayed) {
+        if (displayed == null) {
+            return null;
+        }
+        ItemStack reward = displayed.clone();
+        ItemMeta meta = reward.getItemMeta();
+        if (meta != null) {
+            meta.lore(null);
+            reward.setItemMeta(meta);
+        }
+        return reward;
     }
 }

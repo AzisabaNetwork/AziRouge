@@ -16,12 +16,15 @@ import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
 import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.scheduler.BukkitTask;
 import net.kyori.adventure.text.Component;
@@ -190,7 +193,7 @@ public final class GameSessionManager {
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.LOBBY);
         broadcastTitle(session, m("boss.title.defeated", "&6ボス撃破"), m("round.subtitle.returned-home", "&eホームに戻りました"), 10, 70, 20);
-        broadcastSessionMessage(session, m("boss.cleared", "&aボス戦をクリアしました。準備ができたら次のラウンドを開始してください。"));
+        broadcastSessionMessage(session, m("boss.cleared", "&aボス戦をクリアしました。準備ができたら翌日の探索を始めてください。"));
     }
 
     public void cleanupLeftoverWorldFoldersOnStartup() {
@@ -555,8 +558,8 @@ public final class GameSessionManager {
                     sendMessage(alivePlayer, m(
                             awakeAtMidnight ? "round.midnight-out" : "round.away-out",
                             awakeAtMidnight
-                                    ? "&c深夜までに眠れなかったため、このラウンドは死亡扱いです。"
-                                    : "&c帰還できなかったため、このラウンドは死亡扱いです。"
+                                    ? "&c深夜までに眠れなかったため、今日は死亡扱いです。"
+                                    : "&c帰還できなかったため、今日は死亡扱いです。"
                     ));
                 }
             }
@@ -797,7 +800,7 @@ public final class GameSessionManager {
         restorePlayerVitals(player);
         if (wasAlive) {
             session.markDead(player.getUniqueId());
-            broadcastSessionMessage(session, m("session.member-disconnected", "&c{player} がラウンド中に切断したため、このラウンドは脱落になります。", "player", player.getName()));
+            broadcastSessionMessage(session, m("session.member-disconnected", "&c{player} が探索中に切断したため、今日は脱落になります。", "player", player.getName()));
             updateRoundAfterAliveChange(session);
         }
         scheduleIdleTimeoutIfNeeded(session);
@@ -1198,21 +1201,22 @@ public final class GameSessionManager {
     }
 
     private void announceRoundStart(GameSession session) {
+        long quota = plugin.economyService().quotaForRound(session.currentRound());
         broadcastTitle(
                 session,
-                m("round.title.start", "&6Round {round}", "round", session.currentRound()),
-                m("journey.ready", "&eさあ、探索へ"),
+                m("round.title.start", "&6{round}日目", "round", session.currentRound()),
+                m("round.subtitle.quota", "&e今日のノルマ: {quota}", "quota", quota),
                 10,
                 60,
                 15
         );
-        broadcastSessionMessage(session, m(
+        broadcastVillagerMessage(session, m(
                 "round.quota-due-detail",
-                "&e今回のノルマ: 納品箱の評価額 {quota}（精算額は共有資金へ加算）",
-                "quota", plugin.economyService().quotaForRound(session.currentRound()),
+                "&e村人「今日のノルマは {quota} だ。納品箱へ入れてくれ」",
+                "quota", quota,
                 "remaining", Math.max(0, plugin.settings().economy().quota().maxConsecutiveMisses()
                         - session.consecutiveQuotaMisses())
-        ));
+        ), Sound.ENTITY_VILLAGER_AMBIENT);
     }
 
     private void announceRoundEnd(GameSession session, RoundEndResult result) {
@@ -1224,7 +1228,7 @@ public final class GameSessionManager {
         broadcastTitle(session, title, subtitle, 10, 70, 20);
         broadcastSessionMessage(session, m(
                 "round.ended-summary",
-                "&eラウンド {round} 終了。納品 {items}個 / 価格 {amount} / ノルマ {quota} / 共有資金 {balance}",
+                "&e{round}日目終了。納品 {items}個 / 価格 {amount} / ノルマ {quota} / 共有資金 {balance}",
                 "round", session.currentRound(),
                 "items", result.itemCount(),
                 "amount", result.totalAmount(),
@@ -1232,25 +1236,38 @@ public final class GameSessionManager {
                 "balance", session.sharedBalance()
         ));
         if (result.quotaAchieved()) {
-            broadcastSessionMessage(session, m("round.quota-achieved", "&aノルマ達成！ 未達の連続回数はリセットされました。"));
+            broadcastVillagerMessage(session, m(
+                    "round.quota-achieved",
+                    "&a村人「よくやった！ 今日のノルマ達成だ！」"
+            ), Sound.ENTITY_VILLAGER_CELEBRATE);
         } else {
-            broadcastSessionMessage(session, m(
+            showVillagerAnger(session);
+            broadcastVillagerMessage(session, m(
                     "round.quota-missed-angry",
-                    "&c村人「ノルマ未達！？ めっちゃ怒ってるぞ！」 ゲームオーバーまで残り {remaining}回です。",
+                    "&c村人「ノルマ未達だと！？ 次は必ず持ってこい！」 &7ゲームオーバーまで残り {remaining}回",
                     "remaining", result.remainingMisses()
-            ));
+            ), Sound.ENTITY_VILLAGER_NO);
             int warningAt = plugin.settings().economy().quota().warningRemaining();
             if (result.remainingMisses() > 0 && result.remainingMisses() <= warningAt) {
-                broadcastSessionMessage(session, m(
+                broadcastVillagerMessage(session, m(
                         "round.quota-warning",
-                        "&4警告: 次もノルマ未達ならゲームオーバーです！"
-                ));
+                        "&4村人「次もノルマ未達なら、もう終わりだからな！」"
+                ), Sound.ENTITY_VILLAGER_NO);
                 for (UUID playerId : session.onlineMembers()) {
                     Player player = Bukkit.getPlayer(playerId);
                     if (player != null) {
                         player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_WITHER_SPAWN, 0.35F, 1.4F);
                     }
                 }
+            }
+        }
+    }
+
+    private void showVillagerAnger(GameSession session) {
+        for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
+            Location location = villager.getLocation();
+            if (session.homeArea().contains(location.getBlockX(), location.getBlockY(), location.getBlockZ())) {
+                session.world().spawnParticle(Particle.ANGRY_VILLAGER, location.add(0.0D, 2.1D, 0.0D), 8, 0.35D, 0.2D, 0.35D, 0.0D);
             }
         }
     }
@@ -1262,13 +1279,13 @@ public final class GameSessionManager {
         broadcastTitle(
                 session,
                 m("game-over.title", "&4Game Over"),
-                m("game-over.subtitle", "&c{reason}&7 / Reached round {round}", "reason", reason, "round", session.currentRound()),
+                m("game-over.subtitle", "&c{reason}&7 / {round}日目到達", "reason", reason, "round", session.currentRound()),
                 10,
                 100,
                 30
         );
         broadcastSessionMessage(session, m("game-over.reason-line", "&cGame over: {reason}", "reason", reason));
-        broadcastSessionMessage(session, m("game-over.reached-round", "&6Reached round: {round}", "round", session.currentRound()));
+        broadcastSessionMessage(session, m("game-over.reached-round", "&6到達日数: {round}日目", "round", session.currentRound()));
         broadcastSessionMessage(session, m("game-over.leave", "&eLeave this session: /azirouge session leave"));
         broadcastSessionMessage(session, m("game-over.next-session", "&eCreate the next session after leaving with /azirouge session create, or right-click the start menu."));
         broadcastSessionMessage(session, m("game-over.auto-close", "&7This session will be closed automatically soon."));
@@ -1333,6 +1350,16 @@ public final class GameSessionManager {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
                 sendMessage(player, message);
+            }
+        }
+    }
+
+    private void broadcastVillagerMessage(GameSession session, String message, Sound sound) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                sendMessage(player, message);
+                player.playSound(player.getLocation(), sound, 0.8F, 1.0F);
             }
         }
     }

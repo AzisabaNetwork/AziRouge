@@ -390,7 +390,7 @@ public final class AziRougeCommand implements TabExecutor {
         }
         try {
             DungeonGenerationResult result = plugin.gameSessionManager().startRound(session, maxDepth);
-            tell(sender, "journey.started", "&7探索の支度が整いました。ラウンド {round} / 深さ {depth}",
+            tell(sender, "journey.started", "&7探索の支度が整いました。{round}日目 / 深さ {depth}",
                     "round", session.currentRound(), "depth", maxDepth);
         } catch (TemplateLoadException | SchematicPlacementException ex) {
             tell(sender, "round.error.start-failed", "&cラウンド開始に失敗しました: {reason}", "reason", ex.getMessage());

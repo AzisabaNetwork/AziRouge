@@ -19,7 +19,6 @@ import java.util.UUID;
 public final class SessionScoreboardService {
     private static final String OBJECTIVE_NAME = "azirouge";
     private static final String SERVER_ADDRESS = "azisaba.net";
-
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Set<UUID> displayedPlayers = new HashSet<>();
@@ -92,11 +91,14 @@ public final class SessionScoreboardService {
                 : plugin.economyService().deliveryValue(session);
         int maxMisses = plugin.settings().economy().quota().maxConsecutiveMisses();
         setLine(objective, ChatColor.DARK_GRAY.toString(), 11);
-        setLine(objective, label("state", "状態") + stateName(session), 10);
-        setLine(objective, label("round", "Round") + session.currentRound(), 9);
+        setLine(objective, ChatColor.GOLD + plugin.messages().format(
+                "scoreboard.day",
+                "{round}日目",
+                "round", session.currentRound()
+        ), 9);
         setLine(objective, label("shared-money", "共有資金") + session.sharedBalance(), 8);
         setLine(objective, label("delivery-quota", "納品 / ノルマ") + delivered + " / " + quota, 7);
-        setLine(objective, label("villager-anger", "村人の怒り") + angerGauge(session.consecutiveQuotaMisses(), maxMisses), 6);
+        setLine(objective, label("villager-anger", "村人の怒り") + AngerGauge.render(session.consecutiveQuotaMisses(), maxMisses), 6);
         String time = allAlivePlayersInDungeon(session) ? "??:??" : RoundClock.format(session.world().getTime());
         setLine(objective, label("time", "時刻") + time, 5);
         setLine(objective, ChatColor.BLACK.toString(), 4);
@@ -142,10 +144,6 @@ public final class SessionScoreboardService {
         objective.getScore(text).setScore(score);
     }
 
-    private String stateName(GameSession session) {
-        return plugin.messages().text("scoreboard.states." + session.state().displayKey(), session.state().name());
-    }
-
     private String label(String key, String fallback) {
         return ChatColor.YELLOW + plugin.messages().text("scoreboard." + key, fallback) + ": " + ChatColor.WHITE;
     }
@@ -170,11 +168,6 @@ public final class SessionScoreboardService {
                 player.getLocation().getBlockY(),
                 player.getLocation().getBlockZ()
         );
-    }
-
-    private String angerGauge(int misses, int maximum) {
-        int angry = Math.clamp(misses, 0, maximum);
-        return ChatColor.RED + "■".repeat(angry) + ChatColor.DARK_GRAY + "□".repeat(maximum - angry);
     }
 
     private Guidance guidance(GameSession session, Player player, long delivered, long quota) {
@@ -228,5 +221,20 @@ public final class SessionScoreboardService {
 
     private record Guidance(String goal, String next) {
         private static final Guidance NONE = new Guidance("", "");
+    }
+}
+
+final class AngerGauge {
+    private static final int LENGTH = 19;
+
+    private AngerGauge() {
+    }
+
+    static String render(int misses, int maximum) {
+        int safeMaximum = Math.max(1, maximum);
+        int angry = Math.clamp(misses, 0, safeMaximum);
+        int filled = (angry * LENGTH + safeMaximum - 1) / safeMaximum;
+        String color = angry * 3 <= safeMaximum ? "§a" : angry * 3 <= safeMaximum * 2 ? "§6" : "§c";
+        return color + "|".repeat(filled) + "§7" + "|".repeat(LENGTH - filled);
     }
 }
