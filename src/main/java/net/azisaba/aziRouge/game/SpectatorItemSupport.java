@@ -1,7 +1,8 @@
 package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
-import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -46,7 +47,12 @@ public final class SpectatorItemSupport {
         ItemStack item = new ItemStack(Material.COMPASS);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text(plugin.messages().text("items.switch-spectator-target", "Switch Spectator Target")));
+            meta.displayName(LegacyComponentSerializer.legacySection()
+                    .deserialize(plugin.messages().text("items.switch-spectator-target", "&b観戦先を切り替え"))
+                    .decoration(TextDecoration.ITALIC, false));
+            meta.lore(java.util.List.of(LegacyComponentSerializer.legacySection()
+                    .deserialize(plugin.messages().text("items.switch-spectator-target-lore", "&7右クリックで次の生存者へ"))
+                    .decoration(TextDecoration.ITALIC, false)));
             meta.getPersistentDataContainer().set(key(plugin), PersistentDataType.STRING, SWITCH_TARGET);
             item.setItemMeta(meta);
         }

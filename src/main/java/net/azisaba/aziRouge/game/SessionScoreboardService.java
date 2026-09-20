@@ -130,7 +130,7 @@ public final class SessionScoreboardService {
             setLine(objective, label("goal", "目標") + guidance.goal(), 3);
         }
         if (!guidance.next().isBlank()) {
-            setLine(objective, label("next", "次") + guidance.next(), 2);
+            setLine(objective, label("next", "やること") + guidance.next(), 2);
         }
         setLine(objective, ChatColor.DARK_AQUA.toString(), 1);
         setLine(objective, ChatColor.AQUA + SERVER_ADDRESS, 0);
@@ -195,7 +195,7 @@ public final class SessionScoreboardService {
 
     private Guidance guidance(GameSession session, Player player, long delivered, long quota) {
         if (session.state() == SessionState.GAME_OVER) {
-            return new Guidance("", plugin.messages().text("scoreboard.next-actions.leave-session", "セッションを退出"));
+            return new Guidance("", plugin.messages().text("scoreboard.next-actions.leave-session", "セッションを出る"));
         }
         if (session.isBossBattleActive()) {
             return new Guidance(plugin.messages().text("scoreboard.goals.defeat-boss", "ボスを倒す"), "");

@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.data.type.Bed;
 import org.bukkit.entity.Player;
@@ -105,7 +106,7 @@ public final class RoundTimeService implements Listener {
         }
         if (!isInHomeArea(session, player.getLocation())) {
             event.setUseBed(Event.Result.DENY);
-            player.sendMessage(plugin.messages().prefixed("sleep.home-only", "&cホームへ帰還してからベッドに入ってください。"));
+            player.sendMessage(plugin.messages().prefixed("sleep.home-only", "&cベッドはホームに戻ってから。"));
             return;
         }
 
@@ -119,7 +120,7 @@ public final class RoundTimeService implements Listener {
             Set<UUID> playersAtHome = alivePlayersAtHome(session);
             plugin.confirmationService().request(
                     player,
-                    plugin.messages().text("sleep.confirm-night-impact", "時間を夜にして寝ますか？\nこの操作は、探索中の他のプレイヤーにも影響します。"),
+                    plugin.messages().text("sleep.confirm-night-impact", "いまは昼だ。夜にして寝ると、探索中の仲間の時間も進む。"),
                     () -> sleepAtNight(player, session, round, alivePlayers, playersAtHome, bedLocation)
             );
             return;
@@ -135,7 +136,7 @@ public final class RoundTimeService implements Listener {
                 || !isInHomeArea(session, player.getLocation())
                 || player.getLocation().distanceSquared(bedLocation) > 16.0D
                 || !(bedLocation.getBlock().getBlockData() instanceof Bed)) {
-            player.sendMessage(plugin.messages().prefixed("sleep.changed", "&7状況が変わったため、就寝をキャンセルしました。"));
+            player.sendMessage(plugin.messages().prefixed("sleep.changed", "&7状況が変わったので、就寝をやめた。"));
             return;
         }
         session.world().setTime(NIGHT_TICKS);
@@ -219,7 +220,7 @@ public final class RoundTimeService implements Listener {
                 showSleepStatus(
                         session,
                         "sleep.waiting-players",
-                        "&eあと {players}人ベッドに入ると夜をスキップします",
+                        "&e夜を越すには、あと {players}人眠る必要がある",
                         "players", RoundSleepPolicy.requiredSleeping(alive, requiredPercentage) - sleeping
                 );
                 continue;
@@ -234,7 +235,7 @@ public final class RoundTimeService implements Listener {
             showSleepStatus(
                     session,
                     "sleep.skip-countdown",
-                    "&eあと {seconds}秒で夜をスキップします",
+                    "&eあと {seconds}秒で夜が明ける",
                     "seconds", remainingSeconds
             );
             if (elapsedTicks >= waitTicks) {
@@ -314,16 +315,27 @@ public final class RoundTimeService implements Listener {
             return;
         }
         deadlineWarningHours.put(session.sessionId(), hours);
-        String message = plugin.messages().prefixed(
-                hours == 1 ? "sleep.deadline-one-hour" : "sleep.deadline-three-hours",
-                hours == 1
-                        ? "&c深夜0時まであと1時間！ 探索を切り上げて家に戻ってください。"
-                        : "&e深夜0時まであと3時間。そろそろ家への帰り道を確認してください。"
+        boolean urgent = hours == 1;
+        String chat = plugin.messages().prefixed(
+                urgent ? "sleep.deadline-one-hour" : "sleep.deadline-three-hours",
+                urgent
+                        ? "&c0時まであと1時間。探索を切り上げて帰れ。"
+                        : "&e0時まであと3時間。帰り道を見ておけ。"
+        );
+        String title = plugin.messages().text(
+                urgent ? "sleep.title.one-hour" : "sleep.title.three-hours",
+                urgent ? "&cあと1時間" : "&e日没が近い"
+        );
+        String subtitle = plugin.messages().text(
+                urgent ? "sleep.subtitle.one-hour" : "sleep.subtitle.three-hours",
+                urgent ? "&c切り上げて家に戻れ" : "&70時までにベッドへ"
         );
         for (UUID playerId : session.alivePlayers()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                player.sendMessage(message);
+                player.sendMessage(chat);
+                player.sendTitle(title, subtitle, 10, 55, 15);
+                player.playSound(player.getLocation(), Sound.BLOCK_BELL_USE, urgent ? 1.0F : 0.7F, urgent ? 1.35F : 0.75F);
             }
         }
     }

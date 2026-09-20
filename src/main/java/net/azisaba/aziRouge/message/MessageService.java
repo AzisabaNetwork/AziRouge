@@ -1,5 +1,7 @@
 package net.azisaba.aziRouge.message;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -41,11 +43,15 @@ public final class MessageService {
     }
 
     public String prefix() {
-        return text("prefix", "&6[Azirouge] &r");
+        return text("prefix", "&6[AziRouge] &r");
     }
 
     public String prefixed(String key, String fallback, Object... replacements) {
         return prefix() + format(key, fallback, replacements);
+    }
+
+    public Component component(String key, String fallback, Object... replacements) {
+        return LegacyComponentSerializer.legacySection().deserialize(format(key, fallback, replacements));
     }
 
     private String color(String value) {

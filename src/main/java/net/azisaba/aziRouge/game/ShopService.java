@@ -2,9 +2,12 @@ package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.azisaba.aziRouge.config.ShopTradeSettings;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
@@ -72,8 +75,7 @@ public final class ShopService implements Listener {
                     player,
                     plugin.messages().format(
                             "shop.confirm-expensive",
-                            "{item} x{amount} を {price} で購入します。共有資金 {balance} → {after}。よろしいですか？",
-                            "item", trade.material().name(),
+                            "{amount}個を {price} で買う。共有資金 {balance} → {after}。",
                             "amount", trade.amount(),
                             "price", trade.price(),
                             "balance", session.sharedBalance(),
@@ -91,39 +93,44 @@ public final class ShopService implements Listener {
         if (session == null || !canUseShop(player, session) || session.state() != holder.state
                 || session.currentRound() != holder.round || !session.runId().equals(holder.runId)) {
             player.closeInventory();
-            player.sendMessage(plugin.messages().prefix() + m("shop.unavailable", "&cショップは現在利用できません。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.unavailable", "&cいまは店が使えない。"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.7F, 1.0F);
             return;
         }
 
         if (session.sharedBalance() < trade.price()) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money-detail", "&c共有資金が足りません。価格 {price} / 残高 {balance}", "price", trade.price(), "balance", session.sharedBalance()));
+            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money-detail", "&c共有資金が足りない。価格 {price} / 残高 {balance}", "price", trade.price(), "balance", session.sharedBalance()));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8F, 0.9F);
             return;
         }
 
         ItemStack purchased = tradeItem(trade);
         if (!PlayerInventorySupport.canFit(player.getInventory(), purchased)) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.inventory-full", "&cインベントリに空きがありません。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.inventory-full", "&c持ち物がいっぱいだ。"));
+            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, 0.7F, 0.8F);
             return;
         }
 
         if (!session.withdrawSharedBalance(trade.price())) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money", "&c共有資金が足りません。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.not-enough-money", "&c共有資金が足りない。"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8F, 0.9F);
             return;
         }
         player.getInventory().addItem(purchased);
-        player.sendMessage(plugin.messages().prefix() + m("shop.purchase-complete", "&a購入完了: {item} x{amount}（-{price}） &7共有資金: {balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
+        player.sendMessage(plugin.messages().prefix() + m("shop.purchase-complete", "&a買った。-{price}  &7共有資金 {balance}", "price", trade.price(), "balance", session.sharedBalance()));
+        player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.9F, 1.25F);
         refreshShop(inventory, holder, session);
     }
 
     private void openShop(Player player, GameSession session) {
         if (!canUseShop(player, session)) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.only-in-game", "&cショップはロビーまたは探索中だけ使えます。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.only-in-game", "&c店はロビーか探索中だけ使える。"));
             return;
         }
 
         List<ShopTradeSettings> trades = tradesFor(session);
         if (trades.isEmpty()) {
-            player.sendMessage(plugin.messages().prefix() + m("shop.no-trades", "&cいまは購入できる商品がありません。"));
+            player.sendMessage(plugin.messages().prefix() + m("shop.no-trades", "&cいま買える品はない。"));
             return;
         }
 
@@ -137,40 +144,54 @@ public final class ShopService implements Listener {
         holder.setInventory(inventory);
         refreshShop(inventory, holder, session);
         player.openInventory(inventory);
+        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.45F, 1.2F);
     }
 
     private void refreshShop(Inventory inventory, ShopHolder holder, GameSession session) {
         inventory.clear();
         List<ShopTradeSettings> trades = holder.trades();
         for (int slot = 0; slot < trades.size() && slot < inventory.getSize(); slot++) {
-            inventory.setItem(slot, displayItem(trades.get(slot), session));
+            inventory.setItem(slot, displayItem(trades.get(slot), session, slot == 0));
         }
     }
 
-    private ItemStack displayItem(ShopTradeSettings trade, GameSession session) {
+    private ItemStack displayItem(ShopTradeSettings trade, GameSession session, boolean showHotbarLimit) {
         ItemStack item = tradeItem(trade);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.GREEN + trade.material().name() + " x" + trade.amount()
-                    + ChatColor.GOLD + "  " + trade.price());
-            List<String> lore = new ArrayList<>();
-            lore.add(m("shop.lore.price", "&ePrice: {price}", "price", trade.price()));
-            lore.add(m("shop.lore.shared-money", "&7Shared money: {balance}", "balance", session.sharedBalance()));
-            lore.add(m("shop.lore.after-purchase", "&7購入後: {balance}", "balance", Math.max(0L, session.sharedBalance() - trade.price())));
-            lore.add(m("shop.lore.hotbar-limit", "&c探索中の持ち物は主にホットバー9枠です。"));
+            meta.displayName(Component.translatable(trade.material().translationKey())
+                    .color(NamedTextColor.GREEN)
+                    .decoration(TextDecoration.ITALIC, false)
+                    .append(plain(" ×" + trade.amount(), NamedTextColor.WHITE))
+                    .append(plain("  " + trade.price(), NamedTextColor.GOLD)));
+            List<Component> lore = new ArrayList<>();
+            lore.add(loreLine("shop.lore.price", "&e価格 {price}", "price", trade.price()));
+            lore.add(loreLine("shop.lore.shared-money", "&7共有資金 {balance}", "balance", session.sharedBalance()));
+            lore.add(loreLine("shop.lore.after-purchase", "&7購入後 {balance}", "balance", Math.max(0L, session.sharedBalance() - trade.price())));
+            if (showHotbarLimit) {
+                lore.add(loreLine("shop.lore.hotbar-limit", "&c探索中の持ち物は、ほぼホットバー9枠だけ。"));
+            }
             if (requiresConfirmation(session, trade)) {
-                lore.add(m("shop.lore.confirmation", "&6高額購入のためクリック後に確認します。"));
+                lore.add(loreLine("shop.lore.confirmation", "&6金額が大きいので、もう一度クリックして確定する。"));
             }
             if (!trade.canDestroy().isEmpty()) {
-                lore.add(m("shop.lore.can-mine", "&7Can mine: {count} block types", "count", trade.canDestroy().size()));
+                lore.add(loreLine("shop.lore.can-mine", "&7壊せるブロック {count}種類", "count", trade.canDestroy().size()));
             }
             if (trade.durability() != null) {
-                lore.add(m("shop.lore.durability", "&7Durability: {durability}", "durability", trade.durability()));
+                lore.add(loreLine("shop.lore.durability", "&7耐久 {durability}", "durability", trade.durability()));
             }
-            meta.setLore(lore);
+            meta.lore(lore);
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private static Component plain(String text, NamedTextColor color) {
+        return Component.text(text, color).decoration(TextDecoration.ITALIC, false);
+    }
+
+    private Component loreLine(String key, String fallback, Object... replacements) {
+        return plugin.messages().component(key, fallback, replacements).decoration(TextDecoration.ITALIC, false);
     }
 
     private ItemStack tradeItem(ShopTradeSettings trade) {
@@ -216,8 +237,9 @@ public final class ShopService implements Listener {
     }
 
     private String shopTitle(GameSession session) {
-        return ChatColor.DARK_GREEN + plugin.settings().shop().title()
-                + ChatColor.GRAY + " $" + session.sharedBalance();
+        return m("shop.window-title", "&2{title}  &7資金 {balance}",
+                "title", plugin.settings().shop().title(),
+                "balance", session.sharedBalance());
     }
 
     private String m(String key, String fallback, Object... replacements) {

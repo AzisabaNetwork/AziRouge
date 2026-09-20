@@ -35,14 +35,14 @@ public final class ConfirmationService {
         long expiresAt = System.currentTimeMillis() + TIMEOUT_MILLIS;
         confirmations.put(player.getUniqueId(), new PendingConfirmation(onConfirm, expiresAt));
         Dialog dialog = Dialog.create(builder -> builder.empty()
-                .base(DialogBase.builder(message("confirmation.title", "Confirm"))
+                .base(DialogBase.builder(message("confirmation.title", "確認"))
                         .body(List.of(DialogBody.plainMessage(Component.text(description), 260)))
                         .canCloseWithEscape(true)
                         .pause(false)
                         .build())
                 .type(DialogType.confirmation(
-                        action("confirmation.yes", "Yes", true),
-                        action("confirmation.no", "No", false)
+                        action("confirmation.yes", "進める", true),
+                        action("confirmation.no", "やめる", false)
                 )));
         player.showDialog(dialog);
         Bukkit.getScheduler().runTaskLater(plugin, () -> expire(player.getUniqueId(), expiresAt), TIMEOUT_MILLIS / 50L);
@@ -53,14 +53,14 @@ public final class ConfirmationService {
         if (pending == null || pending.isExpired()) {
             player.sendMessage(plugin.messages().prefixed(
                     "confirmation.expired",
-                    "&7Confirmation expired. Try the action again."
+                    "&7確認の時間が切れた。もう一度操作して。"
             ));
             return true;
         }
         if (!accepted) {
             player.sendMessage(plugin.messages().prefixed(
                     "confirmation.cancelled",
-                    "&7Action cancelled."
+                    "&7やめた。"
             ));
             return true;
         }
@@ -88,7 +88,7 @@ public final class ConfirmationService {
     }
 
     private Component message(String key, String fallback) {
-        return Component.text(plugin.messages().text(key, fallback));
+        return plugin.messages().component(key, fallback);
     }
 
     private void expire(UUID playerId, long expiresAt) {
@@ -99,7 +99,7 @@ public final class ConfirmationService {
             if (player != null) {
                 player.sendMessage(plugin.messages().prefixed(
                         "confirmation.expired",
-                        "&7Confirmation expired. Try the action again."
+                        "&7確認の時間が切れた。もう一度操作して。"
                 ));
             }
         }

@@ -48,7 +48,7 @@ leaderboard:
       z: 0.5
       yaw: 0.0
       pitch: 0.0
-      title: Daily Ranking
+      title: 日間ランキング
     weekly:
       world: world
       x: 0.5
@@ -56,7 +56,7 @@ leaderboard:
       z: 0.5
       yaw: 0.0
       pitch: 0.0
-      title: Weekly Ranking
+      title: 週間ランキング
     monthly:
       world: world
       x: 0.5
@@ -64,7 +64,7 @@ leaderboard:
       z: 0.5
       yaw: 0.0
       pitch: 0.0
-      title: Monthly Ranking
+      title: 月間ランキング
     total:
       world: world
       x: 0.5
@@ -72,7 +72,7 @@ leaderboard:
       z: 0.5
       yaw: 0.0
       pitch: 0.0
-      title: All-Time Ranking
+      title: 通算ランキング
 sessions:
   default-max-players: 4
   max-max-players: 8
@@ -170,7 +170,7 @@ economy:
     AMETHYST_SHARD: 3
     LAPIS_LAZULI: 2
 shop:
-  title: AziRouge Shop
+  title: 商人
   trades:
     in-round:
       - id: bread

@@ -2,6 +2,8 @@ package net.azisaba.aziRouge.game;
 
 import net.azisaba.aziRouge.AziRouge;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -19,8 +21,8 @@ public final class GameOverItemSupport {
     }
 
     public static void give(AziRouge plugin, Player player) {
-        player.getInventory().setItem(0, create(plugin, Material.RED_BED, plugin.messages().text("items.leave-session", "Leave Session"), LEAVE));
-        player.getInventory().setItem(4, create(plugin, Material.COMPASS, plugin.messages().text("items.open-menu", "Open Menu"), MENU));
+        player.getInventory().setItem(0, create(plugin, Material.RED_BED, "items.leave-session", "&cセッションを出る", "items.leave-session-lore", "&7右クリックで退出する", LEAVE));
+        player.getInventory().setItem(4, create(plugin, Material.COMPASS, "items.open-menu", "&6メニュー", "items.open-menu-lore", "&7右クリックで開く", MENU));
     }
 
     public static void remove(AziRouge plugin, Player player) {
@@ -41,15 +43,20 @@ public final class GameOverItemSupport {
         return hasAction(plugin, item, MENU);
     }
 
-    private static ItemStack create(AziRouge plugin, Material material, String name, String action) {
+    private static ItemStack create(AziRouge plugin, Material material, String nameKey, String nameFallback, String loreKey, String loreFallback, String action) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text(name));
+            meta.displayName(named(plugin.messages().text(nameKey, nameFallback)));
+            meta.lore(java.util.List.of(named(plugin.messages().text(loreKey, loreFallback))));
             meta.getPersistentDataContainer().set(key(plugin), PersistentDataType.STRING, action);
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private static Component named(String value) {
+        return LegacyComponentSerializer.legacySection().deserialize(value).decoration(TextDecoration.ITALIC, false);
     }
 
     private static boolean hasAction(AziRouge plugin, ItemStack item, String action) {

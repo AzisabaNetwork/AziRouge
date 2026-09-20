@@ -81,7 +81,7 @@ public final class EconomyService {
         ItemMeta meta = item.getItemMeta();
         if (price != null && meta != null) {
             meta.lore(List.of(LegacyComponentSerializer.legacySection().deserialize(
-                    plugin.messages().format("treasure.sell-price", "&e価値: {price}", "price", price)
+                    plugin.messages().format("treasure.sell-price", "&e価値 {price}", "price", price)
             )));
             item.setItemMeta(meta);
         }

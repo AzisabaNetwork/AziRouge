@@ -12,6 +12,8 @@ import net.azisaba.aziRouge.config.GuiSettings;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -117,9 +119,9 @@ public final class GameMenuService implements Listener {
     private void showCreateSessionDialog(Player player) {
         showConfirmationDialog(
                 player,
-                message("menu.create-session", "Create Session"),
-                message("menu.create-session-description", "Create a new session."),
-                action(label("menu.create-session", "Create"), label("menu.tooltip.create-session", "Create a session and move to the home world."), "/azirouge session create --confirm"),
+                message("menu.create-session", "セッションを作る"),
+                message("menu.create-session-description", "新しいセッションを作り、ホームへ移動する。"),
+                action(label("menu.create-session", "セッションを作る"), label("menu.tooltip.create-session", "作るとホームへ移動する。"), "/azirouge session create --confirm"),
                 closeAction()
         );
     }
@@ -127,10 +129,10 @@ public final class GameMenuService implements Listener {
     private void showJoinSessionDialog(Player player) {
         showDialog(
                 player,
-                message("menu.join-session", "Join Session"),
-                message("menu.join-session-description", "Enter the session ID to join."),
+                message("menu.join-session", "セッションに入る"),
+                message("menu.join-session-description", "入りたいセッションのIDを入れて。"),
                 List.of(sessionIdInput()),
-                List.of(action(label("menu.join-session", "Join"), label("menu.tooltip.join-session", "Join the entered session."), "/azirouge session join $(sessionId) --confirm")),
+                List.of(action(label("menu.join-session", "セッションに入る"), label("menu.tooltip.join-session", "仲間のセッションIDを入れる。"), "/azirouge session join $(sessionId) --confirm")),
                 1
         );
     }
@@ -138,14 +140,14 @@ public final class GameMenuService implements Listener {
     private void showLeaveSessionConfirmation(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         String description = session == null
-                ? label("menu.leave-no-session", "セッションに参加していません。")
-                : plugin.messages().format("menu.leave-session-description", "セッション {session} から退出します。よろしいですか？", "session", session.sessionId());
+                ? label("menu.leave-no-session", "セッションに入っていない。")
+                : plugin.messages().format("menu.leave-session-description", "セッション {session} から出る。", "session", session.sessionId());
         showConfirmationDialog(
                 player,
-                message("menu.leave-session", "Leave Session"),
+                message("menu.leave-session", "セッションを出る"),
                 text(description),
-                action(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session", "Leave your current session."), "/azirouge session leave --confirm"),
-                menuAction(label("menu.back", "Back"), label("menu.tooltip.back-session", "Return to the session menu."), this::showSessionMenuDialog)
+                action(label("menu.leave-session", "セッションを出る"), label("menu.tooltip.leave-session", "ホームの外へ戻る。"), "/azirouge session leave --confirm"),
+                menuAction(label("menu.back", "戻る"), label("menu.tooltip.back-session", "セッションへ戻る。"), this::showSessionMenuDialog)
         );
     }
 
@@ -157,7 +159,7 @@ public final class GameMenuService implements Listener {
         int round = session.currentRound();
         java.util.UUID offer = java.util.UUID.randomUUID();
         departureOffers.put(player.getUniqueId(), offer);
-        ActionButton depart = ActionButton.create(message("journey.depart", "出発！"), null, 160,
+        ActionButton depart = ActionButton.create(message("journey.depart", "出発"), null, 160,
                 DialogAction.customClick((view, audience) -> {
                     Float depth = view.getFloat("depth");
                     if (audience instanceof Player current && current.getUniqueId().equals(player.getUniqueId())
@@ -167,10 +169,11 @@ public final class GameMenuService implements Listener {
                         });
                     }
                 }, ClickCallback.Options.builder().uses(1).build()));
+        player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.7F, 1.2F);
         showDialog(
                 player,
-                message("journey.depart", "出発！"),
-                text(plugin.messages().format("journey.depart-description-details", "どこまで踏み込む？\n深いほどダンジョンが広がり、宝・宝箱・罠が増え、採掘物とドロップも変化します。\n探索中の持ち物は主にホットバー9枠です。\n今回のノルマ: {quota} / 共有資金: {balance}",
+                message("journey.depart", "出発"),
+                text(plugin.messages().format("journey.depart-description-details", "深さを選んで出発する。深いほどダンジョンは広くなり、宝、宝箱、罠が増える。採掘できる鉱石と敵のドロップも変わる。\n探索中の持ち物は、ほぼホットバーの9枠だけだ。\n今日のノルマ {quota}  /  共有資金 {balance}",
                         "quota", plugin.economyService().quotaForRound(round + 1), "balance", session.sharedBalance())),
                 List.of(depthInput()),
                 List.of(depart),
@@ -184,10 +187,11 @@ public final class GameMenuService implements Listener {
                 || !DepartureGuard.canPrepare(current.state(), current.roundState())
                 || !player.getWorld().equals(current.world()) || player.isDead()
                 || !current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())) {
-            player.sendMessage(plugin.messages().prefixed("journey.changed", "&7状況が変わりました。出入口からもう一度お試しください。"));
+            player.sendMessage(plugin.messages().prefixed("journey.changed", "&7準備の途中で状況が変わった。出入口から入り直して。"));
             return;
         }
-        player.sendActionBar(message("journey.preparing", "出発の準備中…"));
+        player.sendActionBar(plugin.messages().component("journey.preparing", "&7ダンジョンを用意している…"));
+        player.playSound(player.getLocation(), Sound.BLOCK_ENCHANTMENT_TABLE_USE, 0.55F, 1.15F);
         // Give the client a tick to display the transition before synchronous world generation.
         org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null) != expected
@@ -207,9 +211,9 @@ public final class GameMenuService implements Listener {
         if (session == null || session.state() != SessionState.IN_ROUND) return;
         showDialog(
                 player,
-                message("menu.end-round", "一日の終え方"),
+                message("menu.end-round", "帰り方"),
                 text(plugin.messages().format("journey.end-description",
-                        "宝を納品箱へ入れ、ホームのベッドで休んでください。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。\n深夜までに眠れないプレイヤーは死亡扱いです。",
+                        "持ち帰った宝はホームの納品箱へ。入れた分だけ精算される。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。\n0時までに眠れていないと、その日は脱落だ。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
                         "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
                 List.of(),
@@ -222,14 +226,14 @@ public final class GameMenuService implements Listener {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         showDialog(
                 player,
-                message("menu.title", "AziRouge Menu"),
+                message("menu.title", "AziRouge"),
                 text(menuDescription(session)),
                 List.of(),
                 List.of(
-                        menuAction(label("menu.session-title", "Session"), label("menu.tooltip.session", "Open session actions."), this::showSessionMenuDialog),
-                        menuAction(label("menu.round-title", "日程"), label("menu.tooltip.round", "日程の操作を開きます。"), this::showRoundDialog),
-                        action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions", "Show active sessions in chat."), "/azirouge session list"),
-                        menuAction(label("journey.help", "旅の手引き"), label("journey.help", "旅の手引き"), this::showJourneyHelp),
+                        menuAction(label("menu.session-title", "セッション"), label("menu.tooltip.session", "参加、退出、一覧。"), this::showSessionMenuDialog),
+                        menuAction(label("menu.round-title", "今日の探索"), label("menu.tooltip.round", "出発と、一日の終わり方。"), this::showRoundDialog),
+                        action(label("menu.list-sessions", "セッション一覧"), label("menu.tooltip.list-sessions", "稼働中のセッションをチャットに出す。"), "/azirouge session list"),
+                        menuAction(label("journey.help", "遊び方"), label("journey.help", "ルールを読み返す。"), this::showJourneyHelp),
                         closeAction()
                 ),
                 2
@@ -237,8 +241,8 @@ public final class GameMenuService implements Listener {
     }
 
     private void showJourneyHelp(Player player) {
-        showDialog(player, message("journey.help", "旅の手引き"),
-                text(plugin.messages().format("journey.help-body-v2", "旅支度：商人を右クリック。資金は仲間と共有です。探索中の持ち物は主にホットバー9枠です。\n出発：深いほど広くなり、宝・宝箱・罠、採掘物、ドロップが変化します。\n納品：箱の評価額でノルマを判定し、精算額は共有資金に加算されます。\n就寝：生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝です。深夜までに眠れないと死亡扱いになります。",
+        showDialog(player, message("journey.help", "遊び方"),
+                text(plugin.messages().format("journey.help-body-v2", "商人を右クリックすると買い物できる。お金は仲間と共有だ。探索中の持ち物は、ほぼホットバーの9枠だけ。\n出発では深さを選ぶ。深いほど広くなり、宝、宝箱、罠、採掘物、ドロップが変わる。\n持ち帰った宝は納品箱に入れた分だけ精算される。評価額がノルマ以上なら達成だ。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。0時までに眠れていないと、その日は脱落だ。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
                         "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
                 List.of(), List.of(menuAction(label("menu.back", "戻る"), "", this::showMenuDialog)), 1);
@@ -247,15 +251,15 @@ public final class GameMenuService implements Listener {
     private void showSessionMenuDialog(Player player) {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         List<ActionButton> actions = new ArrayList<>();
-        actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
-        actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
-        actions.add(action(label("menu.list-sessions", "List Sessions"), label("menu.tooltip.list-sessions-joinable", "Show joinable sessions in chat."), "/azirouge session list"));
-        actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
-        actions.add(menuAction(label("menu.back", "Back"), label("menu.tooltip.back-main", "Return to the main menu."), this::showMenuDialog));
+        actions.add(menuAction(label("menu.create-session", "セッションを作る"), label("menu.tooltip.create-session-open", "作成の確認を開く。"), this::showCreateSessionDialog));
+        actions.add(menuAction(label("menu.join-session", "セッションに入る"), label("menu.tooltip.join-session-open", "IDを入れて参加する。"), this::showJoinSessionDialog));
+        actions.add(action(label("menu.list-sessions", "セッション一覧"), label("menu.tooltip.list-sessions-joinable", "入れるセッションをチャットに出す。"), "/azirouge session list"));
+        actions.add(menuAction(label("menu.leave-session", "セッションを出る"), label("menu.tooltip.leave-session-open", "退出の確認を開く。"), this::showLeaveSessionConfirmation));
+        actions.add(menuAction(label("menu.back", "戻る"), label("menu.tooltip.back-main", "メニューへ戻る。"), this::showMenuDialog));
 
         showDialog(
                 player,
-                message("menu.session-title", "Session Menu"),
+                message("menu.session-title", "セッション"),
                 text(menuDescription(session)),
                 List.of(),
                 actions,
@@ -267,22 +271,22 @@ public final class GameMenuService implements Listener {
         GameSession session = plugin.gameSessionManager().sessionForPlayer(player.getUniqueId()).orElse(null);
         List<ActionButton> actions = new ArrayList<>();
         if (session == null) {
-            actions.add(menuAction(label("menu.join-session", "Join Session"), label("menu.tooltip.join-session-open", "Enter a session ID and join."), this::showJoinSessionDialog));
-            actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
+            actions.add(menuAction(label("menu.join-session", "セッションに入る"), label("menu.tooltip.join-session-open", "IDを入れて参加する。"), this::showJoinSessionDialog));
+            actions.add(menuAction(label("menu.create-session", "セッションを作る"), label("menu.tooltip.create-session-open", "作成の確認を開く。"), this::showCreateSessionDialog));
         } else if (session.state() == SessionState.LOBBY) {
-            actions.add(menuAction(label("menu.start-round", "一日を始める"), label("menu.tooltip.start-round-open", "深さを選んで探索を始めます。"), this::showStartRoundDialog));
-            actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
+            actions.add(menuAction(label("menu.start-round", "探索を始める"), label("menu.tooltip.start-round-open", "深さを選んで出発する。"), this::showStartRoundDialog));
+            actions.add(menuAction(label("menu.leave-session", "セッションを出る"), label("menu.tooltip.leave-session-open", "退出の確認を開く。"), this::showLeaveSessionConfirmation));
         } else if (session.state() == SessionState.IN_ROUND) {
-            actions.add(menuAction(label("menu.end-round", "一日の終え方"), label("menu.tooltip.end-round-open", "納品と就寝の方法を確認します。"), this::showEndRoundConfirmation));
+            actions.add(menuAction(label("menu.end-round", "帰り方"), label("menu.tooltip.end-round-open", "納品と就寝の手順を見る。"), this::showEndRoundConfirmation));
         } else if (session.state() == SessionState.GAME_OVER) {
-            actions.add(menuAction(label("menu.leave-session", "Leave Session"), label("menu.tooltip.leave-session-open", "Open the leave session confirmation."), this::showLeaveSessionConfirmation));
-            actions.add(menuAction(label("menu.create-session", "Create Session"), label("menu.tooltip.create-session-open", "Open the create session confirmation."), this::showCreateSessionDialog));
+            actions.add(menuAction(label("menu.leave-session", "セッションを出る"), label("menu.tooltip.leave-session-open", "退出の確認を開く。"), this::showLeaveSessionConfirmation));
+            actions.add(menuAction(label("menu.create-session", "セッションを作る"), label("menu.tooltip.create-session-open", "作成の確認を開く。"), this::showCreateSessionDialog));
         }
-        actions.add(menuAction(label("menu.back", "Back"), label("menu.tooltip.back-main", "Return to the main menu."), this::showMenuDialog));
+        actions.add(menuAction(label("menu.back", "戻る"), label("menu.tooltip.back-main", "メニューへ戻る。"), this::showMenuDialog));
 
         showDialog(
                 player,
-                message("menu.round-title", "日程"),
+                message("menu.round-title", "今日の探索"),
                 text(roundDescription(session)),
                 List.of(),
                 actions,
@@ -398,10 +402,10 @@ public final class GameMenuService implements Listener {
 
     private String menuDescription(GameSession session) {
         if (session == null) {
-            return label("menu.description.no-session", "セッションを作成するか、既存のセッションに参加してください。");
+            return label("menu.description.no-session", "セッションを作るか、既存のセッションに入って。");
         }
         return plugin.messages().format("menu.description.session",
-                "現在のセッション: {session}\n状態: {state}\n共有資金: {balance}\n{round}日目",
+                "セッション {session}\n状態 {state}\n共有資金 {balance}\n{round}日目",
                 "session", session.sessionId(),
                 "state", stateName(session),
                 "balance", session.sharedBalance(),
@@ -410,10 +414,10 @@ public final class GameMenuService implements Listener {
 
     private String roundDescription(GameSession session) {
         if (session == null) {
-            return label("menu.description.round-no-session", "セッションに参加していません。探索の前に作成または参加してください。");
+            return label("menu.description.round-no-session", "セッションに入っていない。先に作るか参加して。");
         }
         return plugin.messages().format("menu.description.round",
-                "セッション: {session}\n状態: {state}\n{round}日目\n深さ: {depth}\n共有資金: {balance}",
+                "セッション {session}\n状態 {state}\n{round}日目\n深さ {depth}\n共有資金 {balance}",
                 "session", session.sessionId(),
                 "state", stateName(session),
                 "round", session.currentRound(),
@@ -426,11 +430,11 @@ public final class GameMenuService implements Listener {
     }
 
     private Component text(String value) {
-        return Component.text(value);
+        return LegacyComponentSerializer.legacySection().deserialize(value == null ? "" : value);
     }
 
     private Component message(String key, String fallback) {
-        return Component.text(label(key, fallback));
+        return plugin.messages().component(key, fallback);
     }
 
     private String label(String key, String fallback) {

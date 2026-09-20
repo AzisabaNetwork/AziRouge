@@ -62,10 +62,10 @@ public final class JourneyDisplayService {
             if (session.state() == SessionState.CLOSING || session.state() == SessionState.GAME_OVER || session.isBossBattleActive()) continue;
             boolean preparing = session.roundState() == RoundState.PREPARING;
             mark(wanted, session.sessionId() + ":out", center(session, plugin.settings().portals().homeToDungeon().area()),
-                    Material.COMPASS, preparing ? "preparing" : "depart", preparing ? "&7出発の準備中…" : "&6出発！");
+                    Material.COMPASS, preparing ? "preparing" : "depart", preparing ? "&7準備中…" : "&6出発");
             BlockBox returnArea = plugin.portalService().returnArea(session);
             if (returnArea != null && session.state() == SessionState.IN_ROUND) {
-                mark(wanted, session.sessionId() + ":back", center(session, returnArea), Material.LANTERN, "return", "&a帰還！");
+                mark(wanted, session.sessionId() + ":back", center(session, returnArea), Material.LANTERN, "return", "&a帰還");
             }
             IntVector3 deliveryChest = plugin.economyService().deliveryChestPosition();
             Location deliveryLocation = new Location(
@@ -77,22 +77,22 @@ public final class JourneyDisplayService {
             int maxAnger = plugin.settings().economy().quota().maxConsecutiveMisses();
             mark(wanted, session.sessionId() + ":delivery", deliveryLocation,
                     Material.CHEST, "delivery-status",
-                    "&6納品箱\n&e納品 &f{delivered} / {quota}\n&e共有資金 &f{balance}\n&c村人の怒り &f{anger}",
+                    "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒り &f{anger}",
                     "delivered", plugin.economyService().deliveryValue(session),
                     "quota", plugin.economyService().quotaForRound(session.currentRound() + (session.state() == SessionState.LOBBY ? 1 : 0)),
                     "balance", session.sharedBalance(),
-                    "anger", AngerGauge.render(session.consecutiveQuotaMisses(), maxAnger));
+                    "anger", session.consecutiveQuotaMisses() + "/" + maxAnger);
             for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
                 Location at = villager.getLocation();
                 if (!session.homeArea().contains(at.getBlockX(), at.getBlockY(), at.getBlockZ())
                         || villager.getScoreboardTags().stream().anyMatch(tag -> Set.of("create_session", "join_session", "leave_session", "start_round", "end_round", "round", "menu").contains(tag))
                         || plugin.settings().boss().battles().stream().anyMatch(battle -> villager.getScoreboardTags().contains(battle.villagerTag()))) continue;
                 mark(wanted, session.sessionId() + ":shop:" + villager.getUniqueId(), at.clone().add(0, 2.2, 0),
-                        Material.EMERALD, "shop", "&e旅支度");
+                        Material.EMERALD, "shop", "&e商人");
                 for (Player player : session.world().getPlayers()) {
                     if (session.isMember(player.getUniqueId()) && player.getLocation().distanceSquared(at) < 16
                             && DepartureGuard.canPrepare(session.state(), session.roundState())) {
-                        hintOnce(plugin, player, "shop", "旅の備えに。右クリックで買い物できます。資金は仲間と共有です。");
+                        hintOnce(plugin, player, "shop", "&e右クリックで買い物。お金は仲間と共有だ。");
                     }
                 }
             }
@@ -121,13 +121,14 @@ public final class JourneyDisplayService {
                 display.setItemStack(new ItemStack(material));
                 display.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GROUND);
                 display.setGlowing(true);
-                display.setGlowColorOverride(material == Material.LANTERN ? Color.LIME : Color.YELLOW);
+                display.setGlowColorOverride(glowColor(material));
             });
             TextDisplay text = location.getWorld().spawn(location, TextDisplay.class, display -> {
                 setup(display);
                 display.setShadowed(true);
                 display.setSeeThrough(false);
-                display.setBackgroundColor(Color.fromARGB(90, 15, 15, 15));
+                display.setBackgroundColor(Color.fromARGB(160, 8, 8, 8));
+                display.setLineWidth(140);
             });
             current = new Landmark(icon, text);
             landmarks.put(id, current);
@@ -157,18 +158,32 @@ public final class JourneyDisplayService {
         if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)
                 || player.getPersistentDataContainer().has(pendingKey, PersistentDataType.BYTE)) return;
         player.getPersistentDataContainer().set(pendingKey, PersistentDataType.BYTE, (byte) 1);
-        player.sendActionBar(Component.text(plugin.messages().format("journey.hint." + stage, fallback, replacements)));
+        Component line = plugin.messages().component("journey.hint." + stage, fallback, replacements);
+        player.sendActionBar(line);
+        // ponytail: action bars vanish in ~3s, refresh so the first hint stays readable
+        for (int i = 1; i <= 4; i++) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (player.isOnline() && player.getPersistentDataContainer().has(pendingKey, PersistentDataType.BYTE)) {
+                    player.sendActionBar(line);
+                }
+            }, i * 20L);
+        }
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             player.getPersistentDataContainer().remove(pendingKey);
             if (player.isOnline()) {
                 player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
             }
-        }, 40L);
+        }, 90L);
     }
 
     public void showDeliveryHint(Player player) {
-        hintOnce(plugin, player, "delivery-rules",
-                "納品箱の評価額がノルマ以上なら達成です。精算時に評価額が共有資金へ加算され、ノルマ分は差し引かれません。");
+        NamespacedKey key = new NamespacedKey(plugin, "journey_delivery-rules");
+        if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
+        player.sendMessage(plugin.messages().prefixed(
+                "journey.hint.delivery-rules",
+                "納品箱に入れた評価額でノルマを判定する。精算でその額が共有資金に入る。ノルマ分は引かれない。"
+        ));
+        player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
     }
 
     public void showBedHint(Player player) {
@@ -176,11 +191,20 @@ public final class JourneyDisplayService {
         if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
         player.sendMessage(plugin.messages().prefixed(
                 "journey.hint.bed-deadline",
-                "深夜0時までに眠っていない仲間は死亡・脱落扱いです。生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。",
+                "0時までに眠れていないと、その日は脱落だ。生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。",
                 "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
                 "seconds", plugin.settings().roundTiming().sleepDelaySeconds()
         ));
         player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+    }
+
+    private static Color glowColor(Material material) {
+        return switch (material) {
+            case LANTERN -> Color.LIME;
+            case EMERALD -> Color.AQUA;
+            case CHEST -> Color.ORANGE;
+            default -> Color.YELLOW;
+        };
     }
 
     private record Landmark(ItemDisplay icon, TextDisplay text) {

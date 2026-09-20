@@ -67,7 +67,7 @@ public final class TreasurePickupListener implements Listener {
         }
 
         if (!PlayerInventorySupport.canFitHotbar(event.getPlayer().getInventory(), reward)) {
-            event.getPlayer().sendMessage(plugin.messages().prefixed("treasure.hotbar-full", "&cホットバーがいっぱいです。空きを作ってから拾ってください。"));
+            event.getPlayer().sendMessage(plugin.messages().prefixed("treasure.hotbar-full", "&cホットバーがいっぱいだ。空きを作ってから拾って。"));
             return;
         }
         PlayerInventorySupport.addToHotbar(event.getPlayer().getInventory(), reward.clone());
@@ -75,7 +75,15 @@ public final class TreasurePickupListener implements Listener {
                 .ifPresent(session -> plugin.statisticsService()
                         .recordTreasure(session.runId(), event.getPlayer(), display.getUniqueId()));
 
-        event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.8F, 1.1F);
+        Long price = plugin.settings().economy().sellPrices().get(reward.getType());
+        event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.85F, 1.15F);
+        if (price != null) {
+            event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.35F, 1.6F);
+            event.getPlayer().sendActionBar(plugin.messages().component(
+                    "treasure.picked-up-value", "&e宝を拾った  &6価値 {price}", "price", price * reward.getAmount()));
+        } else {
+            event.getPlayer().sendActionBar(plugin.messages().component("treasure.picked-up", "&e宝を拾った"));
+        }
         display.remove();
         interaction.remove();
     }

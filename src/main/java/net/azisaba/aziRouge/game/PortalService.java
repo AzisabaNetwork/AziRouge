@@ -123,7 +123,8 @@ public final class PortalService implements Listener {
                     player,
                     roundPortals.homeDestination(),
                     roundPortals.homeYawOffset(),
-                    plugin.messages().text("journey.return", "&a帰還！"),
+                    plugin.messages().text("portal.title.return-home", "&a帰還"),
+                    plugin.messages().text("portal.message.return-home", "&e納品箱へ入れて、ベッドで休め"),
                     false
             );
         }
@@ -138,7 +139,7 @@ public final class PortalService implements Listener {
                 && player.getGameMode() != GameMode.SPECTATOR;
     }
 
-    private void teleportWithCooldown(Player player, Location destination, float yawOffset, String title, boolean enteredDungeon) {
+    private void teleportWithCooldown(Player player, Location destination, float yawOffset, String title, String subtitle, boolean enteredDungeon) {
         long now = System.currentTimeMillis();
         long cooldownUntil = cooldownUntilMillis.getOrDefault(player.getUniqueId(), 0L);
         if (cooldownUntil > now) {
@@ -149,15 +150,18 @@ public final class PortalService implements Listener {
         target.setYaw(normalizeYaw(player.getLocation().getYaw() + yawOffset));
         target.setPitch(player.getLocation().getPitch());
         if (player.teleport(target)) {
-            player.sendTitle(title, "", 5, 35, 10);
+            player.sendTitle(title, subtitle, 8, 45, 12);
             cooldownUntilMillis.put(player.getUniqueId(), now + plugin.settings().portals().cooldownSeconds() * 1000L);
-            player.playSound(player.getLocation(), enteredDungeon ? Sound.BLOCK_AMETHYST_BLOCK_CHIME : Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.35F, 1.2F);
+            Location at = player.getLocation();
+            player.playSound(at, Sound.ENTITY_ENDERMAN_TELEPORT, 0.45F, enteredDungeon ? 1.15F : 0.85F);
+            player.playSound(at, enteredDungeon ? Sound.BLOCK_AMETHYST_BLOCK_CHIME : Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE,
+                    enteredDungeon ? 0.7F : 0.55F, enteredDungeon ? 1.35F : 1.0F);
             JourneyDisplayService.hintOnce(plugin, player, enteredDungeon ? "explore" : "return-home",
-                    enteredDungeon ? "宝を探そう。帰り道も忘れずに。" : "おかえり。深夜0時までに家のベッドで休もう。");
-
+                    enteredDungeon ? "&e宝を集めたら、ダンジョン内の帰還ポータルで戻れ。" : "&aおかえり。0時までにベッドで休もう。");
         } else {
             cooldownUntilMillis.put(player.getUniqueId(), now + 1000L);
-            player.sendActionBar(net.kyori.adventure.text.Component.text(plugin.messages().text("journey.teleport-failed", "道が塞がれています。少し待って、もう一度。")));
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.8F, 0.6F);
+            player.sendActionBar(plugin.messages().component("journey.teleport-failed", "&c足下がふさがっている。少し待ってからもう一度。"));
         }
     }
 
@@ -165,7 +169,9 @@ public final class PortalService implements Listener {
         RoundPortals portals = roundPortalsBySessionId.get(session.sessionId());
         if (portals == null || !canUsePortal(session, player)) return;
         teleportWithCooldown(player, portals.dungeonDestination(), portals.dungeonYawOffset(),
-                plugin.messages().text("journey.depart-title", "&6出発！"), true);
+                plugin.messages().text("portal.title.enter-dungeon", "&6出発"),
+                plugin.messages().text("portal.message.enter-dungeon", "&e宝を集めたら、帰還ポータルで戻れ"),
+                true);
     }
 
     @EventHandler

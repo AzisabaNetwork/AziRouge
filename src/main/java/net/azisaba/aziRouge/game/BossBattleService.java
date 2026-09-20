@@ -5,6 +5,7 @@ import net.azisaba.aziRouge.config.BossBattleSettings;
 import net.azisaba.aziRouge.math.BlockBox;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -106,11 +107,13 @@ public final class BossBattleService implements Listener {
 
         session.markBossDefeated();
         active.installReturnPortal(session.world());
-        broadcast(session, m("boss.defeated", "&6Boss defeated. A return portal has opened."));
+        broadcast(session, m("boss.defeated", "&6ボスを倒した。帰還ポータルが開いた。"));
         for (UUID playerId : session.onlineMembers()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
-                player.sendTitle(m("boss.title.defeated", "&6Boss Defeated"), m("boss.subtitle.enter-return-portal", "&eEnter the portal to return"), 10, 70, 20);
+                player.sendTitle(m("boss.title.defeated", "&6ボス撃破"), m("boss.subtitle.enter-return-portal", "&e帰還ポータルに入れ"), 10, 70, 20);
+                player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.8F, 1.0F);
+                player.playSound(player.getLocation(), Sound.BLOCK_END_PORTAL_SPAWN, 0.35F, 1.4F);
             }
         }
     }
@@ -153,19 +156,19 @@ public final class BossBattleService implements Listener {
 
     private void challengeBoss(Player player, GameSession session, BossBattleSettings battle) {
         if (!session.isMember(player.getUniqueId())) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.not-member", "&cYou are not a member of this session."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.not-member", "&cこのセッションのメンバーではない。"));
             return;
         }
         if (session.state() != SessionState.LOBBY) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.lobby-only", "&cBoss battles can only be challenged in the lobby."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.lobby-only", "&cボス戦はロビーからのみ挑める。"));
             return;
         }
         if (session.currentRound() < battle.minRound()) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.min-round", "&cこのボスは {min}日目以降に挑戦できます。現在: {round}日目", "min", battle.minRound(), "round", session.currentRound()));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.min-round", "&cこのボスは {min}日目から挑める。いまは {round}日目。", "min", battle.minRound(), "round", session.currentRound()));
             return;
         }
         if (session.isBossBattleActive()) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.already-active", "&cA boss battle is already active."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.already-active", "&cボス戦はすでに始まっている。"));
             return;
         }
 
@@ -173,7 +176,7 @@ public final class BossBattleService implements Listener {
                 .filter(playerId -> Bukkit.getPlayer(playerId) != null)
                 .toList();
         if (participants.isEmpty()) {
-            player.sendMessage(plugin.messages().prefix() + m("boss.error.no-online-members", "&cThere are no online session members."));
+            player.sendMessage(plugin.messages().prefix() + m("boss.error.no-online-members", "&cオンラインのメンバーがいない。"));
             return;
         }
 
@@ -189,7 +192,7 @@ public final class BossBattleService implements Listener {
                 player,
                 plugin.messages().format(
                         "boss.confirm-challenge",
-                        "Challenge boss {boss} with all online members?",
+                        "オンラインのメンバー全員で、ボス {boss} に挑む。",
                         "boss",
                         battle.id()
                 ),

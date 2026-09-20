@@ -12,7 +12,6 @@ import net.azisaba.aziRouge.template.TemplateLoadException;
 import net.azisaba.aziRouge.statistics.ExitReason;
 import net.azisaba.aziRouge.statistics.PlayerSnapshot;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -142,8 +141,9 @@ public final class GameSessionManager {
             initializeSessionPlayerState(player);
             player.teleport(destination);
         }
-        broadcastTitle(session, m("boss.title.start", "&5ボス戦"), ChatColor.YELLOW + bossBattleId, 10, 60, 15);
-        broadcastSessionMessage(session, m("boss.challenging", "&dボス戦に挑戦します: {boss}", "boss", bossBattleId));
+        broadcastTitle(session, m("boss.title.start", "&5ボス戦"), m("boss.subtitle.start", "&e全員で挑め"), 10, 70, 20);
+        broadcastSound(session, Sound.ENTITY_EVOKER_PREPARE_SUMMON, 0.8F, 0.9F);
+        broadcastSessionMessage(session, m("boss.challenging", "&dボス戦だ。{boss}", "boss", bossBattleId));
         updateRoundAfterAliveChange(session);
     }
 
@@ -173,7 +173,8 @@ public final class GameSessionManager {
         setRoundSurvival(player);
         initializeSessionPlayerState(player);
         player.teleport(session.returnSpawnLocation());
-        sendTitle(player, m("session.title.returned-home", "&aReturned Home"), m("session.subtitle.waiting-party", "&eWaiting for the party"), 5, 40, 10);
+        sendTitle(player, m("session.title.returned-home", "&aホームへ"), m("session.subtitle.waiting-party", "&e仲間を待っている"), 8, 50, 12);
+        player.playSound(player.getLocation(), Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE, 0.5F, 1.05F);
     }
 
     public void finishBossBattleVictory(GameSession session) {
@@ -190,8 +191,9 @@ public final class GameSessionManager {
         session.clearBossBattle();
         session.setRoundState(RoundState.ENDED);
         session.setState(SessionState.LOBBY);
-        broadcastTitle(session, m("boss.title.defeated", "&6ボス撃破"), m("round.subtitle.returned-home", "&eホームに戻りました"), 10, 70, 20);
-        broadcastSessionMessage(session, m("boss.cleared", "&aボス戦をクリアしました。準備ができたら翌日の探索を始めてください。"));
+        broadcastTitle(session, m("boss.title.defeated", "&6ボス撃破"), m("round.subtitle.returned-home", "&eホームに戻った"), 10, 70, 20);
+        broadcastSound(session, Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7F, 1.05F);
+        broadcastSessionMessage(session, m("boss.cleared", "&aボスを倒した。準備ができたら、次の探索を始めて。"));
     }
 
     public void cleanupLeftoverWorldFoldersOnStartup() {
@@ -307,10 +309,11 @@ public final class GameSessionManager {
                 }
 
                 preparePlayerForSessionEntry(player);
-                sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.created", "&eセッション {session} を作成しました", "session", session.sessionId()), 10, 50, 10);
+                sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.created", "&eセッション {session}", "session", session.sessionId()), 10, 55, 12);
+                player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.8F, 1.1F);
                 sendMessage(player, m("session.created", "&aCreated session {session}. Invite players with /azirouge session join {session}.", "session", session.sessionId()));
                 sendCopyableSessionId(player, session);
-                JourneyDisplayService.hintOnce(plugin, player, "home", "旅支度ができたら、出発の目印へ。");
+                JourneyDisplayService.hintOnce(plugin, player, "home", "&e商人で支度してから、出発の印へ。");
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
                 plugin.statisticsService().recordSessionJoin(session.runId(), player);
@@ -360,14 +363,15 @@ public final class GameSessionManager {
         } else {
             restoreGameMode(player);
         }
-        sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.joined", "&eセッション {session} に参加しました", "session", session.sessionId()), 10, 50, 10);
+        sendTitle(player, m("session.title.brand", "&6AziRouge"), m("session.subtitle.joined", "&eセッション {session} に入った", "session", session.sessionId()), 10, 55, 12);
+        player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.8F, 1.1F);
         sendMessage(player, m("session.joined", "&aJoined session {session}.", "session", session.sessionId()));
         if (session.state() == SessionState.IN_ROUND) {
             sendMessage(player, m("session.joined-in-round", "&eA round is in progress, so you will spectate this round. You can play from the next round."));
         } else {
             broadcastSessionMessage(session, m("session.member-joined", "&e{player} joined the session. Players: {players}/{max}",
                     "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
-            JourneyDisplayService.hintOnce(plugin, player, "home", "旅支度ができたら、出発の目印へ。");
+            JourneyDisplayService.hintOnce(plugin, player, "home", "&e商人で支度してから、出発の印へ。");
         }
         plugin.statisticsService().recordSessionJoin(session.runId(), player);
         return session;
@@ -812,7 +816,7 @@ public final class GameSessionManager {
         if (session.isBossBattleActive()) {
             session.markDead(player.getUniqueId());
             session.recordBossDeathLocation(player.getUniqueId(), player.getLocation());
-            sendTitle(player, m("session.title.down", "&cDown"), m("session.subtitle.boss-revive", "&7An ally can revive you by sneaking nearby"), 10, 60, 20);
+            sendTitle(player, m("session.title.down", "&cダウン"), m("session.subtitle.boss-revive", "&7味方が近くでスニークすると蘇生できる"), 10, 70, 20);
             sendMessage(player, m("session.boss-down", "&cYou are down in the boss battle. An alive ally can hold sneak at your death location to revive you."));
             broadcastSessionMessage(session, m("session.member-down", "&c{player} went down. Alive: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
             updateRoundAfterAliveChange(session);
@@ -828,7 +832,7 @@ public final class GameSessionManager {
             );
         }
         session.markPendingNextRound(player.getUniqueId());
-        sendTitle(player, m("session.title.down", "&cDown"), m("session.subtitle.spectating-next-round", "&7Spectating until the next round"), 10, 60, 20);
+        sendTitle(player, m("session.title.down", "&cダウン"), m("session.subtitle.spectating-next-round", "&7翌日まで観戦"), 10, 70, 20);
         sendMessage(player, m("session.out-this-round", "&cYou are out for this round. You will return at the start of the next round."));
         broadcastSessionMessage(session, m("session.member-died", "&c{player} died. Alive: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
         updateRoundAfterAliveChange(session);
@@ -1121,7 +1125,8 @@ public final class GameSessionManager {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
-                sendTitle(player, m("session.title.returned", "&aReturned"), m("session.subtitle.can-play-round", "&eYou can play this round"), 10, 45, 10);
+                sendTitle(player, m("session.title.returned", "&a復帰"), m("session.subtitle.can-play-round", "&e今日から動ける"), 10, 50, 12);
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.45F, 1.4F);
             }
         }
         for (UUID playerId : session.pendingPlayersNextRound()) {
@@ -1133,7 +1138,8 @@ public final class GameSessionManager {
                 setRoundSurvival(player);
                 initializeSessionPlayerState(player);
                 player.teleport(session.spawnLocation());
-                sendTitle(player, m("session.title.returned", "&aReturned"), m("session.subtitle.can-play-round", "&eYou can play this round"), 10, 45, 10);
+                sendTitle(player, m("session.title.returned", "&a復帰"), m("session.subtitle.can-play-round", "&e今日から動ける"), 10, 50, 12);
+                player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.45F, 1.4F);
             }
         }
     }
@@ -1203,14 +1209,20 @@ public final class GameSessionManager {
         broadcastTitle(
                 session,
                 m("round.title.start", "&6{round}日目", "round", session.currentRound()),
-                m("round.subtitle.quota", "&e今日のノルマ: {quota}", "quota", quota),
+                m("round.subtitle.quota", "&e今日のノルマ {quota}", "quota", quota),
                 10,
-                60,
-                15
+                70,
+                16
         );
+        broadcastSound(session, Sound.ENTITY_PLAYER_LEVELUP, 0.55F, 0.85F);
+        broadcastSessionMessage(session, m(
+                "round.started",
+                "&a{round}日目が始まった。ホームの出入口からダンジョンへ。",
+                "round", session.currentRound()
+        ));
         broadcastVillagerMessage(session, m(
                 "round.quota-due-detail",
-                "&e村人「今日のノルマは {quota} だ。納品箱へ入れてくれ」",
+                "&e村人: 今日のノルマは {quota} だ。納品箱に入れてくれ",
                 "quota", quota,
                 "remaining", Math.max(0, plugin.settings().economy().quota().maxConsecutiveMisses()
                         - session.consecutiveQuotaMisses())
@@ -1219,14 +1231,17 @@ public final class GameSessionManager {
 
     private void announceRoundEnd(GameSession session, RoundEndResult result) {
         String title = result.quotaAchieved()
-                ? m("round.title.quota-achieved", "&aノルマ達成！")
-                : m("round.title.quota-missed", "&cノルマ到達ならず...");
-        String subtitle = m("round.subtitle.result", "&e納品 {items}個 / {amount} / ノルマ {quota}",
+                ? m("round.title.quota-achieved", "&aノルマ達成")
+                : m("round.title.quota-missed", "&cノルマ未達");
+        String subtitle = m("round.subtitle.result", "&e納品 {amount}（ノルマ {quota}）",
                 "items", result.itemCount(), "amount", result.totalAmount(), "quota", result.quota());
         broadcastTitle(session, title, subtitle, 10, 70, 20);
+        if (result.quotaAchieved()) {
+            broadcastSound(session, Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7F, 1.15F);
+        }
         broadcastSessionMessage(session, m(
                 "round.ended-summary",
-                "&e{round}日目終了。納品 {items}個 / 価格 {amount} / ノルマ {quota} / 共有資金 {balance}",
+                "&e{round}日目終了。納品 {items}個 / {amount} / ノルマ {quota} / 共有資金 {balance}",
                 "round", session.currentRound(),
                 "items", result.itemCount(),
                 "amount", result.totalAmount(),
@@ -1236,26 +1251,21 @@ public final class GameSessionManager {
         if (result.quotaAchieved()) {
             broadcastVillagerMessage(session, m(
                     "round.quota-improved",
-                    "&a村人「よくやった！ 怒りが少し収まったぞ」"
+                    "&a村人: 助かった。怒りも、少し収まったな"
             ), Sound.ENTITY_VILLAGER_CELEBRATE);
         } else {
             broadcastVillagerMessage(session, m(
                     "round.quota-missed-angry",
-                    "&c村人「ノルマ未達だと！？ 次は必ず持ってこい！」 &7ゲームオーバーまで残り {remaining}回",
+                    "&c村人: 足りないぞ。次は持ってこい  &7ゲームオーバーまで残り {remaining}回",
                     "remaining", result.remainingMisses()
             ), Sound.ENTITY_VILLAGER_NO);
             int warningAt = plugin.settings().economy().quota().warningRemaining();
             if (result.remainingMisses() > 0 && result.remainingMisses() <= warningAt) {
                 broadcastVillagerMessage(session, m(
                         "round.quota-warning",
-                        "&4村人「次もノルマ未達なら、もう終わりだからな！」"
+                        "&4村人: 次も足りなければ、ここまでだ"
                 ), Sound.ENTITY_VILLAGER_NO);
-                for (UUID playerId : session.onlineMembers()) {
-                    Player player = Bukkit.getPlayer(playerId);
-                    if (player != null) {
-                        player.playSound(player.getLocation(), org.bukkit.Sound.ENTITY_WITHER_SPAWN, 0.35F, 1.4F);
-                    }
-                }
+                broadcastSound(session, Sound.ENTITY_WITHER_SPAWN, 0.35F, 1.4F);
             }
         }
     }
@@ -1266,17 +1276,18 @@ public final class GameSessionManager {
         launchGameOverFireworks(session);
         broadcastTitle(
                 session,
-                m("game-over.title", "&4Game Over"),
-                m("game-over.subtitle", "&c{reason}&7 / {round}日目到達", "reason", reason, "round", session.currentRound()),
+                m("game-over.title", "&4ゲームオーバー"),
+                m("game-over.subtitle", "&c{reason}  &7{round}日目まで", "reason", reason, "round", session.currentRound()),
                 10,
                 100,
                 30
         );
-        broadcastSessionMessage(session, m("game-over.reason-line", "&cGame over: {reason}", "reason", reason));
-        broadcastSessionMessage(session, m("game-over.reached-round", "&6到達日数: {round}日目", "round", session.currentRound()));
-        broadcastSessionMessage(session, m("game-over.leave", "&eLeave this session: /azirouge session leave"));
-        broadcastSessionMessage(session, m("game-over.next-session", "&eCreate the next session after leaving with /azirouge session create, or right-click the start menu."));
-        broadcastSessionMessage(session, m("game-over.auto-close", "&7This session will be closed automatically soon."));
+        broadcastSound(session, Sound.ENTITY_WITHER_DEATH, 0.45F, 0.75F);
+        broadcastSessionMessage(session, m("game-over.reason-line", "&cゲームオーバー  {reason}", "reason", reason));
+        broadcastSessionMessage(session, m("game-over.reached-round", "&6到達 {round}日目", "round", session.currentRound()));
+        broadcastSessionMessage(session, m("game-over.leave", "&e退出  /azirouge session leave"));
+        broadcastSessionMessage(session, m("game-over.next-session", "&e出たあと、/azirouge session create か開始メニューから次を作れる。"));
+        broadcastSessionMessage(session, m("game-over.auto-close", "&7このセッションはまもなく自動で終了する。"));
         scheduleGameOverShutdown(session);
     }
 
@@ -1329,6 +1340,15 @@ public final class GameSessionManager {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null) {
                 sendTitle(player, title, subtitle, fadeIn, stay, fadeOut);
+            }
+        }
+    }
+
+    private void broadcastSound(GameSession session, Sound sound, float volume, float pitch) {
+        for (UUID playerId : session.onlineMembers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                player.playSound(player.getLocation(), sound, volume, pitch);
             }
         }
     }

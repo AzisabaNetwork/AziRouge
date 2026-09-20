@@ -153,10 +153,10 @@ public final class SettingsLoader {
 
     private static String defaultLeaderboardTitle(RankingPeriod period) {
         return switch (period) {
-            case DAILY -> "Daily Ranking";
-            case WEEKLY -> "Weekly Ranking";
-            case MONTHLY -> "Monthly Ranking";
-            case TOTAL -> "All-Time Ranking";
+            case DAILY -> "日間ランキング";
+            case WEEKLY -> "週間ランキング";
+            case MONTHLY -> "月間ランキング";
+            case TOTAL -> "通算ランキング";
         };
     }
 
@@ -207,7 +207,7 @@ public final class SettingsLoader {
 
     private static ShopSettings loadShopSettings(JavaPlugin plugin, FileConfiguration config) {
         return new ShopSettings(
-                requireText(config.getString("shop.title"), "AziRouge Shop"),
+                requireText(config.getString("shop.title"), "商人"),
                 loadShopTrades(plugin, config.getList("shop.trades.in-round"), "shop.trades.in-round"),
                 loadShopTrades(plugin, config.getList("shop.trades.between-round"), "shop.trades.between-round")
         );
