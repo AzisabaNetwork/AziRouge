@@ -66,20 +66,24 @@ public final class ShopService implements Listener {
         }
 
         Inventory inventory = event.getView().getTopInventory();
-        plugin.confirmationService().request(
-                player,
-                plugin.messages().format(
-                        "shop.confirm-purchase",
-                        "Purchase {item} x{amount} for {price} shared money?",
-                        "item",
-                        trade.material().name(),
-                        "amount",
-                        trade.amount(),
-                        "price",
-                        trade.price()
-                ),
-                () -> handlePurchase(player, holder, trade, inventory)
-        );
+        GameSession session = sessionManager.sessionById(holder.sessionId()).orElse(null);
+        if (session != null && requiresConfirmation(session, trade)) {
+            plugin.confirmationService().request(
+                    player,
+                    plugin.messages().format(
+                            "shop.confirm-expensive",
+                            "{item} x{amount} を {price} で購入します。共有資金 {balance} → {after}。よろしいですか？",
+                            "item", trade.material().name(),
+                            "amount", trade.amount(),
+                            "price", trade.price(),
+                            "balance", session.sharedBalance(),
+                            "after", session.sharedBalance() - trade.price()
+                    ),
+                    () -> handlePurchase(player, holder, trade, inventory)
+            );
+        } else {
+            handlePurchase(player, holder, trade, inventory);
+        }
     }
 
     private void handlePurchase(Player player, ShopHolder holder, ShopTradeSettings trade, Inventory inventory) {
@@ -107,7 +111,7 @@ public final class ShopService implements Listener {
             return;
         }
         player.getInventory().addItem(purchased);
-        player.sendMessage(plugin.messages().prefix() + m("shop.purchased", "&a{item} x{amount} を購入しました。価格 {price} / 残高 {balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
+        player.sendMessage(plugin.messages().prefix() + m("shop.purchase-complete", "&a購入完了: {item} x{amount}（-{price}） &7共有資金: {balance}", "item", trade.material().name(), "amount", trade.amount(), "price", trade.price(), "balance", session.sharedBalance()));
         refreshShop(inventory, holder, session);
     }
 
@@ -147,10 +151,16 @@ public final class ShopService implements Listener {
         ItemStack item = tradeItem(trade);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.GREEN + trade.material().name());
+            meta.setDisplayName(ChatColor.GREEN + trade.material().name() + " x" + trade.amount()
+                    + ChatColor.GOLD + "  " + trade.price());
             List<String> lore = new ArrayList<>();
             lore.add(m("shop.lore.price", "&ePrice: {price}", "price", trade.price()));
             lore.add(m("shop.lore.shared-money", "&7Shared money: {balance}", "balance", session.sharedBalance()));
+            lore.add(m("shop.lore.after-purchase", "&7購入後: {balance}", "balance", Math.max(0L, session.sharedBalance() - trade.price())));
+            lore.add(m("shop.lore.hotbar-limit", "&c探索中の持ち物は主にホットバー9枠です。"));
+            if (requiresConfirmation(session, trade)) {
+                lore.add(m("shop.lore.confirmation", "&6高額購入のためクリック後に確認します。"));
+            }
             if (!trade.canDestroy().isEmpty()) {
                 lore.add(m("shop.lore.can-mine", "&7Can mine: {count} block types", "count", trade.canDestroy().size()));
             }
@@ -182,6 +192,11 @@ public final class ShopService implements Listener {
             return plugin.settings().shop().betweenRoundTrades();
         }
         return List.of();
+    }
+
+    private boolean requiresConfirmation(GameSession session, ShopTradeSettings trade) {
+        long balance = session.sharedBalance();
+        return balance > 0L && trade.price() <= balance && trade.price() >= Math.ceilDiv(balance, 2L);
     }
 
     private boolean canUseShop(Player player, GameSession session) {

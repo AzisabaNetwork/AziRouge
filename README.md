@@ -242,7 +242,7 @@ Mob は `azirouge.mobs` の重みとスポーン間隔でダンジョン内に�
 - `/azirouge money add <sessionId> <amount>` で共有資金を加算します。
 - `economy.quota.delivery-chest` に session ごとの納品箱を設置します。ラウンド終了時はこのチェスト内だけを換金し、player inventory 内のアイテムは納品に含めません。
 - ノルマは `ceil((economy.quota.base + economy.quota.per-round * currentRound) * economy.quota.multiplier)` です。納品価格がノルマ以上なら達成となり、連続未達回数をリセットします。
-- 未達が `economy.quota.max-consecutive-misses` 回連続すると GAME_OVER です。残回数はスコアボードに表示され、`warning-remaining` 以下では警告します。
+- 未達が `economy.quota.max-consecutive-misses` 回連続すると GAME_OVER です。進行度はスコアボードの村人の怒りゲージに表示され、`warning-remaining` 以下では警告します。
 - 納品した宝の価格は共有資金へ加算されます。共有資金からノルマ額を差し引くことはありません。
 - 換金価格は `economy.sell-prices.<MATERIAL>` の Material name ベースです。
 

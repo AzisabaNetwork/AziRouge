@@ -29,6 +29,7 @@ public final class GameSession {
     private final Set<UUID> alivePlayers = new HashSet<>();
     private final Set<UUID> deadPlayers = new HashSet<>();
     private final Set<UUID> pendingPlayersNextRound = new HashSet<>();
+    private final Set<UUID> roundExplorers = new HashSet<>();
     private final Map<UUID, Location> savedReturnLocations = new HashMap<>();
     private final Map<UUID, Location> bossDeathLocations = new HashMap<>();
     private final Map<UUID, Integer> maxReachedDepths = new HashMap<>();
@@ -315,6 +316,7 @@ public final class GameSession {
         alivePlayers.addAll(playerIds);
         deadPlayers.clear();
         pendingPlayersNextRound.clear();
+        roundExplorers.clear();
     }
 
     public void markDead(UUID playerId) {
@@ -340,6 +342,7 @@ public final class GameSession {
         alivePlayers.clear();
         deadPlayers.clear();
         pendingPlayersNextRound.clear();
+        roundExplorers.clear();
         bossDeathLocations.clear();
     }
 
@@ -418,6 +421,7 @@ public final class GameSession {
     }
 
     public boolean updateMaxReachedDepth(UUID playerId, int depth) {
+        roundExplorers.add(playerId);
         int normalizedDepth = Math.max(0, depth);
         int previousDepth = maxReachedDepths.getOrDefault(playerId, -1);
         if (normalizedDepth <= previousDepth) {
@@ -425,6 +429,10 @@ public final class GameSession {
         }
         maxReachedDepths.put(playerId, normalizedDepth);
         return true;
+    }
+
+    public boolean hasExploredThisRound(UUID playerId) {
+        return roundExplorers.contains(playerId);
     }
 
     private double distanceSquaredToBox(int x, int y, int z, BlockBox bounds) {

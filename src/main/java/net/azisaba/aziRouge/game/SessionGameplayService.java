@@ -24,6 +24,7 @@ import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerToggleSprintEvent;
 import org.bukkit.inventory.ItemStack;
@@ -181,6 +182,17 @@ public final class SessionGameplayService implements Listener {
         }
         if (event.getClickedInventory() instanceof PlayerInventory && event.getSlot() >= 9 && event.getSlot() <= 35) {
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player) || !(event.getInventory().getHolder() instanceof Chest chest)) {
+            return;
+        }
+        GameSession session = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
+        if (session != null && plugin.economyService().isDeliveryChest(session, chest.getBlock())) {
+            plugin.journeyDisplayService().showDeliveryHint(player);
         }
     }
 

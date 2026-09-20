@@ -74,14 +74,15 @@ public final class JourneyDisplayService {
                     deliveryChest.y() + 1.2D,
                     deliveryChest.z() + 0.5D
             );
+            int maxAnger = plugin.settings().economy().quota().maxConsecutiveMisses();
+            int anger = Math.min(maxAnger, session.consecutiveQuotaMisses());
             mark(wanted, session.sessionId() + ":delivery", deliveryLocation,
-                    Material.CHEST, "delivery", "&6納品箱");
-            for (Player player : session.world().getPlayers()) {
-                if (session.isMember(player.getUniqueId())
-                        && player.getLocation().distanceSquared(deliveryLocation) < 16.0D) {
-                    showDeliveryHint(player);
-                }
-            }
+                    Material.CHEST, "delivery-status",
+                    "&6納品箱\n&e納品 &f{delivered} / {quota}\n&e共有資金 &f{balance}\n&c村人の怒り &f{anger}",
+                    "delivered", plugin.economyService().deliveryValue(session),
+                    "quota", plugin.economyService().quotaForRound(session.currentRound() + (session.state() == SessionState.LOBBY ? 1 : 0)),
+                    "balance", session.sharedBalance(),
+                    "anger", "&c" + "■".repeat(anger) + "&7" + "□".repeat(maxAnger - anger));
             for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
                 Location at = villager.getLocation();
                 if (!session.homeArea().contains(at.getBlockX(), at.getBlockY(), at.getBlockZ())
@@ -110,7 +111,7 @@ public final class JourneyDisplayService {
                 (box.minZ() + box.maxZ() + 1) / 2.0);
     }
 
-    private void mark(Set<String> wanted, String id, Location location, Material material, String key, String fallback) {
+    private void mark(Set<String> wanted, String id, Location location, Material material, String key, String fallback, Object... replacements) {
         wanted.add(id);
         if (!location.getWorld().isChunkLoaded(location.getBlockX() >> 4, location.getBlockZ() >> 4)) return;
         Landmark current = landmarks.get(id);
@@ -132,7 +133,9 @@ public final class JourneyDisplayService {
             current = new Landmark(icon, text);
             landmarks.put(id, current);
         }
-        Component label = LegacyComponentSerializer.legacySection().deserialize(plugin.messages().text("journey.landmark." + key, fallback));
+        Component label = LegacyComponentSerializer.legacySection().deserialize(
+                plugin.messages().format("journey.landmark." + key, fallback, replacements)
+        );
         if (!label.equals(current.text.text())) current.text.text(label);
         if (current.text.getLocation().distanceSquared(location) > 0.01) {
             current.text.teleport(location);
@@ -151,21 +154,34 @@ public final class JourneyDisplayService {
 
     public static void hintOnce(AziRouge plugin, Player player, String stage, String fallback, Object... replacements) {
         NamespacedKey key = new NamespacedKey(plugin, "journey_" + stage);
-        if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
+        NamespacedKey pendingKey = new NamespacedKey(plugin, "journey_" + stage + "_pending");
+        if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)
+                || player.getPersistentDataContainer().has(pendingKey, PersistentDataType.BYTE)) return;
+        player.getPersistentDataContainer().set(pendingKey, PersistentDataType.BYTE, (byte) 1);
         player.sendActionBar(Component.text(plugin.messages().format("journey.hint." + stage, fallback, replacements)));
-        player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            player.getPersistentDataContainer().remove(pendingKey);
+            if (player.isOnline()) {
+                player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
+            }
+        }, 40L);
     }
 
     public void showDeliveryHint(Player player) {
-        hintOnce(plugin, player, "delivery",
-                "宝はインベントリに持っているだけでは納品されません。納品箱へ入れてください。");
+        hintOnce(plugin, player, "delivery-rules",
+                "納品箱の評価額がノルマ以上なら達成です。精算時に評価額が共有資金へ加算され、ノルマ分は差し引かれません。");
     }
 
     public void showBedHint(Player player) {
-        hintOnce(plugin, player, "bed",
-                "生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。",
+        NamespacedKey key = new NamespacedKey(plugin, "journey_bed_deadline");
+        if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
+        player.sendMessage(plugin.messages().prefixed(
+                "journey.hint.bed-deadline",
+                "深夜0時までに眠っていない仲間は死亡・脱落扱いです。生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になります。",
                 "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
-                "seconds", plugin.settings().roundTiming().sleepDelaySeconds());
+                "seconds", plugin.settings().roundTiming().sleepDelaySeconds()
+        ));
+        player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
     }
 
     private record Landmark(ItemDisplay icon, TextDisplay text) {

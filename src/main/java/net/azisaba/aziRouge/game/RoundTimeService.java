@@ -8,6 +8,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.GameRules;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.data.type.Bed;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -32,6 +33,7 @@ public final class RoundTimeService implements Listener {
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<String, Integer> majoritySleepingTicks = new HashMap<>();
+    private final Map<String, Integer> deadlineWarningHours = new HashMap<>();
     private final Set<String> scheduledTransitions = new HashSet<>();
     private final Set<UUID> deeplySleepingPlayers = new HashSet<>();
     private final Set<UUID> forcingSleep = new HashSet<>();
@@ -54,6 +56,7 @@ public final class RoundTimeService implements Listener {
             task = null;
         }
         majoritySleepingTicks.clear();
+        deadlineWarningHours.clear();
         scheduledTransitions.clear();
         deeplySleepingPlayers.clear();
         forcingSleep.clear();
@@ -67,6 +70,7 @@ public final class RoundTimeService implements Listener {
     public void beginRound(GameSession session) {
         prepareWorld(session.world());
         majoritySleepingTicks.remove(session.sessionId());
+        deadlineWarningHours.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
         deeplySleepingPlayers.removeAll(session.members());
         for (Player player : session.world().getPlayers()) {
@@ -78,6 +82,7 @@ public final class RoundTimeService implements Listener {
 
     public void endRound(GameSession session) {
         majoritySleepingTicks.remove(session.sessionId());
+        deadlineWarningHours.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
         deeplySleepingPlayers.removeAll(session.members());
         forcingSleep.removeAll(session.members());
@@ -103,28 +108,36 @@ public final class RoundTimeService implements Listener {
             return;
         }
 
+        plugin.journeyDisplayService().showBedHint(player);
+
         if (player.getWorld().isDayTime()) {
             event.setUseBed(Event.Result.DENY);
             Location bedLocation = event.getBed().getLocation();
+            int round = session.currentRound();
+            Set<UUID> alivePlayers = Set.copyOf(session.alivePlayers());
+            Set<UUID> playersAtHome = alivePlayersAtHome(session);
             plugin.confirmationService().request(
                     player,
-                    plugin.messages().text("sleep.confirm-night", "時間を夜にして寝ますか？"),
-                    () -> sleepAtNight(player, session, bedLocation)
+                    plugin.messages().text("sleep.confirm-night-impact", "時間を夜にして寝ますか？\nこの操作は、探索中の他のプレイヤーにも影響します。"),
+                    () -> sleepAtNight(player, session, round, alivePlayers, playersAtHome, bedLocation)
             );
             return;
         }
         event.setUseBed(Event.Result.ALLOW);
-        plugin.journeyDisplayService().showBedHint(player);
         scheduleSleep(player, session, event.getBed().getLocation());
     }
 
-    private void sleepAtNight(Player player, GameSession session, Location bedLocation) {
-        if (activeSession(player) != session || !isInHomeArea(session, player.getLocation())) {
+    private void sleepAtNight(Player player, GameSession session, int round, Set<UUID> alivePlayers, Set<UUID> playersAtHome, Location bedLocation) {
+        if (activeSession(player) != session || session.currentRound() != round || !session.world().isDayTime()
+                || !alivePlayers.equals(session.alivePlayers())
+                || !playersAtHome.equals(alivePlayersAtHome(session))
+                || !isInHomeArea(session, player.getLocation())
+                || player.getLocation().distanceSquared(bedLocation) > 4.0D
+                || !(bedLocation.getBlock().getBlockData() instanceof Bed)) {
             player.sendMessage(plugin.messages().prefixed("sleep.changed", "&7状況が変わったため、就寝をキャンセルしました。"));
             return;
         }
         session.world().setTime(NIGHT_TICKS);
-        plugin.journeyDisplayService().showBedHint(player);
         scheduleSleep(player, session, bedLocation);
     }
 
@@ -180,7 +193,9 @@ public final class RoundTimeService implements Listener {
                 continue;
             }
 
-            if (remainingTicks(session) == 0L) {
+            long remainingTicks = remainingTicks(session);
+            showDeadlineWarning(session, remainingTicks);
+            if (remainingTicks == 0L) {
                 forceMorning(session);
                 continue;
             }
@@ -200,6 +215,12 @@ public final class RoundTimeService implements Listener {
             if (!RoundSleepPolicy.minimumSleeping(alive, sleeping, requiredPercentage)) {
                 session.world().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
                 majoritySleepingTicks.remove(session.sessionId());
+                showSleepStatus(
+                        session,
+                        "sleep.waiting-players",
+                        "&eあと {players}人ベッドに入ると夜をスキップします",
+                        "players", RoundSleepPolicy.requiredSleeping(alive, requiredPercentage) - sleeping
+                );
                 continue;
             }
             int elapsedTicks = majoritySleepingTicks.merge(
@@ -209,7 +230,12 @@ public final class RoundTimeService implements Listener {
             );
             int waitTicks = plugin.settings().roundTiming().sleepDelaySeconds() * 20;
             int remainingSeconds = Math.max(0, (waitTicks - elapsedTicks + 19) / 20);
-            showSleepCountdown(session, sleeping, alive, remainingSeconds);
+            showSleepStatus(
+                    session,
+                    "sleep.skip-countdown",
+                    "&eあと {seconds}秒で夜をスキップします",
+                    "seconds", remainingSeconds
+            );
             if (elapsedTicks >= waitTicks) {
                 session.world().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, requiredPercentage);
             }
@@ -269,16 +295,46 @@ public final class RoundTimeService implements Listener {
         return Set.copyOf(sleeping);
     }
 
-    private void showSleepCountdown(GameSession session, int sleeping, int alive, int remainingSeconds) {
+    private Set<UUID> alivePlayersAtHome(GameSession session) {
+        Set<UUID> players = new HashSet<>();
+        for (UUID playerId : session.alivePlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && isInHomeArea(session, player.getLocation())) {
+                players.add(playerId);
+            }
+        }
+        return Set.copyOf(players);
+    }
+
+    private void showDeadlineWarning(GameSession session, long remainingTicks) {
+        int hours = RoundClock.deadlineWarningHours(remainingTicks);
+        int previous = deadlineWarningHours.getOrDefault(session.sessionId(), 0);
+        if (hours == 0 || hours == previous || (hours == 3 && previous == 1)) {
+            return;
+        }
+        deadlineWarningHours.put(session.sessionId(), hours);
+        String message = plugin.messages().prefixed(
+                hours == 1 ? "sleep.deadline-one-hour" : "sleep.deadline-three-hours",
+                hours == 1
+                        ? "&c深夜0時まであと1時間！ 探索を切り上げて家に戻ってください。"
+                        : "&e深夜0時まであと3時間。そろそろ家への帰り道を確認してください。"
+        );
+        for (UUID playerId : session.alivePlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                player.sendMessage(message);
+            }
+        }
+    }
+
+    private void showSleepStatus(GameSession session, String key, String fallback, Object... replacements) {
         String message = plugin.messages().format(
-                "sleep.countdown",
-                "&e就寝中 {sleeping}/{alive} - 翌朝まで {seconds}秒",
-                "sleeping", sleeping,
-                "alive", alive,
-                "seconds", remainingSeconds
+                key,
+                fallback,
+                replacements
         );
         Component component = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
-                .legacyAmpersand()
+                .legacySection()
                 .deserialize(message);
         for (UUID playerId : session.alivePlayers()) {
             Player player = Bukkit.getPlayer(playerId);

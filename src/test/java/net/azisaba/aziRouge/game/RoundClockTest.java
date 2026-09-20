@@ -13,4 +13,12 @@ class RoundClockTest {
         assertEquals("00:00", RoundClock.format(18_000));
         assertEquals("06:00", RoundClock.format(24_000));
     }
+
+    @Test
+    void choosesTheNearestDeadlineWarning() {
+        assertEquals(0, RoundClock.deadlineWarningHours(3_001));
+        assertEquals(3, RoundClock.deadlineWarningHours(3_000));
+        assertEquals(1, RoundClock.deadlineWarningHours(1_000));
+        assertEquals(0, RoundClock.deadlineWarningHours(0));
+    }
 }

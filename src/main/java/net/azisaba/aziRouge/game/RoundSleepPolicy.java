@@ -13,4 +13,8 @@ final class RoundSleepPolicy {
                 && sleepingPlayers > 0
                 && (long) sleepingPlayers * 100L >= (long) alivePlayers * Math.clamp(minimumPercentage, 1, 100);
     }
+
+    static int requiredSleeping(int alivePlayers, int minimumPercentage) {
+        return alivePlayers <= 0 ? 0 : Math.ceilDiv(alivePlayers * Math.clamp(minimumPercentage, 1, 100), 100);
+    }
 }

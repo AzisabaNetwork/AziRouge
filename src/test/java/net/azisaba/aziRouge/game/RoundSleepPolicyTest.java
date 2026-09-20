@@ -3,6 +3,7 @@ package net.azisaba.aziRouge.game;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoundSleepPolicyTest {
@@ -22,5 +23,11 @@ class RoundSleepPolicyTest {
     void everyLivingPlayerCanSkipImmediately() {
         assertTrue(RoundSleepPolicy.allSleeping(3, 3));
         assertFalse(RoundSleepPolicy.allSleeping(0, 0));
+    }
+
+    @Test
+    void requiredPlayerCountIsRoundedUp() {
+        assertEquals(2, RoundSleepPolicy.requiredSleeping(3, 50));
+        assertEquals(0, RoundSleepPolicy.requiredSleeping(0, 50));
     }
 }

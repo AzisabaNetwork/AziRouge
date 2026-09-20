@@ -170,7 +170,7 @@ public final class GameMenuService implements Listener {
         showDialog(
                 player,
                 message("journey.depart", "出発！"),
-                text(plugin.messages().format("journey.depart-description", "どこまで踏み込む？\n深さを選んで出発しよう。\n今回のノルマ: {quota} / 共有資金: {balance}",
+                text(plugin.messages().format("journey.depart-description-details", "どこまで踏み込む？\n深いほどダンジョンが広がり、宝・宝箱・罠が増え、採掘物とドロップも変化します。\n探索中の持ち物は主にホットバー9枠です。\n今回のノルマ: {quota} / 共有資金: {balance}",
                         "quota", plugin.economyService().quotaForRound(round + 1), "balance", session.sharedBalance())),
                 List.of(depthInput()),
                 List.of(depart),
@@ -238,7 +238,7 @@ public final class GameMenuService implements Listener {
 
     private void showJourneyHelp(Player player) {
         showDialog(player, message("journey.help", "旅の手引き"),
-                text(plugin.messages().format("journey.help-body", "旅支度：商人を右クリック。資金は仲間と共有です。\n出発：ラウンドごとに出入口で深さを選び、探索へ。\n納品：宝はホームの納品箱へ。インベントリ内の宝は数えません。\n就寝：生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝です。深夜までに眠れないと死亡扱いになります。",
+                text(plugin.messages().format("journey.help-body-v2", "旅支度：商人を右クリック。資金は仲間と共有です。探索中の持ち物は主にホットバー9枠です。\n出発：深いほど広くなり、宝・宝箱・罠、採掘物、ドロップが変化します。\n納品：箱の評価額でノルマを判定し、精算額は共有資金に加算されます。\n就寝：生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝です。深夜までに眠れないと死亡扱いになります。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
                         "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
                 List.of(), List.of(menuAction(label("menu.back", "戻る"), "", this::showMenuDialog)), 1);

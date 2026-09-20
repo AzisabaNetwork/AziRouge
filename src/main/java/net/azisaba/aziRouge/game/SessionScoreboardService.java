@@ -4,6 +4,7 @@ import net.azisaba.aziRouge.AziRouge;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
@@ -90,21 +91,22 @@ public final class SessionScoreboardService {
                 ? 0L
                 : plugin.economyService().deliveryValue(session);
         int maxMisses = plugin.settings().economy().quota().maxConsecutiveMisses();
-        int remainingMisses = Math.max(0, maxMisses - session.consecutiveQuotaMisses());
         setLine(objective, ChatColor.DARK_GRAY.toString(), 11);
         setLine(objective, label("state", "状態") + stateName(session), 10);
         setLine(objective, label("round", "Round") + session.currentRound(), 9);
-        setLine(objective, label("money", "Money") + session.sharedBalance(), 8);
-        setLine(objective, label("quota", "ノルマ") + delivered + " / " + quota, 7);
-        String remainingColor = remainingMisses <= plugin.settings().economy().quota().warningRemaining()
-                ? ChatColor.RED.toString()
-                : ChatColor.WHITE.toString();
-        setLine(objective, label("quota-remaining", "残回数") + remainingColor + remainingMisses + " / " + maxMisses, 6);
+        setLine(objective, label("shared-money", "共有資金") + session.sharedBalance(), 8);
+        setLine(objective, label("delivery-quota", "納品 / ノルマ") + delivered + " / " + quota, 7);
+        setLine(objective, label("villager-anger", "村人の怒り") + angerGauge(session.consecutiveQuotaMisses(), maxMisses), 6);
         String time = allAlivePlayersInDungeon(session) ? "??:??" : RoundClock.format(session.world().getTime());
         setLine(objective, label("time", "時刻") + time, 5);
         setLine(objective, ChatColor.BLACK.toString(), 4);
-        setLine(objective, label("goal", "Goal") + goal(session, player), 3);
-        setLine(objective, label("next", "Next") + nextAction(session, player), 2);
+        Guidance guidance = guidance(session, player, delivered, quota);
+        if (!guidance.goal().isBlank()) {
+            setLine(objective, label("goal", "目標") + guidance.goal(), 3);
+        }
+        if (!guidance.next().isBlank()) {
+            setLine(objective, label("next", "次") + guidance.next(), 2);
+        }
         setLine(objective, ChatColor.DARK_AQUA.toString(), 1);
         setLine(objective, ChatColor.AQUA + SERVER_ADDRESS, 0);
 
@@ -161,25 +163,6 @@ public final class SessionScoreboardService {
         return true;
     }
 
-    private String goal(GameSession session, Player player) {
-        String suffix = objectiveSuffix(session, player);
-        return plugin.messages().text("scoreboard.goals." + suffix, fallbackGoal(session, player));
-    }
-
-    private String nextAction(GameSession session, Player player) {
-        String suffix = objectiveSuffix(session, player);
-        return plugin.messages().text("scoreboard.next-actions." + suffix, fallbackNextAction(session, player));
-    }
-
-    private String objectiveSuffix(GameSession session, Player player) {
-        return switch (session.state()) {
-            case LOBBY -> "lobby";
-            case IN_ROUND -> isInHomeArea(session, player) ? "in-round-home" : "in-round-dungeon";
-            case GAME_OVER -> "game-over";
-            case CLOSING -> "closing";
-        };
-    }
-
     private boolean isInHomeArea(GameSession session, Player player) {
         return player.getWorld().getUID().equals(session.world().getUID())
                 && session.homeArea().contains(
@@ -189,21 +172,61 @@ public final class SessionScoreboardService {
         );
     }
 
-    private String fallbackGoal(GameSession session, Player player) {
-        return switch (session.state()) {
-            case LOBBY -> "Gather party";
-            case IN_ROUND -> isInHomeArea(session, player) ? "Deliver and sleep" : "Loot and return";
-            case GAME_OVER -> "Review result";
-            case CLOSING -> "Closing";
-        };
+    private String angerGauge(int misses, int maximum) {
+        int angry = Math.clamp(misses, 0, maximum);
+        return ChatColor.RED + "■".repeat(angry) + ChatColor.DARK_GRAY + "□".repeat(maximum - angry);
     }
 
-    private String fallbackNextAction(GameSession session, Player player) {
-        return switch (session.state()) {
-            case LOBBY -> "Start round";
-            case IN_ROUND -> isInHomeArea(session, player) ? "Chest, then bed" : "Find portal";
-            case GAME_OVER -> "Leave session";
-            case CLOSING -> "Wait";
-        };
+    private Guidance guidance(GameSession session, Player player, long delivered, long quota) {
+        if (session.state() == SessionState.GAME_OVER) {
+            return new Guidance("", plugin.messages().text("scoreboard.next-actions.leave-session", "セッションを退出"));
+        }
+        if (session.isBossBattleActive()) {
+            return new Guidance(plugin.messages().text("scoreboard.goals.defeat-boss", "ボスを倒す"), "");
+        }
+        if (session.state() != SessionState.IN_ROUND || session.roundState() != RoundState.ACTIVE) {
+            return Guidance.NONE;
+        }
+        if (!session.alivePlayers().contains(player.getUniqueId())) {
+            return new Guidance("", plugin.messages().text("scoreboard.next-actions.wait-next-round", "次ラウンドを待つ"));
+        }
+        if (!isInHomeArea(session, player)) {
+            if (plugin.roundTimeService().remainingTicks(session) <= 3_000L) {
+                return new Guidance(
+                        plugin.messages().text("scoreboard.goals.return-before-midnight", "0時までに帰還"),
+                        plugin.messages().text("scoreboard.next-actions.find-return", "帰還ポータルを探す")
+                );
+            }
+            return Guidance.NONE;
+        }
+        if (!session.hasExploredThisRound(player.getUniqueId())) {
+            return Guidance.NONE;
+        }
+        long missing = Math.max(0L, quota - delivered);
+        if (missing > 0L) {
+            return new Guidance(
+                    plugin.messages().format("scoreboard.goals.quota-needed", "ノルマまであと {amount}", "amount", missing),
+                    hasDeliverable(player)
+                            ? plugin.messages().text("scoreboard.next-actions.deliver-treasure", "宝を納品する")
+                            : ""
+            );
+        }
+        return new Guidance(
+                plugin.messages().text("scoreboard.goals.quota-achieved", "ノルマ達成"),
+                player.isSleeping() ? "" : plugin.messages().text("scoreboard.next-actions.sleep", "ベッドで休む")
+        );
+    }
+
+    private boolean hasDeliverable(Player player) {
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            if (item != null && plugin.settings().economy().sellPrices().containsKey(item.getType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private record Guidance(String goal, String next) {
+        private static final Guidance NONE = new Guidance("", "");
     }
 }

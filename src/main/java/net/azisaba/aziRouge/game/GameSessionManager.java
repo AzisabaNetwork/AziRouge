@@ -1207,8 +1207,8 @@ public final class GameSessionManager {
                 15
         );
         broadcastSessionMessage(session, m(
-                "round.quota-due",
-                "&e今回のノルマ: {quota} / 未達猶予: 残り {remaining}回",
+                "round.quota-due-detail",
+                "&e今回のノルマ: 納品箱の評価額 {quota}（精算額は共有資金へ加算）",
                 "quota", plugin.economyService().quotaForRound(session.currentRound()),
                 "remaining", Math.max(0, plugin.settings().economy().quota().maxConsecutiveMisses()
                         - session.consecutiveQuotaMisses())
@@ -1235,8 +1235,8 @@ public final class GameSessionManager {
             broadcastSessionMessage(session, m("round.quota-achieved", "&aノルマ達成！ 未達の連続回数はリセットされました。"));
         } else {
             broadcastSessionMessage(session, m(
-                    "round.quota-missed",
-                    "&cノルマ到達ならず... ゲームオーバーまで残り {remaining}回です。",
+                    "round.quota-missed-angry",
+                    "&c村人「ノルマ未達！？ めっちゃ怒ってるぞ！」 ゲームオーバーまで残り {remaining}回です。",
                     "remaining", result.remainingMisses()
             ));
             int warningAt = plugin.settings().economy().quota().warningRemaining();
