@@ -137,7 +137,7 @@ journey:
     return: "&a帰還"
     preparing: "&7準備中…"
     shop: "&e商人"
-    delivery-status: "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒り &f{anger}"
+    delivery-status: "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒りゲージ &f{anger}"
   hint:
     home: "&e商人で支度を整えてから、出発地点へ向かいましょう。"
     shop: "&e右クリックで買い物ができます。資金は仲間と共有されます。"
@@ -158,8 +158,8 @@ sleep:
   deadline-three-hours: "&e0時まであと3時間！帰り道を確認しておきましょう。"
   deadline-one-hour: "&c0時まであと1時間！探索を切り上げてホームへ戻りましょう。"
   title:
-    three-hours: "&e日没が近い"
-    one-hour: "&cあと1時間"
+    three-hours: " "
+    one-hour: " "
   subtitle:
     three-hours: "&70時までにベッドへ向かおう"
     one-hour: "&c探索を切り上げてホームへ戻ろう"
@@ -254,7 +254,7 @@ round:
   title:
     start: "&6{round}日目"
     quota-achieved: "&aノルマ達成！"
-    quota-missed: "&cノルマ未達…"
+    quota-missed: "&cノルマ達成ならず…"
     boss: "&5ボス戦"
   subtitle:
     quota: "&e今日のノルマ: {quota}"

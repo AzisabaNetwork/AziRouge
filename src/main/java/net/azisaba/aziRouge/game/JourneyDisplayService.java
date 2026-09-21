@@ -77,11 +77,11 @@ public final class JourneyDisplayService {
             int maxAnger = plugin.settings().economy().quota().maxConsecutiveMisses();
             mark(wanted, session.sessionId() + ":delivery", deliveryLocation,
                     Material.CHEST, "delivery-status",
-                    "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒り &f{anger}",
+                    "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒りゲージ &f{anger}",
                     "delivered", plugin.economyService().deliveryValue(session),
                     "quota", plugin.economyService().quotaForRound(session.currentRound() + (session.state() == SessionState.LOBBY ? 1 : 0)),
                     "balance", session.sharedBalance(),
-                    "anger", session.consecutiveQuotaMisses() + "/" + maxAnger);
+                    "anger", AngerGauge.render(session.consecutiveQuotaMisses(), maxAnger));
             for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {
                 Location at = villager.getLocation();
                 if (!session.homeArea().contains(at.getBlockX(), at.getBlockY(), at.getBlockZ())
