@@ -18,7 +18,7 @@ generation:
     depth-prediction-multiplier: 1.3
     min-pieces-per-depth: 4
     max-pieces-per-depth: 8
-    adjacent-piece-penalty: 2.0
+    adjacent-piece-penalty: 3.0
 door:
   enabled: true
   chance: 0.75
@@ -109,9 +109,10 @@ journey:
   enabled: true
   # Height above the top of each entrance area; adjust to the home template.
   entrance-height: 1.2
-  view-distance: 24
+  view-distance: 16
 round-timing:
-  # A Minecraft day is 24000 ticks. Rounds start at sunrise and end at midnight.
+  # A Minecraft day is 24000 ticks (0 = 06:00, 6000 = 12:00, 12000 = 18:00, 18000 = 00:00).
+  # Time is paused until the first dungeon departure and between days.
   start-time-ticks: 0
   deadline-time-ticks: 18000
   sleep:
@@ -149,9 +150,9 @@ portals:
 economy:
   initial-balance: 300
   quota:
-    base: 10
-    per-round: 5
-    multiplier: 1.0
+    base: 50
+    per-round: 25
+    multiplier: 1.1
     # N: the game ends after this many consecutive quota misses.
     max-consecutive-misses: 3
     warning-remaining: 1
@@ -584,7 +585,7 @@ azirouge:
         weight: 0
   mobs:
     zombie_brute:
-      weight: 12
+      weight: 6
       power: 4
       max-health: 20.0
       movement-speed: 0.3
@@ -607,7 +608,7 @@ azirouge:
         enabled: true
         tick-interval-ticks: 20
     skeleton_archer:
-      weight: 10
+      weight: 5
       power: 4
       max-health: 20.0
       movement-speed: 0.3
@@ -627,16 +628,16 @@ azirouge:
         enabled: true
         tick-interval-ticks: 20
     powered_creeper:
-      weight: 0
+      weight: 3
       power: 3
       max-health: 20.0
-      movement-speed: 0.4
-      attack-damage: 4.5
+      movement-speed: 0.2
+      attack-damage: 100.0
       ai:
         enabled: true
         tick-interval-ticks: 20
     mini_enderman:
-      weight: 0
+      weight: 3
       power: 3
       max-health: 20.0
       movement-speed: 0.4
@@ -647,9 +648,9 @@ azirouge:
     copper_golem:
       weight: 3
       power: 4
-      max-alive-count: 1
+      max-alive-count: 2
       max-health: 20.0
-      movement-speed: 0.18
+      movement-speed: 0.2
       attack-damage: 0.0
       drops: []
       ai:
@@ -659,8 +660,8 @@ azirouge:
           enabled: true
           search-radius: 10
           break-distance: 1.8
-          break-ticks: 80
-          goal-speed: 0.7
+          break-ticks: 40
+          goal-speed: 1.0
   chest:
     base-spawn-chance: 0.0
     depth-multiplier: 0.0

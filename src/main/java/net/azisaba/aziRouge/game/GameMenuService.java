@@ -213,9 +213,10 @@ public final class GameMenuService implements Listener {
                 player,
                 message("menu.end-round", "帰り方"),
                 text(plugin.messages().format("journey.end-description",
-                        "持ち帰った宝はホームの納品箱へ。入れた分だけ精算される。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。\n0時までに眠れていないと、その日は脱落だ。",
+                        "持ち帰った宝はホームの納品箱へ。入れた分だけ精算される。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。\n{deadline}までに眠れていないと、その日は脱落だ。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
-                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
+                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds(),
+                        "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks()))),
                 List.of(),
                 List.of(closeAction()),
                 1
@@ -242,9 +243,10 @@ public final class GameMenuService implements Listener {
 
     private void showJourneyHelp(Player player) {
         showDialog(player, message("journey.help", "遊び方"),
-                text(plugin.messages().format("journey.help-body-v2", "商人を右クリックすると買い物できる。お金は仲間と共有だ。探索中の持ち物は、ほぼホットバーの9枠だけ。\n出発では深さを選ぶ。深いほど広くなり、宝、宝箱、罠、採掘物、ドロップが変わる。\n持ち帰った宝は納品箱に入れた分だけ精算される。評価額がノルマ以上なら達成だ。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。0時までに眠れていないと、その日は脱落だ。",
+                text(plugin.messages().format("journey.help-body-v2", "商人を右クリックすると買い物できる。お金は仲間と共有だ。探索中の持ち物は、ほぼホットバーの9枠だけ。\n出発では深さを選ぶ。深いほど広くなり、宝、宝箱、罠、採掘物、ドロップが変わる。\n持ち帰った宝は納品箱に入れた分だけ精算される。評価額がノルマ以上なら達成だ。\n生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。{deadline}までに眠れていないと、その日は脱落だ。",
                         "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
-                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds())),
+                        "seconds", plugin.settings().roundTiming().sleepDelaySeconds(),
+                        "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks()))),
                 List.of(), List.of(menuAction(label("menu.back", "戻る"), "", this::showMenuDialog)), 1);
     }
 

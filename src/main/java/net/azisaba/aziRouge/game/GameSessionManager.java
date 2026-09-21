@@ -313,6 +313,7 @@ public final class GameSessionManager {
                 player.playSound(player.getLocation(), Sound.UI_TOAST_IN, 0.8F, 1.1F);
                 sendMessage(player, m("session.created", "&aCreated session {session}. Invite players with /azirouge session join {session}.", "session", session.sessionId()));
                 sendCopyableSessionId(player, session);
+                sendMessage(player, m("session.prepare-start-round", "&e装備を整えてダンジョンに入ろう！"));
                 JourneyDisplayService.hintOnce(plugin, player, "home", "&e商人で支度してから、出発の印へ。");
                 BukkitTask mobSpawnTask = mobSpawnManager.start(session);
                 session.setMobSpawnTask(mobSpawnTask);
@@ -371,6 +372,9 @@ public final class GameSessionManager {
         } else {
             broadcastSessionMessage(session, m("session.member-joined", "&e{player} joined the session. Players: {players}/{max}",
                     "player", player.getName(), "players", session.members().size(), "max", session.maxPlayers()));
+            if (session.currentRound() == 0) {
+                sendMessage(player, m("session.prepare-start-round", "&e装備を整えてダンジョンに入ろう！"));
+            }
             JourneyDisplayService.hintOnce(plugin, player, "home", "&e商人で支度してから、出発の印へ。");
         }
         plugin.statisticsService().recordSessionJoin(session.runId(), player);
@@ -560,8 +564,9 @@ public final class GameSessionManager {
                     sendMessage(alivePlayer, m(
                             awakeAtMidnight ? "round.midnight-out" : "round.away-out",
                             awakeAtMidnight
-                                    ? "&c深夜までに眠れなかったため、今日は死亡扱いです。"
-                                    : "&c帰還できなかったため、今日は死亡扱いです。"
+                                    ? "&c{deadline}までに眠れなかったため、今日は死亡扱いです。"
+                                    : "&c帰還できなかったため、今日は死亡扱いです。",
+                            "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks())
                     ));
                 }
             }
@@ -580,7 +585,7 @@ public final class GameSessionManager {
 
         boolean gameOver = allPlayersOut || quota.progress().gameOver();
         session.setRoundState(RoundState.ENDED);
-        session.setState(gameOver ? SessionState.GAME_OVER : SessionState.IN_ROUND);
+        session.setState(gameOver ? SessionState.GAME_OVER : SessionState.LOBBY);
         announceRoundEnd(session, result);
 
         if (gameOver) {
@@ -593,25 +598,8 @@ public final class GameSessionManager {
                     announceGameOver(session, reason);
                 }
             }, ROUND_RESULT_TITLE_TICKS);
-        } else {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> startNextRound(session), ROUND_RESULT_TITLE_TICKS);
         }
         return result;
-    }
-
-    private void startNextRound(GameSession session) {
-        if (!sessionsById.containsKey(session.sessionId())
-                || !DepartureGuard.canStartRound(session.state(), session.roundState())) {
-            return;
-        }
-        try {
-            startRound(session, session.getMaxDepth());
-        } catch (TemplateLoadException | SchematicPlacementException | RuntimeException ex) {
-            session.setState(SessionState.GAME_OVER);
-            clearOnlineMemberInventories(session);
-            plugin.getLogger().severe("Automatic round start failed: " + ex.getMessage());
-            announceGameOver(session, m("game-over.reason.round-start-failed", "翌日の開始に失敗しました。"));
-        }
     }
 
     public record RoundEndResult(

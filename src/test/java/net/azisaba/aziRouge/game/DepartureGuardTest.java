@@ -17,9 +17,9 @@ class DepartureGuardTest {
     }
 
     @Test
-    void anEndedRoundMayContinueAutomatically() {
+    void anEndedRoundMustReturnToTheLobbyForDepthSelection() {
         assertTrue(DepartureGuard.canStartRound(SessionState.LOBBY, RoundState.ENDED));
-        assertTrue(DepartureGuard.canStartRound(SessionState.IN_ROUND, RoundState.ENDED));
+        assertFalse(DepartureGuard.canStartRound(SessionState.IN_ROUND, RoundState.ENDED));
         assertFalse(DepartureGuard.canStartRound(SessionState.IN_ROUND, RoundState.ACTIVE));
     }
 

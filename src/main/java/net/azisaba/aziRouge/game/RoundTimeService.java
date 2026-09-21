@@ -67,10 +67,12 @@ public final class RoundTimeService implements Listener {
     public void prepareWorld(World world) {
         configureWorld(world);
         world.setTime(plugin.settings().roundTiming().startTimeTicks());
+        world.setGameRule(GameRules.ADVANCE_TIME, false);
     }
 
     public void beginRound(GameSession session) {
         prepareWorld(session.world());
+        session.world().setGameRule(GameRules.ADVANCE_TIME, true);
         majoritySleepingTicks.remove(session.sessionId());
         deadlineWarningHours.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
@@ -83,6 +85,7 @@ public final class RoundTimeService implements Listener {
     }
 
     public void endRound(GameSession session) {
+        session.world().setGameRule(GameRules.ADVANCE_TIME, false);
         majoritySleepingTicks.remove(session.sessionId());
         deadlineWarningHours.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());
@@ -174,7 +177,7 @@ public final class RoundTimeService implements Listener {
         deeplySleepingPlayers.remove(event.getPlayer().getUniqueId());
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onTimeSkipped(TimeSkipEvent event) {
         if (event.getSkipReason() != TimeSkipEvent.SkipReason.NIGHT_SKIP) {
             return;
@@ -183,8 +186,9 @@ public final class RoundTimeService implements Listener {
         if (session == null || session.state() != SessionState.IN_ROUND || session.isBossBattleActive()) {
             return;
         }
+        event.setCancelled(true);
         event.getWorld().setGameRule(GameRules.PLAYERS_SLEEPING_PERCENTAGE, 100);
-        scheduleTransition(session, false, deeplySleepingPlayers(session));
+        forceMorning(session, false);
     }
 
     private void tick() {
@@ -198,7 +202,7 @@ public final class RoundTimeService implements Listener {
             long remainingTicks = remainingTicks(session);
             showDeadlineWarning(session, remainingTicks);
             if (remainingTicks == 0L) {
-                forceMorning(session);
+                forceMorning(session, true);
                 continue;
             }
 
@@ -244,7 +248,7 @@ public final class RoundTimeService implements Listener {
         }
     }
 
-    private void forceMorning(GameSession session) {
+    private void forceMorning(GameSession session, boolean deadlineReached) {
         if (scheduledTransitions.contains(session.sessionId())) {
             return;
         }
@@ -255,8 +259,9 @@ public final class RoundTimeService implements Listener {
         if (skipAmount == 0L) {
             skipAmount = DAY_TICKS;
         }
+        world.setGameRule(GameRules.ADVANCE_TIME, false);
         world.setFullTime(world.getFullTime() + skipAmount);
-        scheduleTransition(session, true, deeplySleepingPlayers(session));
+        scheduleTransition(session, deadlineReached, deeplySleepingPlayers(session));
     }
 
     private void scheduleTransition(GameSession session, boolean midnight, Set<UUID> sleepingPlayers) {
@@ -316,19 +321,23 @@ public final class RoundTimeService implements Listener {
         }
         deadlineWarningHours.put(session.sessionId(), hours);
         boolean urgent = hours == 1;
+        String deadline = RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks());
         String chat = plugin.messages().prefixed(
                 urgent ? "sleep.deadline-one-hour" : "sleep.deadline-three-hours",
                 urgent
-                        ? "&c0時まであと1時間。探索を切り上げて帰れ。"
-                        : "&e0時まであと3時間。帰り道を見ておけ。"
+                        ? "&c{deadline}まであと1時間。探索を切り上げて帰れ。"
+                        : "&e{deadline}まであと3時間。帰り道を見ておけ。",
+                "deadline", deadline
         );
-        String title = plugin.messages().text(
+        String title = plugin.messages().format(
                 urgent ? "sleep.title.one-hour" : "sleep.title.three-hours",
-                urgent ? "&cあと1時間" : "&e日没が近い"
+                urgent ? "&cあと1時間" : "&e日没が近い",
+                "deadline", deadline
         );
-        String subtitle = plugin.messages().text(
+        String subtitle = plugin.messages().format(
                 urgent ? "sleep.subtitle.one-hour" : "sleep.subtitle.three-hours",
-                urgent ? "&c切り上げて家に戻れ" : "&70時までにベッドへ"
+                urgent ? "&c切り上げて家に戻れ" : "&7{deadline}までにベッドへ",
+                "deadline", deadline
         );
         for (UUID playerId : session.alivePlayers()) {
             Player player = Bukkit.getPlayer(playerId);

@@ -157,7 +157,8 @@ public final class PortalService implements Listener {
             player.playSound(at, enteredDungeon ? Sound.BLOCK_AMETHYST_BLOCK_CHIME : Sound.BLOCK_RESPAWN_ANCHOR_DEPLETE,
                     enteredDungeon ? 0.7F : 0.55F, enteredDungeon ? 1.35F : 1.0F);
             JourneyDisplayService.hintOnce(plugin, player, enteredDungeon ? "explore" : "return-home",
-                    enteredDungeon ? "&e宝を集めたら、ダンジョン内の帰還ポータルで戻れ。" : "&aおかえり。0時までにベッドで休もう。");
+                    enteredDungeon ? "&e宝を集めたら、ダンジョン内の帰還ポータルで戻れ。" : "&aおかえり。{deadline}までにベッドで休もう。",
+                    "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks()));
         } else {
             cooldownUntilMillis.put(player.getUniqueId(), now + 1000L);
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 0.8F, 0.6F);

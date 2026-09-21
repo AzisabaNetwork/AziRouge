@@ -45,7 +45,7 @@ public final class MobDropListener implements Listener {
                 random,
                 depth,
                 plugin.settings().azirouge().mobSpawn().profile(profile)
-        ));
+        ).stream().map(plugin.economyService()::withValueLore).toList());
         event.setDroppedExp(Math.max(1, 3 + depth));
     }
 }

@@ -197,6 +197,16 @@ public final class SessionScoreboardService {
         if (session.state() == SessionState.GAME_OVER) {
             return new Guidance("", plugin.messages().text("scoreboard.next-actions.leave-session", "セッションを出る"));
         }
+        if (session.state() == SessionState.LOBBY) {
+            return new Guidance("", plugin.messages().text(
+                    session.currentRound() == 0
+                            ? "scoreboard.next-actions.start-first-round"
+                            : "scoreboard.next-actions.choose-depth",
+                    session.currentRound() == 0
+                            ? "装備を整えてダンジョンに入ろう！"
+                            : "深さを選んでダンジョンへ"
+            ));
+        }
         if (session.isBossBattleActive()) {
             return new Guidance(plugin.messages().text("scoreboard.goals.defeat-boss", "ボスを倒す"), "");
         }
@@ -209,7 +219,11 @@ public final class SessionScoreboardService {
         if (!isInHomeArea(session, player)) {
             if (plugin.roundTimeService().remainingTicks(session) <= 3_000L) {
                 return new Guidance(
-                        plugin.messages().text("scoreboard.goals.return-before-midnight", "0時までに帰還"),
+                        plugin.messages().format(
+                                "scoreboard.goals.return-before-midnight",
+                                "{deadline}までに帰還",
+                                "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks())
+                        ),
                         plugin.messages().text("scoreboard.next-actions.find-return", "帰還ポータルを探す")
                 );
             }

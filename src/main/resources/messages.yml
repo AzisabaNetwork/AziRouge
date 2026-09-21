@@ -62,7 +62,7 @@ scoreboard:
   villager-anger: "村人の怒り"
   time: "時刻"
   goal: "目標"
-  next: "次："
+  next: "次"
   states:
     lobby: "ロビー"
     in-round: "探索中"
@@ -70,7 +70,7 @@ scoreboard:
     closing: "終了中"
   goals:
     defeat-boss: "ボスを討伐"
-    return-before-midnight: "0時までに帰還"
+    return-before-midnight: "{deadline}までに帰還"
     quota-needed: "ノルマまであと {amount}"
     quota-achieved: "ノルマ達成！"
   next-actions:
@@ -78,6 +78,8 @@ scoreboard:
     sleep: "ベッドで休む"
     find-return: "帰還ポータルを探す"
     wait-next-round: "翌日の開始を待つ"
+    start-first-round: "装備を整えてダンジョンに入ろう！"
+    choose-depth: "深さを選んでダンジョンへ"
     leave-session: "セッションを退出"
 
 shop:
@@ -127,24 +129,24 @@ journey:
   return: "&a帰還"
   preparing: "&7ダンジョンを生成中…"
   depart-description-details: "深さを選択して出発します。深くなるほどダンジョンは広大になり、宝・宝箱・罠が増加します。採掘できる鉱石や敵のドロップ品も変化します。\n※探索中の持ち物はホットバーの9枠のみです。\n今日のノルマ: {quota} / 共有資金: {balance}"
-  end-description: "持ち帰った宝はホームの納品箱へ入れます。入れた分だけ精算されます。\n生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝になります。\n0時までに眠れていないプレイヤーはその日は脱落となります。"
+  end-description: "持ち帰った宝はホームの納品箱へ入れます。入れた分だけ精算されます。\n生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝になります。\n{deadline}までに眠れていないプレイヤーはその日は脱落となります。"
   changed: "&7準備中に状況が変更されました。出入口から入り直してください。"
   teleport-failed: "&c足元が塞がっています。安全な場所へ移動してからもう一度お試しください。"
   help: "遊び方"
-  help-body-v2: "商人を右クリックするとアイテムを購入できます。資金は仲間と共有です。探索中の持ち物はホットバーの9枠のみとなります。\n出発時は深さを選びます。深くなるほどダンジョンが広くなり、宝・宝箱・罠・採掘物・ドロップ品が豪華になります。\n持ち帰った宝は納品箱に入れた分だけ精算され、評価額がノルマ以上なら達成となります。\n生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝を迎えます。0時までに眠れていないと、その日は脱落となります。"
+  help-body-v2: "商人を右クリックするとアイテムを購入できます。資金は仲間と共有です。探索中の持ち物はホットバーの9枠のみとなります。\n出発時は深さを選びます。深くなるほどダンジョンが広くなり、宝・宝箱・罠・採掘物・ドロップ品が豪華になります。\n持ち帰った宝は納品箱に入れた分だけ精算され、評価額がノルマ以上なら達成となります。\n生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝を迎えます。{deadline}までに眠れていないと、その日は脱落となります。"
   landmark:
     depart: "&6出発"
     return: "&a帰還"
     preparing: "&7準備中…"
     shop: "&e商人"
-    delivery-status: "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒りゲージ &f{anger}"
+    delivery-status: "&6納品箱\n&e納品済/ノルマ &f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒りゲージ &f{anger}"
   hint:
     home: "&e商人で支度を整えてから、出発地点へ向かいましょう。"
     shop: "&e右クリックで買い物ができます。資金は仲間と共有されます。"
     explore: "&e宝を集めたら、ダンジョン内の帰還ポータルでホームへ戻りましょう。"
-    return-home: "&aおかえりなさい！0時までにベッドで休みましょう。"
+    return-home: "&aおかえりなさい！{deadline}までにベッドで休みましょう。"
     delivery-rules: "納品箱に入れたアイテムの評価額でノルマを判定します。精算額は全額共有資金に入ります（ノルマ達成で資金が減額されることはありません）。"
-    bed-deadline: "0時までに眠れていないと、その日は脱落となります。生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝を迎えます。"
+    bed-deadline: "{deadline}までに眠れていないと、その日は脱落となります。生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝を迎えます。"
 
 delivery-chest:
   name: "納品箱"
@@ -155,13 +157,13 @@ sleep:
   changed: "&7状況が変化したため、就寝をキャンセルしました。"
   waiting-players: "&e夜を越すには、あと {players} 人が眠る必要があります"
   skip-countdown: "&eあと {seconds} 秒で夜が明けます…"
-  deadline-three-hours: "&e0時まであと3時間！帰り道を確認しておきましょう。"
-  deadline-one-hour: "&c0時まであと1時間！探索を切り上げてホームへ戻りましょう。"
+  deadline-three-hours: "&e{deadline}まであと3時間！帰り道を確認しておきましょう。"
+  deadline-one-hour: "&c{deadline}まであと1時間！探索を切り上げてホームへ戻りましょう。"
   title:
     three-hours: " "
     one-hour: " "
   subtitle:
-    three-hours: "&70時までにベッドへ向かおう"
+    three-hours: "&7{deadline}までにベッドへ向かおう"
     one-hour: "&c探索を切り上げてホームへ戻ろう"
 
 portal:
@@ -210,7 +212,7 @@ session:
   created: "&aセッション {session} を作成しました。招待コマンド: /azirouge session join {session}"
   created-detail: "&aセッション {session} を作成しました。（人数: 1/{max} / 資金: {money} / ワールド: {world}）"
   started-detail: "&aセッションを開始しました。（ワールド: {world} / ID: {session} / 資金: {money}）"
-  prepare-start-round: "&eホームで準備を整えてから、出入口へ向かってください。"
+  prepare-start-round: "&e装備を整えてダンジョンに入ろう！"
   joined: "&aセッション {session} に参加しました。"
   joined-detail: "&aセッション {session} に参加しました。（人数: {players}/{max}）"
   joined-in-round: "&e現在探索中のため、本日は観戦モードとなります。翌日から参加可能です。"
@@ -268,7 +270,7 @@ round:
   quota-improved: "&a村人: 助かった、よくやってくれたな。怒りも少し収まったよ。"
   quota-missed-angry: "&c村人: 全然足りないぞ！次は必ず持ってこい…  &7（ゲームオーバーまで残り {remaining}回）"
   quota-warning: "&4村人: 次も足りなければ、もう後はないぞ…"
-  midnight-out: "&c0時までに就寝できなかったため、本日は脱落となります。"
+  midnight-out: "&c{deadline}までに就寝できなかったため、本日は脱落となります。"
   away-out: "&cホームに帰還できなかったため、本日は脱落となります。"
   error:
     not-ready: "&c現在は探索を開始できません。"

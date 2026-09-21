@@ -8,7 +8,7 @@ final class DepartureGuard {
     }
 
     static boolean canStartRound(SessionState state, RoundState round) {
-        return round == RoundState.ENDED && (state == SessionState.LOBBY || state == SessionState.IN_ROUND);
+        return canPrepare(state, round);
     }
 
     static boolean validDepth(Float depth, int maximum) {

@@ -191,9 +191,10 @@ public final class JourneyDisplayService {
         if (player.getPersistentDataContainer().has(key, PersistentDataType.BYTE)) return;
         player.sendMessage(plugin.messages().prefixed(
                 "journey.hint.bed-deadline",
-                "0時までに眠れていないと、その日は脱落だ。生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。",
+                "{deadline}までに眠れていないと、その日は脱落だ。生存者の{percentage}%以上が{seconds}秒眠るか、全員が眠ると翌朝になる。",
                 "percentage", plugin.settings().roundTiming().minimumSleepingPercentage(),
-                "seconds", plugin.settings().roundTiming().sleepDelaySeconds()
+                "seconds", plugin.settings().roundTiming().sleepDelaySeconds(),
+                "deadline", RoundClock.format(plugin.settings().roundTiming().deadlineTimeTicks())
         ));
         player.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
     }
