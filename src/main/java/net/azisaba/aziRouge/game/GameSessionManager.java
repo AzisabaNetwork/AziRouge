@@ -47,6 +47,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public final class GameSessionManager {
     private static final long ROUND_RESULT_TITLE_TICKS = 100L;
+    private static final long FIRST_ROUND_TITLE_DELAY_TICKS = 70L;
     private static final Map<Attribute, Double> SESSION_ATTRIBUTE_VALUES = Map.of(
             Attribute.MAX_HEALTH, 20.0D,
             Attribute.MOVEMENT_SPEED, 0.1D,
@@ -471,7 +472,7 @@ public final class GameSessionManager {
 
         session.setState(SessionState.IN_ROUND);
         session.setRoundState(RoundState.PREPARING);
-        session.setCurrentRound(previousRound + 1);
+        session.setCurrentRound(DepartureGuard.dayToStart(previousRound));
         IntVector3 origin = allocateDungeonOrigin(session);
         session.setCurrentDungeonOrigin(origin);
         try {
@@ -495,7 +496,13 @@ public final class GameSessionManager {
             session.setState(SessionState.IN_ROUND);
             plugin.portalService().installRoundPortals(session);
             plugin.roundTimeService().beginRound(session);
-            announceRoundStart(session);
+            if (session.currentRound() == 1) {
+                Bukkit.getScheduler().runTaskLater(
+                        plugin,
+                        () -> announceRoundStart(session),
+                        FIRST_ROUND_TITLE_DELAY_TICKS
+                );
+            }
 
             for (UUID playerId : participants) {
                 Player player = Bukkit.getPlayer(playerId);
@@ -598,6 +605,13 @@ public final class GameSessionManager {
                     announceGameOver(session, reason);
                 }
             }, ROUND_RESULT_TITLE_TICKS);
+        } else {
+            session.setCurrentRound(session.currentRound() + 1);
+            Bukkit.getScheduler().runTaskLater(
+                    plugin,
+                    () -> announceRoundStart(session),
+                    ROUND_RESULT_TITLE_TICKS
+            );
         }
         return result;
     }

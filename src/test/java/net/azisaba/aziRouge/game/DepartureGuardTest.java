@@ -24,6 +24,12 @@ class DepartureGuardTest {
     }
 
     @Test
+    void onlyDayZeroAdvancesWhenStartingADay() {
+        assertEquals(1, DepartureGuard.dayToStart(0));
+        assertEquals(2, DepartureGuard.dayToStart(2));
+    }
+
+    @Test
     void dialogDepthRejectsMissingNonFiniteFractionalAndOutOfRangeInput() {
         for (Float depth : new Float[]{null, Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, 0F, -1F, 1.5F, 13F}) {
             assertFalse(DepartureGuard.validDepth(depth, 12));

@@ -435,9 +435,7 @@ public final class AziRougeCommand implements TabExecutor {
                 tell(sender, "session.error.not-in-session", "&cセッションに参加していません。");
                 return true;
             }
-            int quotaRound = session.state() == net.azisaba.aziRouge.game.SessionState.IN_ROUND
-                    ? session.currentRound()
-                    : session.currentRound() + 1;
+            int quotaRound = Math.max(1, session.currentRound());
             long nextQuota = plugin.economyService().quotaForRound(quotaRound);
             tell(sender, "commands.money-status", "&eセッション {session} 資金={money} 対象={round}日目 ノルマ={quota}",
                     "session", session.sessionId(),

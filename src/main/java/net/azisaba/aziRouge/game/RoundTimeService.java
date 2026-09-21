@@ -71,7 +71,9 @@ public final class RoundTimeService implements Listener {
     }
 
     public void beginRound(GameSession session) {
-        prepareWorld(session.world());
+        if (session.currentRound() == 1) {
+            prepareWorld(session.world());
+        }
         session.world().setGameRule(GameRules.ADVANCE_TIME, true);
         majoritySleepingTicks.remove(session.sessionId());
         deadlineWarningHours.remove(session.sessionId());
@@ -85,7 +87,7 @@ public final class RoundTimeService implements Listener {
     }
 
     public void endRound(GameSession session) {
-        session.world().setGameRule(GameRules.ADVANCE_TIME, false);
+        session.world().setGameRule(GameRules.ADVANCE_TIME, true);
         majoritySleepingTicks.remove(session.sessionId());
         deadlineWarningHours.remove(session.sessionId());
         scheduledTransitions.remove(session.sessionId());

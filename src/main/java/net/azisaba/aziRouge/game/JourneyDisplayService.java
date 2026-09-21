@@ -79,7 +79,7 @@ public final class JourneyDisplayService {
                     Material.CHEST, "delivery-status",
                     "&6納品箱\n&f{delivered}&8 / &f{quota}\n&7資金 &f{balance}\n&c怒りゲージ &f{anger}",
                     "delivered", plugin.economyService().deliveryValue(session),
-                    "quota", plugin.economyService().quotaForRound(session.currentRound() + (session.state() == SessionState.LOBBY ? 1 : 0)),
+                    "quota", plugin.economyService().quotaForRound(DepartureGuard.dayToStart(session.currentRound())),
                     "balance", session.sharedBalance(),
                     "anger", AngerGauge.render(session.consecutiveQuotaMisses(), maxAnger));
             for (Villager villager : session.world().getEntitiesByClass(Villager.class)) {

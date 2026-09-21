@@ -105,9 +105,7 @@ public final class SessionScoreboardService {
 
         registerHiddenNameTagTeam(scoreboard, session);
 
-        int quotaRound = session.state() == SessionState.IN_ROUND
-                ? session.currentRound()
-                : session.currentRound() + 1;
+        int quotaRound = DepartureGuard.dayToStart(session.currentRound());
         long quota = plugin.economyService().quotaForRound(quotaRound);
         long delivered = session.state() == SessionState.GAME_OVER || session.state() == SessionState.CLOSING
                 ? 0L
@@ -270,10 +268,11 @@ final class AngerGauge {
     static String render(int misses, int maximum) {
         int safeMaximum = Math.max(1, maximum);
         int angry = Math.clamp(misses, 0, safeMaximum);
-        int filled = (angry * LENGTH + safeMaximum - 1) / safeMaximum;
-        String color = angry > 0 && angry >= safeMaximum - 1
-                ? "§c"
-                : angry * 2 >= safeMaximum ? "§6" : "§a";
+        if (angry > 0 && angry >= safeMaximum - 1) {
+            return "§c" + "|".repeat(LENGTH);
+        }
+        int filled = angry == 0 ? Math.ceilDiv(LENGTH, 3) : Math.ceilDiv(LENGTH * 2, 3);
+        String color = angry == 0 ? "§a" : "§6";
         return color + "|".repeat(filled) + "§7" + "|".repeat(LENGTH - filled);
     }
 }

@@ -112,7 +112,7 @@ journey:
   view-distance: 16
 round-timing:
   # A Minecraft day is 24000 ticks (0 = 06:00, 6000 = 12:00, 12000 = 18:00, 18000 = 00:00).
-  # Time is paused until the first dungeon departure and between days.
+  # Time is paused only on day 0, until the first dungeon departure.
   start-time-ticks: 0
   deadline-time-ticks: 18000
   sleep:
@@ -171,11 +171,11 @@ economy:
     RAW_GOLD: 15
     GOLD_INGOT: 20
     EMERALD: 20
-    DIAMOND: 50
-    NETHERITE_SCRAP: 100
+    DIAMOND: 40
+    NETHERITE_SCRAP: 40
     AMETHYST_SHARD: 3
     LAPIS_LAZULI: 2
-    QUARTZ: 30
+    QUARTZ: 20
     PRISMARINE_CRYSTALS: 15
 shop:
   title: Shop
@@ -184,15 +184,15 @@ shop:
       - id: golden_axe
         material: GOLDEN_AXE
         amount: 1
-        price: 80
+        price: 50
       - id: torch
         material: TORCH
-        amount: 16
-        price: 40
+        amount: 8
+        price: 20
       - id: mining_pickaxe
         material: IRON_PICKAXE
         amount: 1
-        price: 35
+        price: 60
         durability: 32
         can-destroy:
           - COAL_ORE
@@ -221,25 +221,25 @@ shop:
         amount: 1
         price: 80
         durability: 32
-      - id: 革防具（頭）
+      - id: 金防具（頭）
         material: GOLDEN_HELMET
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（胸）
+      - id: 金防具（胸）
         material: GOLDEN_CHESTPLATE
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（ズボン）
+      - id: 金防具（ズボン）
         material: GOLDEN_LEGGINGS
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（足）
+      - id: 金防具（足）
         material: GOLDEN_BOOTS
         amount: 1
-        price: 80
+        price: 160
         durability: 32
     between-round:
       - id: golden_axe
@@ -253,7 +253,7 @@ shop:
       - id: mining_pickaxe
         material: IRON_PICKAXE
         amount: 1
-        price: 80
+        price: 60
         durability: 32
         can-destroy:
           - COAL_ORE
@@ -282,25 +282,25 @@ shop:
         amount: 1
         price: 80
         durability: 32
-      - id: 革防具（頭）
+      - id: 金防具（頭）
         material: GOLDEN_HELMET
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（胸）
+      - id: 金防具（胸）
         material: GOLDEN_CHESTPLATE
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（ズボン）
+      - id: 金防具（ズボン）
         material: GOLDEN_LEGGINGS
         amount: 1
-        price: 80
+        price: 160
         durability: 32
-      - id: 革防具（足）
+      - id: 金防具（足）
         material: GOLDEN_BOOTS
         amount: 1
-        price: 80
+        price: 160
         durability: 32
 gui:
   depth:
@@ -387,16 +387,16 @@ azirouge:
         entries:
           - material: COAL
             weight: 12
-            min-amount: 3
-            max-amount: 5
+            min-amount: 1
+            max-amount: 3
           - material: COPPER_NUGGET
             weight: 12
-            min-amount: 2
-            max-amount: 3
+            min-amount: 1
+            max-amount: 2
           - material: IRON_NUGGET
             weight: 12
-            min-amount: 2
-            max-amount: 3
+            min-amount: 1
+            max-amount: 2
           - material: IRON_INGOT
             weight: 12
             min-amount: 1
@@ -427,16 +427,16 @@ azirouge:
         entries:
           - material: COAL
             weight: 12
-            min-amount: 3
-            max-amount: 5
+            min-amount: 1
+            max-amount: 3
           - material: COPPER_NUGGET
             weight: 12
-            min-amount: 2
-            max-amount: 3
+            min-amount: 1
+            max-amount: 2
           - material: IRON_NUGGET
             weight: 12
-            min-amount: 2
-            max-amount: 3
+            min-amount: 1
+            max-amount: 2
           - material: IRON_INGOT
             weight: 12
             min-amount: 1
@@ -452,15 +452,15 @@ azirouge:
           - material: LAPIS_LAZULI
             weight: 9
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: AMETHYST_SHARD
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: PRISMARINE_CRYSTALS
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: EMERALD
             weight: 10
             min-amount: 1
@@ -468,7 +468,7 @@ azirouge:
           - material: QUARTZ
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: POTION
             weight: 6
             potion-type: HEALING
@@ -479,15 +479,15 @@ azirouge:
           - material: COAL
             weight: 12
             min-amount: 3
-            max-amount: 5
+            max-amount: 3
           - material: COPPER_NUGGET
             weight: 12
             min-amount: 2
-            max-amount: 3
+            max-amount: 2
           - material: IRON_NUGGET
             weight: 12
-            min-amount: 2
-            max-amount: 3
+            min-amount: 1
+            max-amount: 2
           - material: IRON_INGOT
             weight: 12
             min-amount: 1
@@ -503,15 +503,15 @@ azirouge:
           - material: LAPIS_LAZULI
             weight: 9
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: AMETHYST_SHARD
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: PRISMARINE_CRYSTALS
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: EMERALD
             weight: 10
             min-amount: 1
@@ -525,7 +525,7 @@ azirouge:
           - material: QUARTZ
             weight: 7
             min-amount: 1
-            max-amount: 3
+            max-amount: 2
           - material: POTION
             weight: 6
             potion-type: HEALING

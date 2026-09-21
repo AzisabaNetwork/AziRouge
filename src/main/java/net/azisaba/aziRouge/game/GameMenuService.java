@@ -174,7 +174,7 @@ public final class GameMenuService implements Listener {
                 player,
                 message("journey.depart", "出発"),
                 text(plugin.messages().format("journey.depart-description-details", "深さを選んで出発する。深いほどダンジョンは広くなり、宝、宝箱、罠が増える。採掘できる鉱石と敵のドロップも変わる。\n探索中の持ち物は、ほぼホットバーの9枠だけだ。\n今日のノルマ {quota}  /  共有資金 {balance}",
-                        "quota", plugin.economyService().quotaForRound(round + 1), "balance", session.sharedBalance())),
+                        "quota", plugin.economyService().quotaForRound(DepartureGuard.dayToStart(round)), "balance", session.sharedBalance())),
                 List.of(depthInput()),
                 List.of(depart),
                 1
@@ -200,7 +200,8 @@ public final class GameMenuService implements Listener {
                     || !current.homeArea().contains(player.getLocation().getBlockX(), player.getLocation().getBlockY(), player.getLocation().getBlockZ())
                     || !departureOffers.remove(player.getUniqueId(), offer)) return;
             player.performCommand("azirouge round start " + depth + " --confirm");
-            if (current.state() == SessionState.IN_ROUND && current.currentRound() == round + 1) {
+            if (current.state() == SessionState.IN_ROUND
+                    && current.currentRound() == DepartureGuard.dayToStart(round)) {
                 plugin.portalService().enterDungeon(player, current);
             }
         }, 2L);

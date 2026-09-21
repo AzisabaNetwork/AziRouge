@@ -11,6 +11,10 @@ final class DepartureGuard {
         return canPrepare(state, round);
     }
 
+    static int dayToStart(int currentDay) {
+        return Math.max(1, currentDay);
+    }
+
     static boolean validDepth(Float depth, int maximum) {
         return depth != null && Float.isFinite(depth) && depth >= 1 && depth <= maximum && depth == Math.floor(depth);
     }
