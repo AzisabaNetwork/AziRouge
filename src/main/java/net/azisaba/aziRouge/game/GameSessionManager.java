@@ -834,6 +834,10 @@ public final class GameSessionManager {
             );
         }
         session.markPendingNextRound(player.getUniqueId());
+        if (session.alivePlayers().isEmpty()) {
+            updateRoundAfterAliveChange(session);
+            return;
+        }
         sendTitle(player, m("session.title.down", "&cダウン"), m("session.subtitle.spectating-next-round", "&7翌日まで観戦"), 10, 70, 20);
         sendMessage(player, m("session.out-this-round", "&cYou are out for this round. You will return at the start of the next round."));
         broadcastSessionMessage(session, m("session.member-died", "&c{player} died. Alive: {alive}", "player", player.getName(), "alive", session.alivePlayers().size()));
@@ -1255,6 +1259,11 @@ public final class GameSessionManager {
                     "round.quota-improved",
                     "&a村人: 助かった。怒りも、少し収まったな"
             ), Sound.ENTITY_VILLAGER_CELEBRATE);
+        } else if (result.remainingMisses() == 0) {
+            broadcastVillagerMessage(session, m(
+                    "round.quota-missed-final",
+                    "&4村人: もう我慢ならん。ここまでだ"
+            ), Sound.ENTITY_VILLAGER_NO);
         } else {
             broadcastVillagerMessage(session, m(
                     "round.quota-missed-angry",
@@ -1287,7 +1296,7 @@ public final class GameSessionManager {
         broadcastSound(session, Sound.ENTITY_WITHER_DEATH, 0.45F, 0.75F);
         broadcastSessionMessage(session, m("game-over.reason-line", "&cゲームオーバー  {reason}", "reason", reason));
         broadcastSessionMessage(session, m("game-over.reached-round", "&6到達 {round}日目", "round", session.currentRound()));
-        broadcastSessionMessage(session, m("game-over.leave", "&e退出  /azirouge session leave"));
+        broadcastSessionMessage(session, m("game-over.leave", "&e手持ちの赤いベッドを右クリックで退出"));
         broadcastSessionMessage(session, m("game-over.next-session", "&e出たあと、/azirouge session create か開始メニューから次を作れる。"));
         broadcastSessionMessage(session, m("game-over.auto-close", "&7このセッションはまもなく自動で終了する。"));
         scheduleGameOverShutdown(session);

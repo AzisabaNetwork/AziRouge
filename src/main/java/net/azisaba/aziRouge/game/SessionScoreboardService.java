@@ -225,24 +225,36 @@ public final class SessionScoreboardService {
                         plugin.messages().text("scoreboard.next-actions.find-return", "帰還ポータルを探す")
                 );
             }
-            return Guidance.NONE;
+            return new Guidance(
+                    quotaGoal(delivered, quota),
+                    plugin.messages().text("scoreboard.next-actions.collect-treasure", "宝を集めて帰還")
+            );
         }
-        if (!session.hasExploredThisRound(player.getUniqueId())) {
-            return Guidance.NONE;
+        if (!session.hasExploredThisRound(player.getUniqueId()) && delivered < quota) {
+            return new Guidance(
+                    quotaGoal(delivered, quota),
+                    plugin.messages().text("scoreboard.next-actions.go-depart", "出発地点からダンジョンへ")
+            );
         }
         long missing = Math.max(0L, quota - delivered);
         if (missing > 0L) {
             return new Guidance(
-                    plugin.messages().format("scoreboard.goals.quota-needed", "ノルマまであと {amount}", "amount", missing),
+                    quotaGoal(delivered, quota),
                     hasDeliverable(player)
                             ? plugin.messages().text("scoreboard.next-actions.deliver-treasure", "宝を納品する")
-                            : ""
+                            : plugin.messages().text("scoreboard.next-actions.dive-again-or-sleep", "再出発かベッドで休む")
             );
         }
         return new Guidance(
                 plugin.messages().text("scoreboard.goals.quota-achieved", "ノルマ達成"),
                 player.isSleeping() ? "" : plugin.messages().text("scoreboard.next-actions.sleep", "ベッドで休む")
         );
+    }
+
+    private String quotaGoal(long delivered, long quota) {
+        return delivered >= quota
+                ? plugin.messages().text("scoreboard.goals.quota-achieved", "ノルマ達成")
+                : plugin.messages().format("scoreboard.goals.quota-needed", "ノルマまであと {amount}", "amount", quota - delivered);
     }
 
     private boolean hasDeliverable(Player player) {

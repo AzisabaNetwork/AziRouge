@@ -77,6 +77,9 @@ scoreboard:
     deliver-treasure: "宝を納品する"
     sleep: "ベッドで休む"
     find-return: "帰還ポータルを探す"
+    collect-treasure: "宝を集めて帰還ポータルへ"
+    go-depart: "出発地点からダンジョンへ"
+    dive-again-or-sleep: "もう一度潜るか、ベッドで休む"
     wait-next-round: "翌日の開始を待つ"
     start-first-round: "装備を整えてダンジョンに入ろう！"
     choose-depth: "深さを選んでダンジョンへ"
@@ -128,6 +131,7 @@ journey:
   depart-title: "&6出発"
   return: "&a帰還"
   preparing: "&7ダンジョンを生成中…"
+  depth-record: "&b最深記録を更新！ &f深さ {depth}"
   depart-description-details: "深さを選択して出発します。深くなるほどダンジョンは広大になり、宝・宝箱・罠が増加します。採掘できる鉱石や敵のドロップ品も変化します。\n※探索中の持ち物はホットバーの9枠のみです。\n今日のノルマ: {quota} / 共有資金: {balance}"
   end-description: "持ち帰った宝はホームの納品箱へ入れます。入れた分だけ精算されます。\n生存者の{percentage}%以上が{seconds}秒間眠るか、全員が眠ると翌朝になります。\n{deadline}までに眠れていないプレイヤーはその日は脱落となります。"
   changed: "&7準備中に状況が変更されました。出入口から入り直してください。"
@@ -150,6 +154,11 @@ journey:
 
 delivery-chest:
   name: "納品箱"
+  progress: "&6納品 &f{delivered}&7 / &f{quota}  &7あと &f{missing}"
+  title:
+    quota-reached: "&aノルマ達成！"
+  subtitle:
+    quota-reached: "&e{player} が納品しました。ベッドで休めば1日が終わります"
 
 sleep:
   home-only: "&cベッドはホームに戻ってから使用してください。"
@@ -270,6 +279,7 @@ round:
   quota-improved: "&a村人: 助かった、よくやってくれたな。怒りも少し収まったよ。"
   quota-missed-angry: "&c村人: 全然足りないぞ！次は必ず持ってこい…  &7（ゲームオーバーまで残り {remaining}回）"
   quota-warning: "&4村人: 次も足りなければ、もう後はないぞ…"
+  quota-missed-final: "&4村人: もう我慢ならん…ここまでだ。"
   midnight-out: "&c{deadline}までに就寝できなかったため、本日は脱落となります。"
   away-out: "&cホームに帰還できなかったため、本日は脱落となります。"
   error:
@@ -288,7 +298,7 @@ game-over:
   subtitle: "&c{reason}  &7（{round}日目で終了）"
   reason-line: "&cゲームオーバー: {reason}"
   reached-round: "&6到達記録: {round}日目"
-  leave: "&e退出: /azirouge session leave"
+  leave: "&e手持ちの「セッション退出」（赤いベッド）を右クリックで退出できます。"
   next-session: "&e退出後、/azirouge session create またはメニューから次のセッションを作成できます。"
   auto-close: "&7このセッションはまもなく自動で終了します。"
   reason:
