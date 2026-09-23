@@ -662,6 +662,20 @@ azirouge:
           break-distance: 1.8
           break-ticks: 40
           goal-speed: 1.0
+    creaking:
+      weight: 3
+      power: 4
+      max-alive-count: 1
+      max-health: 1.0
+      movement-speed: 0.4
+      attack-damage: 3.0
+      drops: []
+      ai:
+        enabled: true
+        sight-range: 32.0
+        forget-after-ticks: 200
+        stroll-speed: 1.0
+        door-open-delay-ticks: 30
   chest:
     base-spawn-chance: 0.0
     depth-multiplier: 0.0

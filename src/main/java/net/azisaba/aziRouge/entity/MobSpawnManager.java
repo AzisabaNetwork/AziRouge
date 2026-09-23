@@ -15,6 +15,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.entity.Creaking;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
@@ -81,7 +82,11 @@ public final class MobSpawnManager {
             if (entity instanceof LivingEntity livingEntity) {
                 profile.apply(livingEntity, profileSettings);
                 if (livingEntity instanceof Mob mob) {
-                    Bukkit.getMobGoals().addGoal(mob, 6, new RandomStrollGoal(mob, strollTargets(session), 1.0D));
+                    double strollSpeed = mob instanceof Creaking ? profileSettings.ai().creaking().strollSpeed() : 1.0D;
+                    Bukkit.getMobGoals().addGoal(mob, 6, new RandomStrollGoal(mob, strollTargets(session), strollSpeed));
+                    if (mob instanceof Creaking creaking && profileSettings.ai().enabled()) {
+                        Bukkit.getMobGoals().addGoal(creaking, 2, new CreakingChaseGoal(creaking, profileSettings.ai().creaking()));
+                    }
                 }
                 mobAiManager.track(livingEntity, profile);
                 alivePower += profileSettings.power();

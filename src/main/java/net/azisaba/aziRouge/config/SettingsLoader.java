@@ -627,7 +627,17 @@ public final class SettingsLoader {
         }
         return new MobAiSettings(
                 section.getBoolean("enabled", defaults.enabled()),
-                loadTorchBreakSettings(section.getConfigurationSection("torch-break"), defaults.torchBreak())
+                loadTorchBreakSettings(section.getConfigurationSection("torch-break"), defaults.torchBreak()),
+                loadCreakingAiSettings(section, defaults.creaking())
+        );
+    }
+
+    private static CreakingAiSettings loadCreakingAiSettings(ConfigurationSection section, CreakingAiSettings defaults) {
+        return new CreakingAiSettings(
+                Math.max(1.0D, section.getDouble("sight-range", defaults.sightRange())),
+                Math.max(0, section.getInt("forget-after-ticks", defaults.forgetAfterTicks())),
+                Math.max(0.0D, section.getDouble("stroll-speed", defaults.strollSpeed())),
+                Math.max(0, section.getInt("door-open-delay-ticks", defaults.doorOpenDelayTicks()))
         );
     }
 

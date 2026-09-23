@@ -31,7 +31,8 @@ public enum MobProfile {
     SKELETON_ARCHER("skeleton_archer", EntityType.SKELETON, 10, 10, 32.0D, 0.28D, 5.0D, -1),
     POWERED_CREEPER("powered_creeper", EntityType.CREEPER, 9, 8, 20.0D, 0.38D, 4.5D, -1),
     MINI_ENDERMAN("mini_enderman", EntityType.ENDERMAN, 9, 6, 20.0D, 0.3D, 5.0D, -1),
-    COPPER_GOLEM("copper_golem", EntityType.COPPER_GOLEM, 3, 4, 20.0D, 0.18D, 0.0D, 1);
+    COPPER_GOLEM("copper_golem", EntityType.COPPER_GOLEM, 3, 4, 20.0D, 0.18D, 0.0D, 1),
+    CREAKING("creaking", EntityType.CREAKING, 3, 4, 1.0D, 0.4D, 3.0D, 1);
 
     public static final String MOB_TAG = "azirouge_mob";
     private static final String PROFILE_TAG_PREFIX = "azirouge_profile:";
@@ -85,7 +86,9 @@ public enum MobProfile {
         applyAttribute(mob, Attribute.MAX_HEALTH, settings.maxHealth());
         applyAttribute(mob, Attribute.MOVEMENT_SPEED, settings.movementSpeed());
         applyAttribute(mob, Attribute.ATTACK_DAMAGE, settings.attackDamage());
-        applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
+        if (mob.getType() != EntityType.CREAKING) {
+            applyAttribute(mob, Attribute.KNOCKBACK_RESISTANCE, 0.8D);
+        }
         mob.setHealth(Math.min(settings.maxHealth(), mob.getMaxHealth()));
 
         if (mob.getType() == EntityType.ENDERMAN) {
@@ -103,14 +106,19 @@ public enum MobProfile {
 
         if (mob instanceof Mob m) {
             m.getPathfinder().setCanOpenDoors(true);
-            Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
-            Bukkit.getMobGoals().removeGoal(m, VanillaGoal.LOOK_AT_PLAYER);
-            if (m instanceof Creature creature) {
-                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RANDOM_STROLL);
-                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.WATER_AVOIDING_RANDOM_STROLL);
-                Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RESTRICT_SUN);
+            if (mob.getType() == EntityType.CREAKING) {
+                Bukkit.getMobGoals().removeAllGoals(m);
+            } else {
+                Bukkit.getMobGoals().removeGoal(m, VanillaGoal.RANDOM_LOOK_AROUND);
+                Bukkit.getMobGoals().removeGoal(m, VanillaGoal.LOOK_AT_PLAYER);
+                if (m instanceof Creature creature) {
+                    Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RANDOM_STROLL);
+                    Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.WATER_AVOIDING_RANDOM_STROLL);
+                    Bukkit.getMobGoals().removeGoal(creature, VanillaGoal.RESTRICT_SUN);
+                }
             }
-            Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m));
+            Bukkit.getMobGoals().addGoal(m, 3, new DoorOpenGoal(m,
+                    mob.getType() == EntityType.CREAKING ? settings.ai().creaking().doorOpenDelayTicks() : 0));
         }
     }
 

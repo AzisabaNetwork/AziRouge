@@ -7,21 +7,28 @@ import com.destroystokyo.paper.entity.ai.GoalType;
 import com.destroystokyo.paper.entity.ai.VanillaGoal;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.Openable;
+import org.bukkit.block.data.type.Door;
 import org.bukkit.entity.Mob;
 
 import java.util.EnumSet;
 
 public class DoorOpenGoal implements Goal<Mob> {
     private final Mob mob;
-    private Location targetDoor;
-    private int openTick;
+    private final int delayTicks;
+    private Block targetDoor;
+    private int startTick;
+    private boolean opened;
 
     public DoorOpenGoal(Mob mob) {
+        this(mob, 0);
+    }
+
+    public DoorOpenGoal(Mob mob, int delayTicks) {
         this.mob = mob;
+        this.delayTicks = delayTicks;
     }
 
     @Override
@@ -30,11 +37,21 @@ public class DoorOpenGoal implements Goal<Mob> {
             return false;
         }
         Pathfinder.PathResult path = mob.getPathfinder().getCurrentPath();
+        if (path == null) {
+            return false;
+        }
         for (int i = 0; i < path.getPoints().size(); i++) {
             Location point = path.getPoints().get(i);
-            if (point.distanceSquared(mob.getLocation()) < 5
-                    && point.clone().add(0, 1, 0).getBlock().getType() == Material.SPRUCE_DOOR) {
-                targetDoor = point;
+            if (point.distanceSquared(mob.getLocation()) >= 5) {
+                continue;
+            }
+            Block block = point.getBlock();
+            if (!(block.getBlockData() instanceof Door)) {
+                block = block.getRelative(BlockFace.UP);
+            }
+            if (block.getBlockData() instanceof Door door) {
+                targetDoor = door.getHalf() == Door.Half.TOP
+                        ? block.getRelative(BlockFace.DOWN) : block;
                 return true;
             }
         }
@@ -43,37 +60,31 @@ public class DoorOpenGoal implements Goal<Mob> {
 
     @Override
     public boolean shouldStayActive() {
-        return Bukkit.getCurrentTick() - openTick < 20;
+        return targetDoor != null && Bukkit.getCurrentTick() - startTick < delayTicks + 20;
     }
 
     @Override
     public void start() {
-        if (targetDoor == null) return;
-
-        Block b = mob.getWorld().getBlockAt(targetDoor);
-        BlockData data = b.getBlockData();
-        if (data instanceof Openable door) {
-            door.setOpen(true);
-            b.setBlockData(door);
-            this.openTick = Bukkit.getCurrentTick();
+        startTick = Bukkit.getCurrentTick();
+        opened = false;
+        if (delayTicks == 0) {
+            setOpen(true);
         }
     }
 
     @Override
     public void stop() {
-        if (targetDoor == null) return;
-
-        Block b = mob.getWorld().getBlockAt(targetDoor);
-        BlockData data = b.getBlockData();
-        if (data instanceof Openable door) {
-            door.setOpen(false);
-            b.setBlockData(door);
+        if (opened) {
+            setOpen(false);
         }
+        targetDoor = null;
     }
 
     @Override
     public void tick() {
-        Goal.super.tick();
+        if (!opened && Bukkit.getCurrentTick() - startTick >= delayTicks) {
+            setOpen(true);
+        }
     }
 
     @Override
@@ -84,5 +95,22 @@ public class DoorOpenGoal implements Goal<Mob> {
     @Override
     public EnumSet<GoalType> getTypes() {
         return EnumSet.noneOf(GoalType.class);
+    }
+
+    private void setOpen(boolean open) {
+        if (targetDoor == null) {
+            return;
+        }
+        BlockData lowerData = targetDoor.getBlockData();
+        Block upper = targetDoor.getRelative(BlockFace.UP);
+        BlockData upperData = upper.getBlockData();
+        if (!(lowerData instanceof Door lower) || !(upperData instanceof Door top)) {
+            return;
+        }
+        lower.setOpen(open);
+        top.setOpen(open);
+        targetDoor.setBlockData(lower);
+        upper.setBlockData(top);
+        opened = open;
     }
 }
