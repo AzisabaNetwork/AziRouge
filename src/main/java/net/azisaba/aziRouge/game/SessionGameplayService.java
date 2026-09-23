@@ -23,7 +23,9 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.Sound;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -46,6 +48,7 @@ public final class SessionGameplayService implements Listener {
     private final AziRouge plugin;
     private final GameSessionManager sessionManager;
     private final Map<UUID, Double> foodLevels = new HashMap<>();
+    private final Map<UUID, Long> deliveryValuesOnOpen = new HashMap<>();
     private BukkitTask task;
 
     public SessionGameplayService(AziRouge plugin, GameSessionManager sessionManager) {
@@ -69,6 +72,7 @@ public final class SessionGameplayService implements Listener {
             removeBlockers(player.getInventory());
         }
         foodLevels.clear();
+        deliveryValuesOnOpen.clear();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -204,6 +208,40 @@ public final class SessionGameplayService implements Listener {
         GameSession session = sessionManager.sessionForPlayer(player.getUniqueId()).orElse(null);
         if (session != null && plugin.economyService().isDeliveryChest(session, chest.getBlock())) {
             plugin.journeyDisplayService().showDeliveryHint(player);
+            deliveryValuesOnOpen.put(player.getUniqueId(), plugin.economyService().deliveryValue(session));
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        Long before = deliveryValuesOnOpen.remove(event.getPlayer().getUniqueId());
+        GameSession session = sessionManager.sessionForPlayer(event.getPlayer().getUniqueId()).orElse(null);
+        if (before == null || session == null || session.state() == SessionState.GAME_OVER || session.state() == SessionState.CLOSING
+                || !(event.getPlayer() instanceof Player player)) {
+            return;
+        }
+        long after = plugin.economyService().deliveryValue(session);
+        if (after == before) {
+            return;
+        }
+        long quota = plugin.economyService().quotaForRound(DepartureGuard.dayToStart(session.currentRound()));
+        player.sendActionBar(plugin.messages().component(
+                "delivery-chest.progress", "&6納品 &f{delivered}&7 / &f{quota}  &7あと &f{missing}",
+                "delivered", after, "quota", quota, "missing", Math.max(0L, quota - after)));
+        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_CLOSE, 0.6F, 1.1F);
+        if (before >= quota || after < quota || session.roundState() != RoundState.ACTIVE || session.isBossBattleActive()) {
+            return;
+        }
+        String title = plugin.messages().text("delivery-chest.title.quota-reached", "&aノルマ達成！");
+        String subtitle = plugin.messages().format("delivery-chest.subtitle.quota-reached", "&e{player} が納品した。ベッドで休めば1日が終わる",
+                "player", player.getName());
+        for (UUID memberId : session.onlineMembers()) {
+            Player member = Bukkit.getPlayer(memberId);
+            if (member != null) {
+                member.sendTitle(title, subtitle, 8, 50, 15);
+                member.playSound(member.getLocation(), Sound.ENTITY_VILLAGER_CELEBRATE, 0.8F, 1.0F);
+                member.playSound(member.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5F, 1.3F);
+            }
         }
     }
 
@@ -267,6 +305,10 @@ public final class SessionGameplayService implements Listener {
         int depth = containingDepth.getAsInt();
         if (session.updateMaxReachedDepth(player.getUniqueId(), depth)) {
             plugin.statisticsService().recordMaxDepth(session.runId(), player, depth);
+            if (depth > 0) {
+                player.sendActionBar(plugin.messages().component("journey.depth-record", "&b最深記録 &f深さ {depth}", "depth", depth));
+                player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_RESONATE, 0.6F, 0.8F + Math.min(depth, 10) * 0.08F);
+            }
         }
     }
 
